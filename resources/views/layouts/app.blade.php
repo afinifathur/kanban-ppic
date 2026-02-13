@@ -181,8 +181,14 @@
 
                 <li>
                     <a href="{{ route('settings.defect-types.index') }}"
-                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.defect-types.*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}">
-                        <i class="fas fa-cog w-6"></i> Settings
+                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.defect-types.*') ? 'bg-blue-600 text-white' : 'text-slate-300' }}">
+                        <i class="fas fa-exclamation-triangle w-6"></i> Setting Kerusakan
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ route('settings.customers.index') }}"
+                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.customers.*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}">
+                        <i class="fas fa-users w-6"></i> Setting Customer
                     </a>
                 </li>
 

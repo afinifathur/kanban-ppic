@@ -1,14 +1,19 @@
 @extends('layouts.app')
 
+@section('top_bar')
+    <div class="flex items-center justify-between w-full">
+        <div>
+            <h1 class="text-lg font-bold text-gray-800 leading-tight">Daftar Rencana Produksi</h1>
+            <p class="text-gray-500 text-[10px]">Penyusunan urutan kerja (Queue)</p>
+        </div>
+        <a href="{{ route('plan.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded shadow text-xs flex items-center gap-2">
+            <i class="fas fa-plus"></i> Tambah Rencana
+        </a>
+    </div>
+@endsection
+
 @section('content')
     <div class="bg-white shadow-md rounded-lg p-6 h-full flex flex-col">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold text-gray-800">Daftar Rencana Produksi</h1>
-            <a href="{{ route('plan.create') }}"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow transition-all">
-                <i class="fas fa-plus mr-2"></i> Tambah Rencana
-            </a>
-        </div>
 
         <div class="flex-1 overflow-auto">
             <table class="min-w-full border-collapse border border-gray-200 text-sm">

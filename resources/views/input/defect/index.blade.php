@@ -1,14 +1,14 @@
 @extends('layouts.app')
 
+@section('top_bar')
+    <div class="flex flex-col">
+        <h1 class="text-lg font-bold text-slate-800 leading-tight">Input Kerusakan: {{ ucfirst(str_replace('_', ' ', $dept)) }}</h1>
+        <p class="text-slate-500 text-[10px]">Detailkan item yang memiliki jumlah reject/scrap.</p>
+    </div>
+@endsection
+
 @section('content')
     <div class="flex flex-col gap-6">
-        <div class="flex items-center justify-between">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Input Kerusakan: {{ ucfirst(str_replace('_', ' ', $dept)) }}
-                </h1>
-                <p class="text-slate-500 text-sm">Detailkan item yang memiliki jumlah reject/scrap.</p>
-            </div>
-        </div>
 
         @if(session('success'))
             <div
@@ -17,6 +17,63 @@
                 <span class="font-medium">{{ session('success') }}</span>
             </div>
         @endif
+
+        <!-- Stats and Filters -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <!-- Stat Card -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div
+                    class="bg-amber-100 text-amber-600 w-12 h-12 rounded-lg flex items-center justify-center text-xl shrink-0">
+                    <i class="fas fa-clipboard-list"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Antrian Detail Kerusakan</div>
+                    <div class="text-2xl font-black text-slate-800">{{ $incompleteCount }} <span
+                            class="text-sm font-normal text-slate-400">item</span></div>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="lg:col-span-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <form action="{{ route('defects.index', $dept) }}" method="GET" class="flex flex-wrap items-center gap-4">
+                    <div class="flex-1 min-w-[200px] relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-slate-400"></i>
+                        </div>
+                        <input type="text" name="search" value="{{ $search }}"
+                            class="block w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            placeholder="Cari Heat Number / Nama Item...">
+                    </div>
+
+                    <div class="w-40 shrink-0">
+                        <select name="status" onchange="this.form.submit()"
+                            class="block w-full py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <option value="all" {{ $status === 'all' ? 'selected' : '' }}>Semua Status</option>
+                            <option value="incomplete" {{ $status === 'incomplete' ? 'selected' : '' }}>Belum Selesai</option>
+                            <option value="completed" {{ $status === 'completed' ? 'selected' : '' }}>Selesai</option>
+                        </select>
+                    </div>
+
+                    <div class="w-40 shrink-0">
+                        <select name="sort" onchange="this.form.submit()"
+                            class="block w-full py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <option value="newest" {{ $sort === 'newest' ? 'selected' : '' }}>Terbaru</option>
+                            <option value="oldest" {{ $sort === 'oldest' ? 'selected' : '' }}>Terlama</option>
+                        </select>
+                    </div>
+
+                    <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors">
+                        Filter
+                    </button>
+
+                    @if($search || $status !== 'all' || $sort !== 'newest')
+                        <a href="{{ route('defects.index', $dept) }}"
+                            class="text-slate-400 hover:text-slate-600 text-sm font-medium">Reset</a>
+                    @endif
+                </form>
+            </div>
+        </div>
 
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div class="overflow-x-auto">
@@ -219,23 +276,23 @@
             });
 
             row.innerHTML = `
-                <div class="flex-1">
-                    <select name="defects[${index}][defect_type_id]" class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                        ${optionsHtml}
-                    </select>
-                </div>
-                <div class="w-20">
-                    <input type="number" name="defects[${index}][qty]" value="${data ? data.qty : ''}" placeholder="Qty" min="1" 
-                        class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 text-center defect-qty" required oninput="updateTotalAllocated()">
-                </div>
-                <div class="flex-1">
-                    <input type="text" name="defects[${index}][notes]" value="${data ? data.notes || '' : ''}" placeholder="Catatan (opsional)" 
-                        class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                </div>
-                <button type="button" onclick="this.parentElement.remove(); updateTotalAllocated();" class="text-slate-400 hover:text-red-500 pt-2">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
+                    <div class="flex-1">
+                        <select name="defects[${index}][defect_type_id]" class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div class="w-20">
+                        <input type="number" name="defects[${index}][qty]" value="${data ? data.qty : ''}" placeholder="Qty" min="1" 
+                            class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 text-center defect-qty" required oninput="updateTotalAllocated()">
+                    </div>
+                    <div class="flex-1">
+                        <input type="text" name="defects[${index}][notes]" value="${data ? data.notes || '' : ''}" placeholder="Catatan (opsional)" 
+                            class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <button type="button" onclick="this.parentElement.remove(); updateTotalAllocated();" class="text-slate-400 hover:text-red-500 pt-2">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
 
             container.appendChild(row);
         }

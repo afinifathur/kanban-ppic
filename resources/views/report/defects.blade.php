@@ -1,13 +1,14 @@
 @extends('layouts.app')
 
-@section('content')
-    <div class="container mx-auto max-w-5xl px-4 py-6">
+@section('top_bar')
+    <div>
+        <h1 class="text-lg font-bold text-slate-800 leading-tight">Generate Report Kerusakan</h1>
+        <p class="text-gray-500 text-[10px]">Laporan Detail Item Rusak/Scrap</p>
+    </div>
+@endsection
 
-        <!-- Title -->
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">Generate Report Kerusakan</h1>
-            <p class="text-sm text-slate-500">Laporan Detail Item Rusak/Scrap</p>
-        </div>
+@section('content')
+    <div class="container mx-auto max-w-5xl px-0 py-0">
 
         <!-- Form -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
@@ -72,7 +73,8 @@
                         <h3 class="text-lg text-gray-600">DEPARTEMEN {{ strtoupper(str_replace('_', ' ', $selectedDept)) }}</h3>
                         <p class="text-sm text-gray-500 mt-1">Tanggal: {{ date('d F Y', strtotime($selectedDate)) }}</p>
                         <p class="text-red-700 font-bold mt-2">JENIS:
-                            {{ $defectTypes->firstWhere('id', $selectedDefectType)->name ?? '-' }}</p>
+                            {{ $defectTypes->firstWhere('id', $selectedDefectType)->name ?? '-' }}
+                        </p>
                     </div>
                     <div class="flex gap-2">
                         <a href="{{ route('report-defects.export', ['type' => 'pdf'] + request()->all()) }}" target="_blank"
@@ -102,7 +104,8 @@
                                 <tr>
                                     <td class="border border-gray-300 px-3 py-2 text-center">{{ $index + 1 }}</td>
                                     <td class="border border-gray-300 px-3 py-2 font-mono font-bold">
-                                        {{ $defect->item->heat_number }}</td>
+                                        {{ $defect->item->heat_number }}
+                                    </td>
                                     <td class="border border-gray-300 px-3 py-2">{{ $defect->item->item_name }}</td>
                                     <td class="border border-gray-300 px-3 py-2 text-center">{{ number_format($defect->qty) }}</td>
                                     <td class="border border-gray-300 px-3 py-2 text-gray-500 italic">{{ $defect->notes ?? '-' }}

@@ -9,7 +9,7 @@ class DashboardController extends Controller
     public function index()
     {
         // 1. Live Stock Stats
-        $stock = \App\Models\ProductionItem::selectRaw('current_dept, SUM(qty_pcs) as total_pcs, SUM(weight_kg) as total_kg')
+        $stock = \App\Models\ProductionItem::selectRaw('current_dept, SUM(qty_pcs) as total_pcs, SUM(qty_pcs * weight_kg) as total_kg')
             ->groupBy('current_dept')
             ->get()
             ->keyBy('current_dept');
@@ -18,8 +18,8 @@ class DashboardController extends Controller
         $stats = [];
         foreach ($depts as $dept) {
             $stats[$dept] = [
-                'pcs' => $stock[$dept]->total_pcs ?? 0,
-                'kg' => $stock[$dept]->total_kg ?? 0,
+                'total_pcs' => $stock[$dept]->total_pcs ?? 0,
+                'total_kg' => $stock[$dept]->total_kg ?? 0,
             ];
         }
 
@@ -29,8 +29,9 @@ class DashboardController extends Controller
             $dates[] = now()->subDays($i)->format('Y-m-d');
         }
 
-        // Fetch history
-        $movements = \App\Models\ProductionHistory::where('moved_at', '>=', now()->subDays(7))
+        // Fetch history with item details to get production_date if needed
+        $movements = \App\Models\ProductionHistory::with('item')
+            ->where('moved_at', '>=', now()->subDays(7))
             ->get();
 
         // Stages to track (6 movements)
@@ -52,13 +53,27 @@ class DashboardController extends Controller
             $lineStats['pcs'][$stageName] = [];
             $lineStats['kg'][$stageName] = [];
 
+            // Initialize for lines 1-4
+            for ($l = 1; $l <= 4; $l++) {
+                $lineStats['pcs'][$stageName][$l] = [];
+                $lineStats['kg'][$stageName][$l] = [];
+            }
+
             foreach ($dates as $date) {
-                $dayMoves = $movements->filter(function ($item) use ($date, $stageKey) {
-                    return $item->moved_at->format('Y-m-d') === $date && $item->to_dept === $stageKey;
+                // Filter movements for this stage and date
+                // Priority: Use the associated item's production_date for reporting alignment
+                $dayMoves = $movements->filter(function ($m) use ($date, $stageKey) {
+                    $dateToUse = ($m->item && $m->item->production_date)
+                        ? $m->item->production_date->format('Y-m-d')
+                        : $m->moved_at->format('Y-m-d');
+                    return $dateToUse === $date && $m->to_dept === $stageKey;
                 });
 
-                $lineStats['pcs'][$stageName][] = $dayMoves->sum('qty_pcs');
-                $lineStats['kg'][$stageName][] = $dayMoves->sum('weight_kg');
+                for ($l = 1; $l <= 4; $l++) {
+                    $lineMoves = $dayMoves->filter(fn($m) => (int) $m->line_number === $l);
+                    $lineStats['pcs'][$stageName][$l][] = $lineMoves->sum('qty_pcs');
+                    $lineStats['kg'][$stageName][$l][] = $lineMoves->sum(fn($m) => $m->qty_pcs * $m->weight_kg);
+                }
             }
         }
 

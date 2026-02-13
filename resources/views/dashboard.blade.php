@@ -1,9 +1,14 @@
 @extends('layouts.app')
 
+@section('top_bar')
+    <div>
+        <h1 class="text-lg font-bold text-slate-800 leading-tight">Dashboard Produksi</h1>
+        <p class="text-gray-500 text-[10px]">Monitoring distribusi dan perpindahan produksi</p>
+    </div>
+@endsection
+
 @section('content')
-    <div class="p-6 h-full overflow-y-auto">
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">Dashboard Produksi</h1>
-        <p class="text-gray-500 mb-6">Monitoring distribusi dan perpindahan produksi</p>
+    <div class="p-0 h-full overflow-y-auto">
 
         <!-- Top Stats Cards -->
         <div class="grid grid-cols-6 gap-4 mb-6">
@@ -12,11 +17,11 @@
                     <h3 class="font-bold text-gray-700 mb-2">{{ ucfirst($dept) }}</h3>
                     <div class="flex justify-between items-end">
                         <div class="text-gray-500 text-xs">PCS:</div>
-                        <div class="font-bold text-lg">{{ number_format($stats[$dept]['pcs']) }}</div>
+                        <div class="font-bold text-lg">{{ number_format($stats[$dept]['total_pcs'] ?? 0) }}</div>
                     </div>
                     <div class="flex justify-between items-end">
                         <div class="text-gray-500 text-xs">KG:</div>
-                        <div class="font-bold text-green-600">{{ number_format($stats[$dept]['kg']) }}</div>
+                        <div class="font-bold text-green-600">{{ number_format($stats[$dept]['total_kg'] ?? 0) }}</div>
                     </div>
                 </div>
             @endforeach
@@ -84,23 +89,61 @@
         const lineStats = @json($lineStats);
         const stagesList = @json($stages);
 
-        // 1. Distribution Charts (Donut) - Existing
-        const formatDepts = depts.map(d => d.charAt(0).toUpperCase() + d.slice(1));
-        const dataPcs = depts.map(d => stats[d].pcs);
-        const dataKg = depts.map(d => stats[d].kg);
+        // 1. Distribution Charts (Donut)
+        const totalPcs = depts.reduce((acc, d) => acc + Number(stats[d]?.total_pcs || 0), 0);
+        const totalKg = depts.reduce((acc, d) => acc + Number(stats[d]?.total_kg || 0), 0);
+
+        const labelsPcs = depts.map(d => {
+            const name = d.charAt(0).toUpperCase() + d.slice(1);
+            const val = Number(stats[d]?.total_pcs || 0);
+            const pct = totalPcs > 0 ? ((val / totalPcs) * 100).toFixed(1) : 0;
+            return `${name} (${pct}%)`;
+        });
+
+        const labelsKg = depts.map(d => {
+            const name = d.charAt(0).toUpperCase() + d.slice(1);
+            const val = Number(stats[d]?.total_kg || 0);
+            const pct = totalKg > 0 ? ((val / totalKg) * 100).toFixed(1) : 0;
+            return `${name} (${pct}%)`;
+        });
+
+        const dataPcs = depts.map(d => Number(stats[d]?.total_pcs || 0));
+        const dataKg = depts.map(d => Number(stats[d]?.total_kg || 0));
         const donutColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-        const donutOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } };
+        const donutOptions = (unit) => ({
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 10,
+                        font: { size: 10, weight: 'bold' },
+                        padding: 8
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const label = context.label.split(' (')[0];
+                            const value = context.parsed;
+                            return ` ${label}: ${value.toLocaleString()} ${unit}`;
+                        }
+                    }
+                }
+            }
+        });
 
         new Chart(document.getElementById('distPcsChart'), {
-            type: 'doughnut', data: { labels: formatDepts, datasets: [{ data: dataPcs, backgroundColor: donutColors }] }, options: donutOptions
+            type: 'doughnut', data: { labels: labelsPcs, datasets: [{ data: dataPcs, backgroundColor: donutColors }] }, options: donutOptions('PCS')
         });
         new Chart(document.getElementById('distKgChart'), {
-            type: 'doughnut', data: { labels: formatDepts, datasets: [{ data: dataKg, backgroundColor: donutColors }] }, options: donutOptions
+            type: 'doughnut', data: { labels: labelsKg, datasets: [{ data: dataKg, backgroundColor: donutColors }] }, options: donutOptions('KG')
         });
 
         // 2. Individual Line Charts (12 Charts with 4 machine lines each)
-        const lineColors = { 
+        const lineColors = {
             1: '#3b82f6', // Blue (Line 1)
             2: '#10b981', // Green (Line 2)
             3: '#f59e0b', // Yellow/Orange (Line 3)
@@ -111,18 +154,18 @@
             responsive: true,
             maintainAspectRatio: false,
             interaction: { intersect: false, mode: 'index' },
-            plugins: { 
-                legend: { 
-                    display: true, 
-                    position: 'top', 
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
                     align: 'end',
                     labels: { boxWidth: 8, padding: 10, font: { size: 9, weight: 'bold' }, usePointStyle: true }
-                }, 
+                },
                 tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', padding: 10 }
             },
             scales: {
-                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, color: '#94a3b8' }},
-                x: { grid: { display: false }, ticks: { font: { size: 8 }, color: '#94a3b8' }}
+                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, color: '#94a3b8' } },
+                x: { grid: { display: false }, ticks: { font: { size: 8 }, color: '#94a3b8' } }
             }
         });
 

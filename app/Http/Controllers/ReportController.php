@@ -11,7 +11,7 @@ class ReportController extends Controller
     public function index(Request $request)
     {
         $departments = ['cor', 'netto', 'bubut_od', 'bubut_cnc', 'bor', 'finish'];
-        
+
         $results = null;
         $totalPcs = 0;
         $totalKg = 0;
@@ -29,15 +29,15 @@ class ReportController extends Controller
             // the user said "hari ini kita akan perintahkan... 10 heat number harus selesai".
             // It implies taking the *available* stock in that department/line to *assign* as work.
             // So we query the current backlog in that department/line. The 'date' parameter is likely just for the report header "Date of SPK".
-            
+
             $query = ProductionItem::where('current_dept', $request->department)
-                                  ->where('line_number', $request->line)
-                                  ->orderBy('created_at') // FIFO
-                                  ->limit($request->count);
-                                  
+                ->where('line_number', $request->line)
+                ->orderBy('created_at') // FIFO
+                ->limit($request->count);
+
             $results = $query->get();
             $totalPcs = $results->sum('qty_pcs');
-            $totalKg = $results->sum('weight_kg');
+            $totalKg = $results->sum(fn($r) => $r->qty_pcs * $r->weight_kg);
         }
 
         return view('report.index', [
@@ -63,14 +63,14 @@ class ReportController extends Controller
         ]);
 
         $results = ProductionItem::where('current_dept', $request->department)
-                                  ->where('line_number', $request->line)
-                                  ->orderBy('created_at')
-                                  ->limit($request->count)
-                                  ->get();
+            ->where('line_number', $request->line)
+            ->orderBy('created_at')
+            ->limit($request->count)
+            ->get();
 
         $totalPcs = $results->sum('qty_pcs');
-        $totalKg = $results->sum('weight_kg');
-        
+        $totalKg = $results->sum(fn($r) => $r->qty_pcs * $r->weight_kg);
+
         $data = [
             'date' => $request->date,
             'department' => $request->department,
@@ -86,13 +86,13 @@ class ReportController extends Controller
         } elseif ($type === 'excel') {
             // Generate HTML table for Excel
             $filename = "SPK_{$request->department}_Line{$request->line}_{$request->date}.xls";
-            
+
             return Response::make(view('report.excel', $data), 200, [
                 'Content-Type' => 'application/vnd.ms-excel',
                 'Content-Disposition' => "attachment; filename=\"$filename\"",
             ]);
         }
-        
+
         return back();
     }
 }

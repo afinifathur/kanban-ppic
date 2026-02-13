@@ -31,6 +31,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/input/{dept}/create', [InputController::class, 'create'])->name('input.create');
     Route::post('/input/{dept}', [InputController::class, 'store'])->name('input.store');
     Route::get('/input/{dept}/{date}', [InputController::class, 'show'])->name('input.show');
+    Route::patch('/input/history/{history}', [InputController::class, 'updateHistory'])->name('input.history.update');
+    Route::delete('/input/history/{history}', [InputController::class, 'destroyHistory'])->name('input.history.destroy');
 
     // Kanban Routes
     Route::get('/kanban/{dept}', [KanbanController::class, 'index'])->name('kanban.index');
@@ -49,6 +51,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/settings/defect-types', [\App\Http\Controllers\DefectTypeController::class, 'index'])->name('settings.defect-types.index');
     Route::post('/settings/defect-types', [\App\Http\Controllers\DefectTypeController::class, 'store'])->name('settings.defect-types.store');
     Route::delete('/settings/defect-types/{defectType}', [\App\Http\Controllers\DefectTypeController::class, 'destroy'])->name('settings.defect-types.destroy');
+
+    // Customer Settings
+    Route::get('/settings/customers', [\App\Http\Controllers\CustomerController::class, 'index'])->name('settings.customers.index');
+    Route::post('/settings/customers', [\App\Http\Controllers\CustomerController::class, 'store'])->name('settings.customers.store');
+    Route::delete('/settings/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'destroy'])->name('settings.customers.destroy');
 
     // Defect Entry
     Route::get('/defects/{dept}', [\App\Http\Controllers\DefectController::class, 'index'])->name('defects.index');

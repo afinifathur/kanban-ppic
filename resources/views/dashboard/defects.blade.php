@@ -1,26 +1,29 @@
 @extends('layouts.app')
 
-@section('content')
-    <div class="px-6 py-8">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <div>
-                <h1 class="text-3xl font-bold text-slate-800">Dashboard Kerusakan</h1>
-                <p class="text-slate-500 mt-1">Monitoring trend dan distribusi defect produksi</p>
-            </div>
-
-            <form method="GET" action="{{ route('dashboard.defects') }}"
-                class="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
-                <input type="date" name="start_date" value="{{ $startDate->format('Y-m-d') }}"
-                    class="border-none text-sm focus:ring-0 text-slate-600 rounded-l-md">
-                <span class="flex items-center text-slate-400 px-2">-</span>
-                <input type="date" name="end_date" value="{{ $endDate->format('Y-m-d') }}"
-                    class="border-none text-sm focus:ring-0 text-slate-600">
-                <button type="submit"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-md text-sm font-medium transition-colors">
-                    Filter
-                </button>
-            </form>
+@section('top_bar')
+    <div class="flex items-center justify-between w-full">
+        <div>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight">Dashboard Kerusakan</h1>
+            <p class="text-gray-500 text-[10px]">Monitoring trend dan distribusi defect produksi</p>
         </div>
+
+        <form method="GET" action="{{ route('dashboard.defects') }}"
+            class="flex bg-white rounded-lg shadow-sm border border-slate-200 p-0.5">
+            <input type="date" name="start_date" value="{{ $startDate->format('Y-m-d') }}"
+                class="border-none text-[11px] focus:ring-0 text-slate-600 px-2 py-1">
+            <span class="flex items-center text-slate-400 px-1 text-xs">-</span>
+            <input type="date" name="end_date" value="{{ $endDate->format('Y-m-d') }}"
+                class="border-none text-[11px] focus:ring-0 text-slate-600 px-2 py-1">
+            <button type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-3 rounded text-[11px] font-bold transition-colors">
+                Filter
+            </button>
+        </form>
+    </div>
+@endsection
+
+@section('content')
+    <div class="px-2 py-4">
 
         <!-- Line Chart: Weekly Trend -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
@@ -64,6 +67,22 @@
         Chart.defaults.color = '#64748b';
 
         // 1. Weekly Trend Line Chart
+        const pcsData = @json($lineChartPcs);
+        const kgData = @json($lineChartKg);
+
+        // Calculate max values for proportional scaling (2 PCS : 1 KG or 2000 PCS : 1 Ton)
+        // Since $lineChartKg is already in Ton (kg/1000), ratio is 2000 PCS : 1 Ton
+        const maxPcsValue = Math.max(...pcsData, 10);
+        const maxTonValue = Math.max(...kgData, 0.01);
+
+        // We want visual alignment: shared max height.
+        // Let's find a scale that fits both.
+        // If maxPcs is 3000 and maxTon is 3. 
+        // 3000 / 2000 = 1.5. 
+        // Max Scale for PCS could be 4000, for Ton could be 2.
+        const suggestedMaxPcs = Math.max(maxPcsValue, maxTonValue * 2000) * 1.1;
+        const suggestedMaxTon = suggestedMaxPcs / 2000;
+
         new Chart(document.getElementById('weeklyTrendChart'), {
             type: 'line',
             data: {
@@ -71,7 +90,7 @@
                 datasets: [
                     {
                         label: 'Total PCS',
-                        data: @json($lineChartPcs),
+                        data: pcsData,
                         borderColor: '#3b82f6', // Blue
                         backgroundColor: '#3b82f6',
                         yAxisID: 'y',
@@ -82,7 +101,7 @@
                     },
                     {
                         label: 'Total Tonase (Ton)',
-                        data: @json($lineChartKg),
+                        data: kgData,
                         borderColor: '#f97316', // Orange
                         backgroundColor: '#f97316',
                         yAxisID: 'y1',
@@ -107,7 +126,7 @@
                         display: true,
                         position: 'left',
                         beginAtZero: true,
-                        min: 0,
+                        max: suggestedMaxPcs,
                         title: { display: true, text: 'PCS', color: '#3b82f6', font: { weight: 'bold' } },
                         grid: { color: '#f1f5f9' },
                         ticks: { precision: 0 }
@@ -117,8 +136,8 @@
                         display: true,
                         position: 'right',
                         beginAtZero: true,
-                        min: 0,
-                        title: { display: true, text: 'Tonase', color: '#f97316', font: { weight: 'bold' } },
+                        max: suggestedMaxTon,
+                        title: { display: true, text: 'Tonase (Ton)', color: '#f97316', font: { weight: 'bold' } },
                         grid: { drawOnChartArea: false }
                     },
                     x: {

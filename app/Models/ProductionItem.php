@@ -46,20 +46,26 @@ class ProductionItem extends Model
         return $this->belongsTo(ProductionPlan::class, 'plan_id');
     }
 
+    public function defects()
+    {
+        return $this->hasMany(ProductionDefect::class, 'production_item_id');
+    }
+
     public function getAgingDaysAttribute()
     {
-        return $this->dept_entry_at->diffInDays(now());
+        $baseDate = $this->production_date ?? $this->dept_entry_at;
+        return $baseDate->diffInDays(now()->startOfDay());
     }
 
     public function getAgingColorAttribute()
     {
         $days = $this->aging_days;
 
-        if ($days < 5)
+        if ($days < 7)
             return 'green';
         if ($days <= 14)
             return 'yellow';
-        if ($days <= 30)
+        if ($days <= 21)
             return 'orange';
         return 'red';
     }

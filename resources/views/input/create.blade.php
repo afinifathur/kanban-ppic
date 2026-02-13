@@ -82,7 +82,7 @@
         const parseNum = (val) => {
             if (val === null || val === undefined || val === '' || val === '-') return null;
             if (typeof val === 'number') return val;
-            const clean = val.toString().replace(/[^-0.9.]/g, '');
+            const clean = val.toString().replace(/[^-0-9.]/g, '');
             const num = parseFloat(clean);
             return isNaN(num) ? null : num;
         };

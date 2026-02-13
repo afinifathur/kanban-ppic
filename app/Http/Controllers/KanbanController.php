@@ -17,15 +17,16 @@ class KanbanController extends Controller
                 ->get();
 
             $totalPcs = $items->sum('qty_remaining');
-            $totalKg = $items->sum('weight');
+            $totalKg = $items->sum(fn($i) => $i->qty_remaining * $i->weight);
         } else {
             $items = \App\Models\ProductionItem::where('current_dept', $dept)
+                ->where('qty_pcs', '>', 0)
                 ->orderBy('line_number')
                 ->orderBy('created_at')
                 ->get();
 
             $totalPcs = $items->sum('qty_pcs');
-            $totalKg = $items->sum('weight_kg');
+            $totalKg = $items->sum(fn($i) => $i->qty_pcs * $i->weight_kg);
         }
 
         $lines = [
@@ -40,13 +41,14 @@ class KanbanController extends Controller
         $nextDept = ($currentIndex !== false && isset($flow[$currentIndex + 1])) ? $flow[$currentIndex + 1] : null;
 
         // Stats for All Departments (Navigation Bar)
-        $itemStats = \App\Models\ProductionItem::selectRaw('current_dept, SUM(qty_pcs) as total_pcs, SUM(weight_kg) as total_kg')
+        $itemStats = \App\Models\ProductionItem::where('qty_pcs', '>', 0)
+            ->selectRaw('current_dept, SUM(qty_pcs) as total_pcs, SUM(qty_pcs * weight_kg) as total_kg')
             ->groupBy('current_dept')
             ->get()
             ->keyBy('current_dept');
 
         $planStats = \App\Models\ProductionPlan::where('qty_remaining', '>', 0)
-            ->selectRaw('SUM(qty_remaining) as total_pcs, SUM(weight) as total_kg')
+            ->selectRaw('SUM(qty_remaining) as total_pcs, SUM(qty_remaining * weight) as total_kg')
             ->first();
 
         // Merge stats for navigation

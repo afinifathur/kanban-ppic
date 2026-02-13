@@ -76,9 +76,9 @@
                         <h3 class="font-bold text-sm">Line {{ $lineNum }}</h3>
                         <div class="text-[10px] opacity-90 font-mono">
                             @if($dept === 'rencana_cor')
-                                {{ $items->count() }} P.O <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum('qty_remaining')) }} pcs <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum('weight')) }} kg
+                                {{ $items->count() }} P.O <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum('qty_remaining')) }} pcs <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum(fn($i) => $i->qty_remaining * $i->weight)) }} kg
                             @else
-                                {{ $items->count() }} HN <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum('qty_pcs')) }} pcs <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum('weight_kg')) }} kg
+                                {{ $items->count() }} HN <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum('qty_pcs')) }} pcs <span class="mx-1 opacity-50">|</span> {{ number_format($items->sum(fn($i) => $i->qty_pcs * $i->weight_kg)) }} kg
                             @endif
                         </div>
                     </div>
@@ -91,7 +91,7 @@
                                 <div class="relative bg-white p-2 rounded shadow-sm border border-gray-200 border-l-[3px] border-l-blue-400 hover:shadow-md transition-shadow group">
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <div class="flex justify-between items-start gap-1">
-                                            <div class="text-[11px] font-bold text-gray-800 leading-tight truncate flex-1" title="{{ $item->item_name }}">
+                                            <div class="text-[11px] font-bold text-gray-800 leading-tight line-clamp-2 whitespace-normal flex-1" title="{{ $item->item_name }}">
                                                 {{ $item->item_name }}
                                             </div>
                                             <div class="text-[10px] font-bold text-blue-600 shrink-0">#{{ $loop->iteration }}</div>
@@ -103,7 +103,7 @@
                                             <div class="flex gap-2 text-[10px] font-semibold text-slate-600">
                                                 <span>{{ number_format($item->qty_remaining) }} pcs</span>
                                                 <span class="text-gray-300">|</span>
-                                                <span>{{ number_format($item->weight) }} kg</span>
+                                                <span>{{ number_format($item->qty_remaining * $item->weight, 2) }} kg</span>
                                             </div>
                                             @if($item->customer)
                                             <span class="text-[9px] bg-gray-100 text-gray-500 px-1 rounded uppercase font-bold truncate max-w-[50px]">
@@ -132,7 +132,7 @@
                                         
                                         <div class="flex-1 min-w-0">
                                             <div class="flex justify-between items-start gap-1">
-                                                <div class="text-[11px] font-bold text-gray-800 leading-tight truncate" title="{{ $item->item_name }}">{{ $item->item_name }}</div>
+                                                <div class="text-[11px] font-bold text-gray-800 leading-tight line-clamp-2 whitespace-normal" title="{{ $item->item_name }}">{{ $item->item_name }}</div>
                                                 <div class="text-[11px] font-bold {{ $agingTextClass }} shrink-0">{{ number_format($agingDays, 0) }}h</div>
                                             </div>
                                             
@@ -142,7 +142,7 @@
                                                 <div class="flex gap-2 text-[10px] font-semibold text-slate-600">
                                                     <span>{{ $item->qty_pcs }} <span class="text-[8px] font-normal opacity-70 uppercase tracking-tighter">pcs</span></span>
                                                     <span class="text-gray-300">|</span>
-                                                    <span>{{ $item->weight_kg }} <span class="text-[8px] font-normal opacity-70 uppercase tracking-tighter">kg</span></span>
+                                                    <span>{{ number_format($item->qty_pcs * $item->weight_kg, 2) }} <span class="text-[8px] font-normal opacity-70 uppercase tracking-tighter">kg</span></span>
                                                 </div>
                                                 
                                                 <div class="flex items-center gap-1">
