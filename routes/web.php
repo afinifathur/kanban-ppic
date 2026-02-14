@@ -45,6 +45,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Defect Report Routes
     Route::get('/report-defects', [\App\Http\Controllers\DefectReportController::class, 'index'])->name('report-defects.index');
+    Route::get('/report-defects/summary', [\App\Http\Controllers\DefectReportController::class, 'summary'])->name('report-defects.summary');
     Route::get('/report-defects/export/{type}', [\App\Http\Controllers\DefectReportController::class, 'export'])->name('report-defects.export');
 
     // Defect Settings

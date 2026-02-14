@@ -27,10 +27,10 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="{{ asset('css/all.min.css') }}">
     <!-- Handsontable -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+    <link rel="stylesheet" href="{{ asset('css/handsontable.full.min.css') }}">
+    <script src="{{ asset('js/handsontable.full.min.js') }}"></script>
     <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="{{ asset('js/sweetalert2.all.min.js') }}"></script>
     <style>
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
@@ -143,7 +143,7 @@
                         @foreach($deptIcons as $dept => $icon)
                             <li>
                                 <a href="{{ route('input.index', $dept) }}"
-                                    class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('input/' . $dept) ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-400' }}">
+                                    class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('input/' . $dept) ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}">
                                     <i class="fas {{ $icon }} w-4 mr-2 text-xs opacity-70"></i>
                                     <span class="text-sm">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
                                 </a>
@@ -167,7 +167,7 @@
                             @if($dept !== 'cor') {{-- Cor usually doesn't have defects entry in this flow --}}
                                 <li>
                                     <a href="{{ route('defects.index', $dept) }}"
-                                        class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('defects/' . $dept) ? 'text-white font-medium border-l-2 border-red-500' : 'text-slate-400' }}">
+                                        class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('defects/' . $dept) ? 'text-white font-medium border-l-2 border-red-500' : 'text-slate-300' }}">
                                         <i class="fas {{ $icon }} w-4 mr-2 text-xs opacity-70"></i>
                                         <span class="text-sm">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
                                     </a>
@@ -177,39 +177,64 @@
                     </ul>
                 </li>
 
-                <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">System</li>
-
-                <li>
-                    <a href="{{ route('settings.defect-types.index') }}"
-                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.defect-types.*') ? 'bg-blue-600 text-white' : 'text-slate-300' }}">
-                        <i class="fas fa-exclamation-triangle w-6"></i> Setting Kerusakan
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ route('settings.customers.index') }}"
-                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.customers.*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}">
-                        <i class="fas fa-users w-6"></i> Setting Customer
-                    </a>
-                </li>
-
+                <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">Report</li>
                 <li>
                     <a href="{{ route('report.index') }}"
                         class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report.*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}">
                         <i class="fas fa-print w-6"></i> Report SPK
                     </a>
                 </li>
-
                 <li>
                     <a href="{{ route('report-defects.index') }}"
-                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report-defects.*') ? 'bg-blue-600 text-white border-l-4 border-red-300' : 'text-slate-300' }}">
+                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report-defects.index') ? 'bg-blue-600 text-white border-l-4 border-red-300' : 'text-slate-300' }}">
                         <i class="fas fa-file-invoice-dollar w-6"></i> Report Kerusakan
                     </a>
+                </li>
+
+                <li>
+                    <a href="{{ route('report-defects.summary') }}"
+                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report-defects.summary') ? 'bg-blue-600 text-white border-l-4 border-orange-300' : 'text-slate-300' }}">
+                        <i class="fas fa-file-alt w-6"></i> Rekap Kerusakan
+                    </a>
+                </li>
+
+                <li>
+                    <button onclick="toggleSettingsMenu()"
+                        class="w-full flex items-center justify-between px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group">
+                        <span
+                            class="text-xs font-semibold text-slate-500 uppercase group-hover:text-slate-300">Setting</span>
+                        <i id="settingsMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 {{ request()->is('settings*') ? 'rotate-90' : '' }}"></i>
+                    </button>
+                    <ul id="settingsMenu"
+                        class="{{ request()->is('settings*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        <li>
+                            <a href="{{ route('settings.defect-types.index') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.defect-types.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}">
+                                <i class="fas fa-exclamation-triangle w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Setting Kerusakan</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('settings.customers.index') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('settings.customers.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}">
+                                <i class="fas fa-users w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Setting Customer</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 <script>
                     function toggleDefectMenu() {
                         const menu = document.getElementById('defectMenu');
                         const icon = document.getElementById('defectMenuIcon');
+                        menu.classList.toggle('hidden');
+                        icon.classList.toggle('rotate-90');
+                    }
+                    function toggleSettingsMenu() {
+                        const menu = document.getElementById('settingsMenu');
+                        const icon = document.getElementById('settingsMenuIcon');
                         menu.classList.toggle('hidden');
                         icon.classList.toggle('rotate-90');
                     }

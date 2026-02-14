@@ -27,6 +27,7 @@
                     <select name="department" onchange="this.form.submit()"
                         class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
                         <option value="">Pilih Departemen</option>
+                        <option value="all" {{ $selectedDept == 'all' ? 'selected' : '' }}>Semua Departemen</option>
                         @foreach($departments as $dept)
                             <option value="{{ $dept }}" {{ $selectedDept == $dept ? 'selected' : '' }}>
                                 {{ ucfirst(str_replace('_', ' ', $dept)) }}
@@ -69,11 +70,15 @@
                 <div class="flex justify-between items-start mb-6">
                     <div>
                         <h2 class="text-xl font-bold text-gray-900 uppercase">LAPORAN KERUSAKAN PRODUKSI</h2>
-                        <h3 class="text-lg text-gray-600">DEPARTEMEN {{ strtoupper(str_replace('_', ' ', $selectedDept)) }}</h3>
+                        <h3 class="text-lg text-gray-600">
+                            DEPARTEMEN: {{ $selectedDept === 'all' ? 'SEMUA DEPARTEMEN' : strtoupper(str_replace('_', ' ', $selectedDept)) }}
+                        </h3>
                         <p class="text-sm text-gray-500 mt-1">Tanggal: {{ date('d F Y', strtotime($selectedDate)) }}</p>
-                        <p class="text-red-700 font-bold mt-2 text-lg uppercase">JENIS:
-                            {{ $defectType ? $defectType->name : 'SEMUA JENIS' }}
-                        </p>
+                        @if($selectedDept !== 'all')
+                            <p class="text-red-700 font-bold mt-2 text-lg uppercase">JENIS:
+                                {{ $defectType ? $defectType->name : 'SEMUA JENIS' }}
+                            </p>
+                        @endif
                     </div>
                     <div class="flex gap-2">
                         <a href="{{ route('report-defects.export', ['type' => 'pdf'] + request()->all()) }}" target="_blank"
@@ -87,47 +92,86 @@
                     </div>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full border-collapse border border-gray-300 text-sm">
-                        <thead>
-                            <tr class="bg-gray-100">
-                                <th class="border border-gray-300 px-3 py-2 text-center w-12">No</th>
-                                <th class="border border-gray-300 px-3 py-2 text-left">Heat Number</th>
-                                <th class="border border-gray-300 px-3 py-2 text-left">Nama Item</th>
-                                <th class="border border-gray-300 px-3 py-2 text-center">Qty Rusak (pcs)</th>
-                                <th class="border border-gray-300 px-3 py-2 text-left">Catatan</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($results as $index => $item)
-                                <tr>
-                                    <td class="border border-gray-300 px-3 py-2 text-center">{{ $index + 1 }}</td>
-                                    <td class="border border-gray-300 px-3 py-2 font-mono font-bold">
-                                        {{ $item->heat_number }}
-                                    </td>
-                                    <td class="border border-gray-300 px-3 py-2">{{ $item->item_name }}</td>
-                                    <td class="border border-gray-300 px-3 py-2 text-center">
-                                        {{ number_format($item->total_defect_qty) }}</td>
-                                    <td class="border border-gray-300 px-3 py-2 text-red-600 font-medium">
-                                        {{ $item->defect_summary ?: '-' }}
-                                    </td>
+                <div class="overflow-x-auto space-y-8">
+                    @if($selectedDept === 'all')
+                        @foreach($results as $deptName => $deptItems)
+                            <div class="mb-8">
+                                <h4 class="text-md font-bold text-slate-700 mb-2 uppercase border-b pb-1">
+                                    DEPARTEMEN: {{ str_replace('_', ' ', $deptName) }}
+                                </h4>
+                                <table class="w-full border-collapse border border-gray-300 text-sm">
+                                    <thead>
+                                        <tr class="bg-gray-100">
+                                            <th class="border border-gray-300 px-3 py-2 text-center w-12">No</th>
+                                            <th class="border border-gray-300 px-3 py-2 text-left">Heat Number</th>
+                                            <th class="border border-gray-300 px-3 py-2 text-left">Nama Item</th>
+                                            <th class="border border-gray-300 px-3 py-2 text-center">Qty Rusak (pcs)</th>
+                                            <th class="border border-gray-300 px-3 py-2 text-left">Catatan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($deptItems as $index => $item)
+                                            <tr>
+                                                <td class="border border-gray-300 px-3 py-2 text-center">{{ $index + 1 }}</td>
+                                                <td class="border border-gray-300 px-3 py-2 font-mono font-bold">{{ $item->heat_number }}</td>
+                                                <td class="border border-gray-300 px-3 py-2">{{ $item->item_name }}</td>
+                                                <td class="border border-gray-300 px-3 py-2 text-center">{{ number_format($item->total_defect_qty) }}</td>
+                                                <td class="border border-gray-300 px-3 py-2 text-red-600 font-medium">{{ $item->defect_summary ?: '-' }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                    <tfoot class="bg-gray-50 font-bold">
+                                        <tr>
+                                            <td colspan="3" class="border border-gray-300 px-3 py-2 text-right">TOTAL {{ strtoupper(str_replace('_', ' ', $deptName)) }}</td>
+                                            <td class="border border-gray-300 px-3 py-2 text-center">{{ number_format($deptItems->sum('total_defect_qty')) }}</td>
+                                            <td class="border border-gray-300 px-3 py-2"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        @endforeach
+                    @else
+                        <table class="w-full border-collapse border border-gray-300 text-sm">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="border border-gray-300 px-3 py-2 text-center w-12">No</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-left">Heat Number</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-left">Nama Item</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-center">Qty Rusak (pcs)</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-left">Catatan</th>
                                 </tr>
-                            @empty
+                            </thead>
+                            <tbody>
+                                @forelse($results as $index => $item)
+                                    <tr>
+                                        <td class="border border-gray-300 px-3 py-2 text-center">{{ $index + 1 }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 font-mono font-bold">
+                                            {{ $item->heat_number }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2">{{ $item->item_name }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center">
+                                            {{ number_format($item->total_defect_qty) }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-red-600 font-medium">
+                                            {{ $item->defect_summary ?: '-' }}
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="5" class="border border-gray-300 px-3 py-6 text-center text-gray-500 italic">
+                                            Tidak ada data tersedia untuk kriteria ini.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                            <tfoot class="bg-gray-50 font-bold">
                                 <tr>
-                                    <td colspan="5" class="border border-gray-300 px-3 py-6 text-center text-gray-500 italic">
-                                        Tidak ada data tersedia untuk kriteria ini.
-                                    </td>
+                                    <td colspan="3" class="border border-gray-300 px-3 py-2 text-right">TOTAL</td>
+                                    <td class="border border-gray-300 px-3 py-2 text-center">{{ number_format($totalQty) }}</td>
+                                    <td class="border border-gray-300 px-3 py-2"></td>
                                 </tr>
-                            @endforelse
-                        </tbody>
-                        <tfoot class="bg-gray-50 font-bold">
-                            <tr>
-                                <td colspan="3" class="border border-gray-300 px-3 py-2 text-right">TOTAL</td>
-                                <td class="border border-gray-300 px-3 py-2 text-center">{{ number_format($totalQty) }}</td>
-                                <td class="border border-gray-300 px-3 py-2"></td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                            </tfoot>
+                        </table>
+                    @endif
                 </div>
 
                 <!-- Signatures -->
