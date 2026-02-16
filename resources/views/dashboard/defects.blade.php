@@ -155,6 +155,55 @@
         // 2. Donut Charts
         const donutColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
+        const donutOptions = (unit) => ({
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 10,
+                        padding: 15,
+                        font: { size: 11, weight: 'bold' },
+                        generateLabels: function (chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                const dataset = data.datasets[0];
+                                const total = dataset.data.reduce((acc, val) => acc + val, 0);
+                                return data.labels.map((label, i) => {
+                                    const value = dataset.data[i];
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return {
+                                        text: `${label} (${percentage}%)`,
+                                        fillStyle: dataset.backgroundColor[i],
+                                        strokeStyle: dataset.backgroundColor[i],
+                                        lineWidth: 0,
+                                        hidden: isNaN(dataset.data[i]) || chart.getDatasetMeta(0).data[i].hidden,
+                                        index: i
+                                    };
+                                });
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const dataset = context.chart.data.datasets[0];
+                            const total = dataset.data.reduce((acc, val) => acc + val, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return ` ${label}: ${value.toLocaleString()} ${unit} (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            layout: { padding: { right: 20 } },
+            cutout: '65%'
+        });
+
         // Chart By Type
         new Chart(document.getElementById('chartByType'), {
             type: 'doughnut',
@@ -166,15 +215,7 @@
                     borderWidth: 0
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 10, padding: 15, font: { size: 11 } } }
-                },
-                layout: { padding: 20 },
-                cutout: '65%'
-            }
+            options: donutOptions('PCS')
         });
 
         // Chart By Dept
@@ -188,15 +229,7 @@
                     borderWidth: 0
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 10, padding: 15, font: { size: 11 } } }
-                },
-                layout: { padding: 20 },
-                cutout: '65%'
-            }
+            options: donutOptions('PCS')
         });
     </script>
 @endsection

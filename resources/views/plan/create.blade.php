@@ -45,7 +45,7 @@
                 { type: 'numeric' },
                 { type: 'text' },
                 { type: 'numeric' },
-                { type: 'numeric' },
+                { type: 'text' },
                 { type: 'text' },
             ],
             height: '100%',
