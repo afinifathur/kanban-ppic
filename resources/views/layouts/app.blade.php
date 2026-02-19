@@ -107,7 +107,7 @@
                 <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">Kanban</li>
 
                 <li>
-                    <a href="{{ route('kanban.index', 'cor') }}"
+                    <a href="{{ route('kanban.index', 'rencana_cor') }}"
                         class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->is('kanban*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}">
                         <i class="fas fa-columns w-6"></i> Kanban Board
                     </a>
@@ -175,6 +175,20 @@
                             @endif
                         @endforeach
                     </ul>
+                </li>
+
+                <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">WIP (Work In Process)</li>
+                <li>
+                    <a href="{{ route('wip.index') }}"
+                        class="flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->is('wip') || request()->is('wip/*') ? 'bg-blue-600 text-white border-l-4 border-emerald-400' : 'text-slate-300' }}">
+                        <i class="fas fa-layer-group w-6"></i> Input Harian (WIP)
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ route('wip.report') }}"
+                        class="flex items-center px-6 py-2 border-l-4 border-transparent hover:bg-slate-800 {{ request()->routeIs('wip.report') ? 'bg-blue-600 text-white border-l-emerald-400' : 'text-slate-300' }}">
+                        <i class="fas fa-file-invoice w-6"></i> Report WIP
+                    </a>
                 </li>
 
                 <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">Report</li>
@@ -278,6 +292,14 @@
                     class="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center shadow-sm">
                     <i class="fas fa-check-circle mr-3 text-emerald-500"></i>
                     <span class="font-medium">{{ session('success') }}</span>
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div
+                    class="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center shadow-sm">
+                    <i class="fas fa-exclamation-circle mr-3 text-red-500"></i>
+                    <span class="font-medium">{{ session('error') }}</span>
                 </div>
             @endif
 

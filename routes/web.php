@@ -8,6 +8,7 @@ use App\Http\Controllers\ReportController;
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\WipController;
 
 Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
@@ -25,6 +26,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/plan', [PlanController::class, 'index'])->name('plan.index');
     Route::get('/plan/create', [PlanController::class, 'create'])->name('plan.create');
     Route::post('/plan', [PlanController::class, 'store'])->name('plan.store');
+    Route::get('/plan/{plan}/edit', [PlanController::class, 'edit'])->name('plan.edit');
+    Route::put('/plan/{plan}', [PlanController::class, 'update'])->name('plan.update');
+    Route::delete('/plan/{plan}', [PlanController::class, 'destroy'])->name('plan.destroy');
 
     // Input Routes
     Route::get('/input/{dept}', [InputController::class, 'index'])->name('input.index');
@@ -61,4 +65,10 @@ Route::middleware(['auth'])->group(function () {
     // Defect Entry
     Route::get('/defects/{dept}', [\App\Http\Controllers\DefectController::class, 'index'])->name('defects.index');
     Route::post('/defects/{item}', [\App\Http\Controllers\DefectController::class, 'store'])->name('defects.store');
+
+    // WIP & Heat Number Management
+    Route::get('/wip', [WipController::class, 'index'])->name('wip.index');
+    Route::get('/wip/{date}', [WipController::class, 'show'])->name('wip.show');
+    Route::post('/wip/update', [WipController::class, 'update'])->name('wip.update');
+    Route::get('/report/wip', [WipController::class, 'report'])->name('wip.report');
 });

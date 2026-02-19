@@ -19,6 +19,8 @@ class ProductionPlan extends Model
         'line_number',
         'customer',
         'status',
+        'created_at',
+        'updated_at',
     ];
 
     protected $casts = [

@@ -14,7 +14,7 @@
         <div class="grid grid-cols-6 gap-4 mb-6">
             @foreach($depts as $dept)
                 <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-                    <h3 class="font-bold text-gray-700 mb-2">{{ ucfirst($dept) }}</h3>
+                    <h3 class="font-bold text-gray-700 mb-2">{{ $dept === 'cor' ? 'Rencana Cor' : ucfirst($dept) }}</h3>
                     <div class="flex justify-between items-end">
                         <div class="text-gray-500 text-xs">PCS:</div>
                         <div class="font-bold text-lg">{{ number_format($stats[$dept]['total_pcs'] ?? 0) }}</div>
@@ -94,14 +94,14 @@
         const totalKg = depts.reduce((acc, d) => acc + Number(stats[d]?.total_kg || 0), 0);
 
         const labelsPcs = depts.map(d => {
-            const name = d.charAt(0).toUpperCase() + d.slice(1);
+            let name = d === 'cor' ? 'Rencana Cor' : d.charAt(0).toUpperCase() + d.slice(1);
             const val = Number(stats[d]?.total_pcs || 0);
             const pct = totalPcs > 0 ? ((val / totalPcs) * 100).toFixed(1) : 0;
             return `${name} (${pct}%)`;
         });
 
         const labelsKg = depts.map(d => {
-            const name = d.charAt(0).toUpperCase() + d.slice(1);
+            let name = d === 'cor' ? 'Rencana Cor' : d.charAt(0).toUpperCase() + d.slice(1);
             const val = Number(stats[d]?.total_kg || 0);
             const pct = totalKg > 0 ? ((val / totalKg) * 100).toFixed(1) : 0;
             return `${name} (${pct}%)`;
@@ -126,7 +126,7 @@
                 tooltip: {
                     callbacks: {
                         label: function (context) {
-                            const label = context.label.split(' (')[0];
+                            let label = context.label.split(' (')[0];
                             const value = context.parsed;
                             return ` ${label}: ${value.toLocaleString()} ${unit}`;
                         }

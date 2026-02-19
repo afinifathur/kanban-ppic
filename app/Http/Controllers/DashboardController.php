@@ -17,10 +17,20 @@ class DashboardController extends Controller
         $depts = ['cor', 'netto', 'bubut_od', 'bubut_cnc', 'bor', 'finish'];
         $stats = [];
         foreach ($depts as $dept) {
-            $stats[$dept] = [
-                'total_pcs' => $stock[$dept]->total_pcs ?? 0,
-                'total_kg' => $stock[$dept]->total_kg ?? 0,
-            ];
+            if ($dept === 'cor') {
+                // For 'Cor', we show 'Rencana Cor' (Queue/Remaining)
+                $planSummary = \App\Models\ProductionPlan::selectRaw('SUM(qty_remaining) as total_pcs, SUM(qty_remaining * weight) as total_kg')
+                    ->first();
+                $stats['cor'] = [
+                    'total_pcs' => $planSummary->total_pcs ?? 0,
+                    'total_kg' => $planSummary->total_kg ?? 0,
+                ];
+            } else {
+                $stats[$dept] = [
+                    'total_pcs' => $stock[$dept]->total_pcs ?? 0,
+                    'total_kg' => $stock[$dept]->total_kg ?? 0,
+                ];
+            }
         }
 
         // 2. Movement History (Last 7 Days)

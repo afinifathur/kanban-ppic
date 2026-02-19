@@ -3,12 +3,19 @@
 @section('content')
     <div class="bg-white shadow-md rounded-lg p-6 h-full flex flex-col">
         <div class="flex justify-between items-center mb-4">
-            <div>
-                <h1 class="text-xl font-bold text-gray-800">Rencana Cor (Input PPIC)</h1>
-                <p class="text-sm text-gray-500">Masukkan data P.O. dari Customer untuk antrian Cor.</p>
+            <div class="flex items-center gap-6">
+                <div>
+                    <h1 class="text-xl font-bold text-gray-800">Rencana Cor (Input PPIC)</h1>
+                    <p class="text-sm text-gray-500">Masukkan data P.O. dari Customer untuk antrian Cor.</p>
+                </div>
+                <div class="bg-slate-100 p-2 rounded flex items-center gap-2 border border-slate-200">
+                    <label class="text-xs font-bold text-slate-600 uppercase">Tanggal Rencana:</label>
+                    <input type="date" id="planDate" value="{{ date('Y-m-d') }}"
+                        class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500">
+                </div>
             </div>
-            <button onclick="savePlans()"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow-sm transition-all">
+            <button onclick="savePlans()" id="saveBtn"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="fas fa-save mr-2"></i> Simpan Rencana
             </button>
         </div>
@@ -26,6 +33,7 @@
     <script>
         let hot;
         const container = document.getElementById('planTable');
+        const customerList = @json($customers->pluck('name'));
 
         // Initial data: 30 empty rows
         const initialData = Array.from({ length: 30 }, () => [null, null, null, null, null, null, null, null, null, null]);
@@ -46,7 +54,11 @@
                 { type: 'text' },
                 { type: 'numeric' },
                 { type: 'text' },
-                { type: 'text' },
+                {
+                    type: 'dropdown',
+                    source: customerList,
+                    strict: false // Allow manual entry if not in list
+                },
             ],
             height: '100%',
             width: '100%',
@@ -59,6 +71,8 @@
         });
 
         function savePlans() {
+            const saveBtn = document.getElementById('saveBtn');
+            const planDate = document.getElementById('planDate').value;
             const rawData = hot.getData();
             const plans = [];
 
@@ -85,16 +99,28 @@
                 return;
             }
 
-            axios.post('{{ route('plan.store') }}', { plans: plans })
+            // Disable button and show loading
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Memproses...';
+
+            axios.post('{{ route('plan.store') }}', {
+                plans: plans,
+                date: planDate
+            })
                 .then(res => {
                     alert(res.data.message);
                     if (res.data.redirect) {
                         window.location.href = res.data.redirect;
+                    } else {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';
                     }
                 })
                 .catch(err => {
                     console.error(err);
                     alert('Terjadi kesalahan saat menyimpan data. Periksa konsol.');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';
                 });
         }
     </script>

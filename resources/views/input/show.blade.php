@@ -169,7 +169,7 @@
         document.getElementById('editForm').onsubmit = async (e) => {
             e.preventDefault();
             const id = document.getElementById('edit_history_id').value;
-            const res = await fetch(`/input/history/${id}`, {
+            const res = await fetch(`{{ route('input.history.update', ':id') }}`.replace(':id', id), {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -188,7 +188,7 @@
         };
 
         async function deleteHistory(id) {
-            const res = await fetch(`/input/history/${id}`, {
+            const res = await fetch(`{{ route('input.history.destroy', ':id') }}`.replace(':id', id), {
                 method: 'DELETE',
                 headers: {
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'

@@ -8,7 +8,7 @@ class KanbanController extends Controller
 {
     public function index($dept)
     {
-        $flow = ['rencana_cor', 'cor', 'netto', 'bubut_od', 'bubut_cnc', 'bor', 'finish'];
+        $flow = ['rencana_cor', 'netto', 'bubut_od', 'bubut_cnc', 'bor', 'finish'];
 
         if ($dept === 'rencana_cor') {
             $items = \App\Models\ProductionPlan::where('qty_remaining', '>', 0)
