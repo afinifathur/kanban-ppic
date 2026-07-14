@@ -2,7 +2,9 @@
 
 @section('top_bar')
     <div class="flex flex-col">
-        <h1 class="text-lg font-bold text-slate-800 leading-tight">Input Kerusakan: {{ ucfirst(str_replace('_', ' ', $dept)) }}</h1>
+        <h1 class="text-lg font-bold text-slate-800 leading-tight">Input Kerusakan:
+            {{ ucfirst(str_replace('_', ' ', $dept)) }}
+        </h1>
         <p class="text-slate-500 text-[10px]">Detailkan item yang memiliki jumlah reject/scrap.</p>
     </div>
 @endsection
@@ -57,6 +59,7 @@
                     <div class="w-40 shrink-0">
                         <select name="sort" onchange="this.form.submit()"
                             class="block w-full py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <option value="auto" {{ $sort === 'auto' ? 'selected' : '' }}>Auto Sort</option>
                             <option value="newest" {{ $sort === 'newest' ? 'selected' : '' }}>Terbaru</option>
                             <option value="oldest" {{ $sort === 'oldest' ? 'selected' : '' }}>Terlama</option>
                         </select>
@@ -67,7 +70,7 @@
                         Filter
                     </button>
 
-                    @if($search || $status !== 'all' || $sort !== 'newest')
+                    @if($search || $status !== 'all' || $sort !== 'auto')
                         <a href="{{ route('defects.index', $dept) }}"
                             class="text-slate-400 hover:text-slate-600 text-sm font-medium">Reset</a>
                     @endif
@@ -276,23 +279,23 @@
             });
 
             row.innerHTML = `
-                    <div class="flex-1">
-                        <select name="defects[${index}][defect_type_id]" class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                            ${optionsHtml}
-                        </select>
-                    </div>
-                    <div class="w-20">
-                        <input type="number" name="defects[${index}][qty]" value="${data ? data.qty : ''}" placeholder="Qty" min="1" 
-                            class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 text-center defect-qty" required oninput="updateTotalAllocated()">
-                    </div>
-                    <div class="flex-1">
-                        <input type="text" name="defects[${index}][notes]" value="${data ? data.notes || '' : ''}" placeholder="Catatan (opsional)" 
-                            class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-                    <button type="button" onclick="this.parentElement.remove(); updateTotalAllocated();" class="text-slate-400 hover:text-red-500 pt-2">
-                        <i class="fas fa-times"></i>
-                    </button>
-                `;
+                            <div class="flex-1">
+                                <select name="defects[${index}][defect_type_id]" class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                            <div class="w-20">
+                                <input type="number" name="defects[${index}][qty]" value="${data ? data.qty : ''}" placeholder="Qty" min="1" 
+                                    class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 text-center defect-qty" required oninput="updateTotalAllocated()">
+                            </div>
+                            <div class="flex-1">
+                                <input type="text" name="defects[${index}][notes]" value="${data ? data.notes || '' : ''}" placeholder="Catatan (opsional)" 
+                                    class="w-full rounded-md border-slate-300 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove(); updateTotalAllocated();" class="text-slate-400 hover:text-red-500 pt-2">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        `;
 
             container.appendChild(row);
         }

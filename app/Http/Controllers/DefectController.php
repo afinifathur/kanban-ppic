@@ -14,7 +14,7 @@ class DefectController extends Controller
     public function index(Request $request, $dept)
     {
         $search = $request->query('search');
-        $sort = $request->query('sort', 'newest');
+        $sort = $request->query('sort', 'auto');
         $status = $request->query('status', 'all');
 
         $query = ProductionItem::where('current_dept', $dept)
@@ -38,7 +38,13 @@ class DefectController extends Controller
         }
 
         // Sorting
-        if ($sort === 'oldest') {
+        if ($sort === 'auto') {
+            $query->orderByRaw('CASE WHEN COALESCE(defects_sum_qty, 0) >= scrap_qty THEN 1 ELSE 0 END ASC')
+                ->orderByRaw('CASE WHEN COALESCE(defects_sum_qty, 0) < scrap_qty THEN production_date END ASC')
+                ->orderByRaw('CASE WHEN COALESCE(defects_sum_qty, 0) < scrap_qty THEN created_at END ASC')
+                ->orderByRaw('CASE WHEN COALESCE(defects_sum_qty, 0) >= scrap_qty THEN production_date END DESC')
+                ->orderByRaw('CASE WHEN COALESCE(defects_sum_qty, 0) >= scrap_qty THEN created_at END DESC');
+        } elseif ($sort === 'oldest') {
             $query->orderBy('production_date', 'asc')->orderBy('created_at', 'asc');
         } else {
             $query->orderByDesc('production_date')->orderByDesc('created_at');
