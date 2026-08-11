@@ -23,6 +23,13 @@
             menu.classList.toggle('hidden');
             icon.classList.toggle('rotate-90');
         }
+
+        function toggleLostWaxMenu() {
+            const menu = document.getElementById('lostWaxMenu');
+            const icon = document.getElementById('lostWaxMenuIcon');
+            menu.classList.toggle('hidden');
+            icon.classList.toggle('rotate-90');
+        }
     </script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="{{ asset('css/all.min.css') }}">
@@ -55,10 +62,10 @@
     </style>
 </head>
 
-<body class="bg-gray-100 font-sans text-gray-900 flex h-screen overflow-hidden">
+<body id="app-body" class="bg-gray-100 font-sans text-gray-900 flex h-screen overflow-hidden">
 
     <!-- Sidebar -->
-    <aside class="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col">
+    <aside id="app-sidebar" class="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col">
         <div class="p-4 border-b border-slate-700">
             <h1 class="text-xl font-bold">FIFO Tracking</h1>
             <p class="text-xs text-slate-400 mb-4">Production System</p>
@@ -165,7 +172,14 @@
                         class="{{ request()->is('defects*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
                         @foreach($deptIcons as $dept => $icon)
                             @if($dept !== 'cor') {{-- Cor usually doesn't have defects entry in this flow --}}
-                                <li>
+                        <li>
+                            <a href="{{ route('lost-wax.production-status') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-table w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Production Status</span>
+                            </a>
+                        </li>
+                        <li>
                                     <a href="{{ route('defects.index', $dept) }}"
                                         class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('defects/' . $dept) ? 'text-white font-medium border-l-2 border-red-500' : 'text-slate-300' }}">
                                         <i class="fas {{ $icon }} w-4 mr-2 text-xs opacity-70"></i>
@@ -189,6 +203,61 @@
                         class="flex items-center px-6 py-2 border-l-4 border-transparent hover:bg-slate-800 {{ request()->routeIs('wip.report') ? 'bg-blue-600 text-white border-l-emerald-400' : 'text-slate-300' }}">
                         <i class="fas fa-file-invoice w-6"></i> Report WIP
                     </a>
+                </li>
+
+                <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">Lost Wax</li>
+                <li>
+                    <button onclick="toggleLostWaxMenu()"
+                        class="w-full flex items-center justify-between px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group">
+                        <span class="text-xs font-semibold text-slate-500 uppercase group-hover:text-slate-300">Lost Wax</span>
+                        <i id="lostWaxMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 {{ request()->is('lost-wax*') ? 'rotate-90' : '' }}"></i>
+                    </button>
+                    <ul id="lostWaxMenu"
+                        class="{{ request()->is('lost-wax*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        <li>
+                            <a href="{{ route('lost-wax.production-status') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-table w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Production Status</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.dashboard') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.dashboard') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-chart-bar w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Dashboard</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.work-orders.index') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.work-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-industry w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Work Order</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.trees.index') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.trees.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-sitemap w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Tree / Traveler</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.scan.index') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-qrcode w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Scan Lapisan</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.scan-oven.index') }}"
+                                class="flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan-oven.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}">
+                                <i class="fas fa-fire w-4 mr-2 text-xs opacity-70"></i>
+                                <span class="text-sm">Scan Oven</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">Report</li>
@@ -263,10 +332,10 @@
 
     <!-- Main Content -->
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col overflow-hidden bg-slate-50 relative">
+    <main id="app-main" class="flex-1 flex flex-col overflow-hidden bg-slate-50 relative">
 
         <!-- Top Navigation Bar -->
-        <header
+        <header id="app-main-header"
             class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
             <!-- Dynamic Top Bar Content (Process Flow) -->
             <div class="flex-1 flex items-center overflow-x-auto no-scrollbar gap-2">
@@ -286,7 +355,7 @@
         </header>
 
         <!-- Scrollable Content -->
-        <div class="flex-1 overflow-y-auto overflow-x-auto p-6 md:p-8 custom-scrollbar">
+        <div id="app-main-content" class="flex-1 overflow-y-auto overflow-x-auto p-6 md:p-8 custom-scrollbar">
             @if(session('success'))
                 <div
                     class="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center shadow-sm">

@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\ProductionItem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
 
 class ReportController extends Controller
@@ -25,7 +25,7 @@ class ReportController extends Controller
             ]);
 
             // Logic: Get top N items from the specified department and line
-            // If specific date is needed implicitly (e.g. items created on that date or just current backlog?), 
+            // If specific date is needed implicitly (e.g. items created on that date or just current backlog?),
             // the user said "hari ini kita akan perintahkan... 10 heat number harus selesai".
             // It implies taking the *available* stock in that department/line to *assign* as work.
             // So we query the current backlog in that department/line. The 'date' parameter is likely just for the report header "Date of SPK".
@@ -37,7 +37,7 @@ class ReportController extends Controller
 
             $results = $query->get();
             $totalPcs = $results->sum('qty_pcs');
-            $totalKg = $results->sum(fn($r) => $r->qty_pcs * $r->weight_kg);
+            $totalKg = $results->sum(fn ($r) => $r->qty_pcs * $r->weight_kg);
         }
 
         return view('report.index', [
@@ -49,7 +49,7 @@ class ReportController extends Controller
             'selectedDate' => $request->date ?? date('Y-m-d'),
             'selectedDept' => $request->department,
             'selectedLine' => $request->line,
-            'selectedCount' => $request->count ?? 10
+            'selectedCount' => $request->count ?? 10,
         ]);
     }
 
@@ -69,7 +69,7 @@ class ReportController extends Controller
             ->get();
 
         $totalPcs = $results->sum('qty_pcs');
-        $totalKg = $results->sum(fn($r) => $r->qty_pcs * $r->weight_kg);
+        $totalKg = $results->sum(fn ($r) => $r->qty_pcs * $r->weight_kg);
 
         $data = [
             'date' => $request->date,
@@ -77,7 +77,7 @@ class ReportController extends Controller
             'line' => $request->line,
             'results' => $results,
             'totalPcs' => $totalPcs,
-            'totalKg' => $totalKg
+            'totalKg' => $totalKg,
         ];
 
         if ($type === 'pdf') {

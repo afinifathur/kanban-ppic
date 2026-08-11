@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-
 class DashboardController extends Controller
 {
     public function index()
@@ -76,13 +74,14 @@ class DashboardController extends Controller
                     $dateToUse = ($m->item && $m->item->production_date)
                         ? $m->item->production_date->format('Y-m-d')
                         : $m->moved_at->format('Y-m-d');
+
                     return $dateToUse === $date && $m->to_dept === $stageKey;
                 });
 
                 for ($l = 1; $l <= 4; $l++) {
-                    $lineMoves = $dayMoves->filter(fn($m) => (int) $m->line_number === $l);
+                    $lineMoves = $dayMoves->filter(fn ($m) => (int) $m->line_number === $l);
                     $lineStats['pcs'][$stageName][$l][] = $lineMoves->sum('qty_pcs');
-                    $lineStats['kg'][$stageName][$l][] = $lineMoves->sum(fn($m) => $m->qty_pcs * $m->weight_kg);
+                    $lineStats['kg'][$stageName][$l][] = $lineMoves->sum(fn ($m) => $m->qty_pcs * $m->weight_kg);
                 }
             }
         }

@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\ProductionDefect;
 use App\Models\DefectType;
+use App\Models\ProductionDefect;
 use App\Models\ProductionItem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
 
 class DefectReportController extends Controller
@@ -52,7 +52,7 @@ class DefectReportController extends Controller
                         if ($request->defect_type_id && $selectedDept !== 'all') {
                             $q->where('defect_type_id', $request->defect_type_id);
                         }
-                    }
+                    },
                 ])
                 ->orderBy('created_at', 'desc');
 
@@ -65,6 +65,7 @@ class DefectReportController extends Controller
                 $details = $item->defects->groupBy('defect_type_id')->map(function ($group) {
                     $type = $group->first()->defectType->name;
                     $qty = $group->sum('qty');
+
                     return "{$type} {$qty}";
                 })->implode(', ');
 
@@ -98,7 +99,7 @@ class DefectReportController extends Controller
             'selectedDept' => $request->department,
             'selectedDefectType' => $request->defect_type_id,
             'defectType' => $defectType,
-            'selectedCount' => $request->count ?? 10
+            'selectedCount' => $request->count ?? 10,
         ]);
     }
 
@@ -172,7 +173,7 @@ class DefectReportController extends Controller
                 return [
                     'name' => $group->first()->defectType->name,
                     'qty' => $group->sum('qty'),
-                    'kg' => round($kg, 2)
+                    'kg' => round($kg, 2),
                 ];
             })->sortByDesc('qty');
 
@@ -223,7 +224,7 @@ class DefectReportController extends Controller
                     if ($request->defect_type_id && $selectedDept !== 'all') {
                         $q->where('defect_type_id', $request->defect_type_id);
                     }
-                }
+                },
             ])
             ->orderBy('created_at', 'desc');
 
@@ -235,12 +236,14 @@ class DefectReportController extends Controller
             $details = $item->defects->groupBy('defect_type_id')->map(function ($group) {
                 $type = $group->first()->defectType->name;
                 $qty = $group->sum('qty');
+
                 return "{$type} {$qty}";
             })->implode(', ');
 
             $item->total_defect_qty = $item->defects->sum('qty');
             $item->defect_summary = $details;
             $item->dept_name = $item->defects->first() ? $item->defects->first()->defectType->department : 'unknown';
+
             return $item;
         });
 
@@ -258,7 +261,7 @@ class DefectReportController extends Controller
             'department' => $selectedDept,
             'defectType' => $defectType,
             'results' => $results,
-            'totalQty' => $totalQty
+            'totalQty' => $totalQty,
         ];
 
         if ($type === 'pdf') {

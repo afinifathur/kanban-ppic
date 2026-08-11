@@ -59,6 +59,7 @@ class ProductionItem extends Model
     public function getAgingDaysAttribute()
     {
         $baseDate = $this->production_date ?? $this->dept_entry_at;
+
         return $baseDate->diffInDays(now()->startOfDay());
     }
 
@@ -66,12 +67,16 @@ class ProductionItem extends Model
     {
         $days = $this->aging_days;
 
-        if ($days < 7)
+        if ($days < 7) {
             return 'green';
-        if ($days <= 14)
+        }
+        if ($days <= 14) {
             return 'yellow';
-        if ($days <= 21)
+        }
+        if ($days <= 21) {
             return 'orange';
+        }
+
         return 'red';
     }
 }

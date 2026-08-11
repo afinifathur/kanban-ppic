@@ -17,7 +17,7 @@ class KanbanController extends Controller
                 ->get();
 
             $totalPcs = $items->sum('qty_remaining');
-            $totalKg = $items->sum(fn($i) => $i->qty_remaining * $i->weight);
+            $totalKg = $items->sum(fn ($i) => $i->qty_remaining * $i->weight);
         } else {
             $items = \App\Models\ProductionItem::where('current_dept', $dept)
                 ->where('qty_pcs', '>', 0)
@@ -26,7 +26,7 @@ class KanbanController extends Controller
                 ->get();
 
             $totalPcs = $items->sum('qty_pcs');
-            $totalKg = $items->sum(fn($i) => $i->qty_pcs * $i->weight_kg);
+            $totalKg = $items->sum(fn ($i) => $i->qty_pcs * $i->weight_kg);
         }
 
         $lines = [
@@ -55,13 +55,13 @@ class KanbanController extends Controller
         $allStats = $itemStats->map(function ($stat) {
             return (object) [
                 'total_pcs' => $stat->total_pcs,
-                'total_kg' => $stat->total_kg
+                'total_kg' => $stat->total_kg,
             ];
         });
 
         $allStats['rencana_cor'] = (object) [
             'total_pcs' => $planStats->total_pcs ?? 0,
-            'total_kg' => $planStats->total_kg ?? 0
+            'total_kg' => $planStats->total_kg ?? 0,
         ];
 
         return view('kanban.index', compact('dept', 'lines', 'nextDept', 'totalPcs', 'totalKg', 'allStats', 'flow'));
@@ -83,10 +83,10 @@ class KanbanController extends Controller
             $item->update([
                 'current_dept' => $data['to_dept'],
                 'dept_entry_at' => now(), // Reset aging
-                // Keep line_number or reset? "Data akan otomatis masuk ke Line 1 dep Cor". 
+                // Keep line_number or reset? "Data akan otomatis masuk ke Line 1 dep Cor".
                 // Usually FIFO maintains flow, but maybe reset to Line 1 is safer if other depts have different capacities.
-                // For now, I'll keep the line number to simulate "flowing through the lines" 
-                // UNLESS user specified otherwise. User said "1 batch barang tadi pindah ke kanban departemen netto". 
+                // For now, I'll keep the line number to simulate "flowing through the lines"
+                // UNLESS user specified otherwise. User said "1 batch barang tadi pindah ke kanban departemen netto".
                 // I'll keep line_number for now as it's cleaner visually.
             ]);
 
@@ -102,7 +102,7 @@ class KanbanController extends Controller
             ]);
         }
 
-        return redirect()->route('kanban.index', $data['to_dept'])->with('success', count($items) . ' Items Moved to ' . ucfirst($data['to_dept']));
+        return redirect()->route('kanban.index', $data['to_dept'])->with('success', count($items).' Items Moved to '.ucfirst($data['to_dept']));
     }
 
     public function reorder(Request $request)
@@ -111,7 +111,7 @@ class KanbanController extends Controller
             'department' => 'required',
             'line' => 'required',
             'from_pos' => 'required|integer',
-            'to_pos' => 'required|integer'
+            'to_pos' => 'required|integer',
         ]);
 
         $dept = $request->department;
@@ -137,7 +137,7 @@ class KanbanController extends Controller
         }
 
         // Validate positions
-        if (!$items->has($fromPos - 1) || !$items->has($toPos - 1)) {
+        if (! $items->has($fromPos - 1) || ! $items->has($toPos - 1)) {
             return back()->withErrors(['msg' => 'Nomor antrian tidak valid.']);
         }
 

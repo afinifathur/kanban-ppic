@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-
 use App\Models\ProductionDefect;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DefectDashboardController extends Controller
@@ -61,7 +60,7 @@ class DefectDashboardController extends Controller
             ->get();
 
         $chartByDept = [
-            'labels' => $byDeptData->pluck('department')->map(fn($d) => ucfirst(str_replace('_', ' ', $d))),
+            'labels' => $byDeptData->pluck('department')->map(fn ($d) => ucfirst(str_replace('_', ' ', $d))),
             'data' => $byDeptData->pluck('total_qty'),
         ];
 
@@ -69,7 +68,7 @@ class DefectDashboardController extends Controller
         // Group by Week Number
         // Note: weight_kg is in ProductionItem, we need to approximate defect weight or use specific items.
         // User said: "pcs vs tonase". Heavy logic: defect weight = (defect_qty / item_qty) * item_weight_kg ? or just use average item weight?
-        // Let's assume defect items account for the scrap weight. 
+        // Let's assume defect items account for the scrap weight.
         // Ideally ProductionItem has 'weight_kg'. If scrap_qty > 0, we should calculate specific scrap weight?
         // Let's rely on item's unit weight: item->weight_kg / item->qty_pcs * defect->qty
 

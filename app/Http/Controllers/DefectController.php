@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-
-use App\Models\ProductionItem;
 use App\Models\DefectType;
-use App\Models\ProductionDefect;
+use App\Models\ProductionItem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DefectController extends Controller
@@ -75,7 +73,7 @@ class DefectController extends Controller
 
         DB::transaction(function () use ($request, $item) {
             // Remove existing defects for this item to allow "sync" style update
-            // Or typically we might just add new ones. 
+            // Or typically we might just add new ones.
             // Let's go with: delete all existing defects for this item and re-create.
             $item->defects()->delete();
 

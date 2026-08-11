@@ -24,7 +24,7 @@ class CustomerSeeder extends Seeder
             'A06',
             'LOKAL',
             'STOK NON PO',
-            'STOK EXP'
+            'STOK EXP',
         ];
 
         foreach ($customers as $name) {

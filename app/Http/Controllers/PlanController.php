@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\ProductionPlan;
-use App\Models\ProductionItem;
+use Illuminate\Http\Request;
 
 class PlanController extends Controller
 {
@@ -21,7 +20,7 @@ class PlanController extends Controller
 
             if ($sort) {
                 if ($sort === 'hasil_cor') {
-                    $query->orderByRaw('(qty_planned - qty_remaining) ' . $direction);
+                    $query->orderByRaw('(qty_planned - qty_remaining) '.$direction);
                 } else {
                     $query->orderBy($sort, $direction);
                 }
@@ -32,6 +31,7 @@ class PlanController extends Controller
 
             $plans = $query->get();
             $planTitle = ProductionPlan::whereDate('created_at', $date)->whereNotNull('title')->value('title');
+
             return view('plan.list', compact('plans', 'date', 'planTitle', 'sort', 'direction'));
         }
 
@@ -57,6 +57,7 @@ class PlanController extends Controller
     public function create()
     {
         $customers = \App\Models\Customer::where('is_active', true)->orderBy('name')->get();
+
         return view('plan.create', compact('customers'));
     }
 
@@ -96,6 +97,7 @@ class PlanController extends Controller
 
             if ($exists) {
                 $skippedCount++;
+
                 continue;
             }
 
@@ -116,8 +118,8 @@ class PlanController extends Controller
             ];
 
             if ($customDate) {
-                $newPlan['created_at'] = $customDate . ' ' . now()->format('H:i:s');
-                $newPlan['updated_at'] = $customDate . ' ' . now()->format('H:i:s');
+                $newPlan['created_at'] = $customDate.' '.now()->format('H:i:s');
+                $newPlan['updated_at'] = $customDate.' '.now()->format('H:i:s');
             }
 
             $createdPlan = ProductionPlan::create($newPlan);
@@ -134,8 +136,9 @@ class PlanController extends Controller
 
             foreach ($unassignedItems as $item) {
                 // Only fill until plan is satisfied
-                if ($createdPlan->qty_remaining <= 0)
+                if ($createdPlan->qty_remaining <= 0) {
                     break;
+                }
 
                 // Map to plan and enrich metadata
                 /** @var \App\Models\ProductionItem $item */
@@ -156,7 +159,7 @@ class PlanController extends Controller
         }
 
         $processedCount = count($data['plans']) - $skippedCount;
-        $message = $processedCount . ' Plans Added Successfully!';
+        $message = $processedCount.' Plans Added Successfully!';
         if ($skippedCount > 0) {
             $message .= " ($skippedCount baris duplikat dilewati)";
         }
@@ -164,7 +167,7 @@ class PlanController extends Controller
         return response()->json([
             'success' => $processedCount > 0 || $skippedCount > 0,
             'message' => $message,
-            'redirect' => route('plan.index')
+            'redirect' => route('plan.index'),
         ]);
     }
 
@@ -216,7 +219,7 @@ class PlanController extends Controller
     {
         $request->validate([
             'date' => 'required|date',
-            'title' => 'required|string|max:255'
+            'title' => 'required|string|max:255',
         ]);
 
         ProductionPlan::whereDate('created_at', $request->date)

@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\ProductionItem;
 use App\Models\ProductionHistory;
-use Carbon\Carbon;
+use App\Models\ProductionItem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class WipController extends Controller
@@ -66,7 +65,7 @@ class WipController extends Controller
         }
 
         // Total finished weight for this group
-        $totalFinishedWeight = $items->sum(fn($i) => $i->qty_pcs * $i->weight_kg);
+        $totalFinishedWeight = $items->sum(fn ($i) => $i->qty_pcs * $i->weight_kg);
 
         DB::beginTransaction();
         try {
@@ -86,7 +85,8 @@ class WipController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'message' => 'Gagal mengupdate data: ' . $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'Gagal mengupdate data: '.$e->getMessage()]);
         }
 
         return response()->json(['success' => true, 'message' => 'Data WIP berhasil diperbarui.']);

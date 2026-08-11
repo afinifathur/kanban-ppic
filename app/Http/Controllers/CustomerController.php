@@ -10,6 +10,7 @@ class CustomerController extends Controller
     public function index()
     {
         $customers = Customer::orderBy('name')->get();
+
         return view('settings.customers.index', compact('customers'));
     }
 
@@ -27,6 +28,7 @@ class CustomerController extends Controller
     public function destroy(Customer $customer)
     {
         $customer->delete();
+
         return redirect()->route('settings.customers.index')->with('success', 'Customer berhasil dihapus.');
     }
 }

@@ -26,8 +26,8 @@ class InputController extends Controller
             // Group by code and heat_number to combine histories from different departments
             $grouped = [];
             foreach ($rawResults as $item) {
-                $key = $item->code . '|' . $item->heat_number;
-                if (!isset($grouped[$key])) {
+                $key = $item->code.'|'.$item->heat_number;
+                if (! isset($grouped[$key])) {
                     // Start with the most advanced state item as the base
                     $grouped[$key] = $item;
                     $grouped[$key]->all_histories = collect();
@@ -55,7 +55,7 @@ class InputController extends Controller
 
                 foreach ($allHistories as $history) {
                     // Avoid duplicating history entries if they were somehow loaded multiple times
-                    if (!$grouped[$key]->all_histories->contains('id', $history->id)) {
+                    if (! $grouped[$key]->all_histories->contains('id', $history->id)) {
                         // attach the item for production_date reference
                         $history_item = \App\Models\ProductionItem::find($history->item_id);
                         $history->setRelation('item', $history_item);
@@ -92,9 +92,9 @@ class InputController extends Controller
                 // Filter by production_date (Tanggal Pekerjaan)
                 $q->where('production_items.production_date', $date)
                     ->orWhere(function ($sq) use ($date) {
-                    $sq->whereNull('production_items.production_date')
-                        ->whereDate('production_histories.moved_at', $date);
-                });
+                        $sq->whereNull('production_items.production_date')
+                            ->whereDate('production_histories.moved_at', $date);
+                    });
             })
             ->select('production_items.*', 'production_histories.id as history_id', 'production_histories.qty_pcs as history_qty', 'production_histories.weight_kg as history_weight')
             ->get();
@@ -147,21 +147,23 @@ class InputController extends Controller
         if ($dept === 'cor') {
             $groupedCor = [];
             foreach ($data['items'] as $index => $item) {
-                if (empty($item['qty_pcs']))
+                if (empty($item['qty_pcs'])) {
                     continue;
+                }
 
                 $gridIndex = $item['grid_row_index'] ?? $index;
-                $rowLabel = "Baris " . ($gridIndex + 1);
+                $rowLabel = 'Baris '.($gridIndex + 1);
 
                 $code = $item['code'] ?? '';
                 $heat = $item['heat_number'] ?? '';
                 if (empty($code) || empty($heat)) {
                     $errors[] = "{$rowLabel}: Code dan Heat Number wajib diisi.";
                     $failedRows[] = $gridIndex;
+
                     continue;
                 }
 
-                $key = $code . '|' . $heat;
+                $key = $code.'|'.$heat;
                 if (isset($groupedCor[$key])) {
                     $errors[] = "{$rowLabel}: Duplikasi Code {$code} dan Heat {$heat} dalam satu kali simpan.";
                     $failedRows[] = $gridIndex;
@@ -191,7 +193,7 @@ class InputController extends Controller
                 }
 
                 $gridIndex = $item['grid_row_index'] ?? $index;
-                $rowLabel = "Baris " . ($gridIndex + 1);
+                $rowLabel = 'Baris '.($gridIndex + 1);
 
                 $code = $item['code'] ?? '';
                 $heat = $item['heat_number'] ?? '';
@@ -199,17 +201,18 @@ class InputController extends Controller
                 if (empty($code) || empty($heat)) {
                     $errors[] = "{$rowLabel}: Code dan Heat Number wajib diisi.";
                     $failedRows[] = $gridIndex;
+
                     continue;
                 }
 
-                $key = $code . '|' . $heat;
-                if (!isset($groupedItems[$key])) {
+                $key = $code.'|'.$heat;
+                if (! isset($groupedItems[$key])) {
                     $groupedItems[$key] = [
                         'code' => $code,
                         'heat_number' => $heat,
                         'total_reported' => 0,
                         'rows' => [],
-                        'items' => []
+                        'items' => [],
                     ];
                 }
 
@@ -226,7 +229,7 @@ class InputController extends Controller
                     ->first();
 
                 $isValidGroup = true;
-                if (!$sourceItem) {
+                if (! $sourceItem) {
                     $everExisted = \App\Models\ProductionItem::where('code', $group['code'])
                         ->where('heat_number', $group['heat_number'])
                         ->exists();
@@ -235,7 +238,7 @@ class InputController extends Controller
                         return $idx + 1;
                     }, $group['rows']));
                     if ($everExisted) {
-                        $errors[] = "Baris {$rowNumbers}: Item {$group['code']} #{$group['heat_number']} tidak memiliki stok di " . ucfirst($dept) . " (sudah habis atau dipindah).";
+                        $errors[] = "Baris {$rowNumbers}: Item {$group['code']} #{$group['heat_number']} tidak memiliki stok di ".ucfirst($dept).' (sudah habis atau dipindah).';
                     } else {
                         $errors[] = "Baris {$rowNumbers}: Item {$group['code']} #{$group['heat_number']} ilegal: Belum pernah diproses di Cor.";
                     }
@@ -245,7 +248,7 @@ class InputController extends Controller
                         $rowNumbers = implode(', ', array_map(function ($idx) {
                             return $idx + 1;
                         }, $group['rows']));
-                        $errors[] = "Baris {$rowNumbers}: Item {$group['code']} #{$group['heat_number']} melebihi stok: total input {$group['total_reported']} pcs, tersedia {$sourceItem->qty_pcs} pcs di " . ucfirst($dept) . ".";
+                        $errors[] = "Baris {$rowNumbers}: Item {$group['code']} #{$group['heat_number']} melebihi stok: total input {$group['total_reported']} pcs, tersedia {$sourceItem->qty_pcs} pcs di ".ucfirst($dept).'.';
                         $isValidGroup = false;
                     }
                 }
@@ -270,7 +273,7 @@ class InputController extends Controller
                 'errors' => $errors,
                 'failed_rows' => $failedRows,
                 'success_rows' => [],
-                'message' => "Gagal menyimpan karena tidak ada baris yang valid. Periksa daftar error.",
+                'message' => 'Gagal menyimpan karena tidak ada baris yang valid. Periksa daftar error.',
             ]);
         }
 
@@ -285,8 +288,9 @@ class InputController extends Controller
                 }
 
                 if ($dept === 'cor') {
-                    if (empty($item['qty_pcs']))
+                    if (empty($item['qty_pcs'])) {
                         continue;
+                    }
 
                     $plan = \App\Models\ProductionPlan::where('item_code', $item['item_code'])
                         ->where('line_number', $lineNumber)
@@ -337,8 +341,9 @@ class InputController extends Controller
                     $qtyRusak = (int) ($item['rusak'] ?? 0);
                     $totalReported = $qtyHasil + $qtyRusak;
 
-                    if ($totalReported <= 0)
+                    if ($totalReported <= 0) {
                         continue;
+                    }
 
                     $sourceItem = \App\Models\ProductionItem::where('current_dept', $dept)
                         ->where('code', $item['code'])
@@ -346,8 +351,9 @@ class InputController extends Controller
                         ->first();
 
                     // Validation already ensured this is safe
-                    if (!$sourceItem || $totalReported > $sourceItem->qty_pcs)
+                    if (! $sourceItem || $totalReported > $sourceItem->qty_pcs) {
                         continue;
+                    }
 
                     $nextItem = $sourceItem->replicate();
                     $nextItem->current_dept = $nextDept;
@@ -356,12 +362,15 @@ class InputController extends Controller
                     $nextItem->dept_entry_at = now();
                     $nextItem->production_date = $productionDate;
 
-                    if (isset($item['bubut_weight']))
+                    if (isset($item['bubut_weight'])) {
                         $nextItem->bubut_weight = $item['bubut_weight'];
-                    if (isset($item['finish_weight']))
+                    }
+                    if (isset($item['finish_weight'])) {
                         $nextItem->finish_weight = $item['finish_weight'];
-                    if (isset($item['weight_kg']))
+                    }
+                    if (isset($item['weight_kg'])) {
                         $nextItem->weight_kg = $item['weight_kg'];
+                    }
 
                     $nextItem->save();
 
@@ -390,8 +399,8 @@ class InputController extends Controller
             \Illuminate\Support\Facades\DB::commit();
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\DB::rollBack();
-            \Illuminate\Support\Facades\Log::error("Input production error: " . $e->getMessage());
-            $errors[] = "System Error: " . $e->getMessage();
+            \Illuminate\Support\Facades\Log::error('Input production error: '.$e->getMessage());
+            $errors[] = 'System Error: '.$e->getMessage();
         }
 
         $allSuccess = $processedCount > 0 && count($errors) == 0;
@@ -404,8 +413,8 @@ class InputController extends Controller
             'errors' => $errors,
             'failed_rows' => $failedRows,
             'success_rows' => $successRows,
-            'message' => $processedCount . " Kombinasi Heat Number berhasil diproses. " . (count($errors) > 0 ? count($errors) . " gagal." : ""),
-            'redirect' => $allSuccess ? route('input.index', $dept) : null
+            'message' => $processedCount.' Kombinasi Heat Number berhasil diproses. '.(count($errors) > 0 ? count($errors).' gagal.' : ''),
+            'redirect' => $allSuccess ? route('input.index', $dept) : null,
         ]);
     }
 
@@ -435,25 +444,32 @@ class InputController extends Controller
             $item->qty_pcs += $diffQty;
 
             // Sync weights based on department
-            if ($history->from_dept === 'cor')
+            if ($history->from_dept === 'cor') {
                 $item->weight_kg = $data['weight_kg'];
-            if ($history->from_dept === 'netto')
+            }
+            if ($history->from_dept === 'netto') {
                 $item->weight_kg = $data['weight_kg'];
-            if ($history->from_dept === 'bubut_od')
+            }
+            if ($history->from_dept === 'bubut_od') {
                 $item->bubut_weight = $data['weight_kg'];
-            if ($history->from_dept === 'finish')
+            }
+            if ($history->from_dept === 'finish') {
                 $item->finish_weight = $data['weight_kg'];
+            }
 
             // Also update generic weight_kg for consistency across WIP views
             $item->weight_kg = $data['weight_kg'];
 
-            if (isset($data['bruto_weight']))
+            if (isset($data['bruto_weight'])) {
                 $item->bruto_weight = $data['bruto_weight'];
-            if (isset($data['netto_weight']))
+            }
+            if (isset($data['netto_weight'])) {
                 $item->netto_weight = $data['netto_weight'];
+            }
 
-            if (isset($data['customer']))
+            if (isset($data['customer'])) {
                 $item->customer = $data['customer'];
+            }
 
             $item->save();
         }
@@ -486,7 +502,7 @@ class InputController extends Controller
                 if ($item->qty_pcs < $history->qty_pcs || $item->current_dept !== $history->to_dept) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Gagal menghapus: Item ini sudah diproses ke departemen selanjutnya.'
+                        'message' => 'Gagal menghapus: Item ini sudah diproses ke departemen selanjutnya.',
                     ], 400);
                 }
             }

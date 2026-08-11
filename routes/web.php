@@ -1,14 +1,18 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InputController;
 use App\Http\Controllers\KanbanController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ReportController;
-
-use App\Http\Controllers\AuthController;
+use App\Http\Controllers\LostWax\DashboardController as LostWaxDashboardController;
+use App\Http\Controllers\LostWax\ProductionStatusController;
+use App\Http\Controllers\LostWax\ScanController;
+use App\Http\Controllers\LostWax\TreeController;
+use App\Http\Controllers\LostWax\WorkOrderController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\WipController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
@@ -72,6 +76,50 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/wip/{date}', [WipController::class, 'show'])->name('wip.show');
     Route::post('/wip/update', [WipController::class, 'update'])->name('wip.update');
     Route::get('/report/wip', [WipController::class, 'report'])->name('wip.report');
+
+    // Lost Wax Routes
+    Route::prefix('lost-wax')->name('lost-wax.')->group(function () {
+        Route::get('/', fn () => redirect()->route('lost-wax.work-orders.index'));
+
+        // Work Orders
+        Route::get('/work-orders', [WorkOrderController::class, 'index'])->name('work-orders.index');
+        Route::get('/work-orders/create', [WorkOrderController::class, 'create'])->name('work-orders.create');
+        Route::post('/work-orders', [WorkOrderController::class, 'store'])->name('work-orders.store');
+        Route::get('/work-orders/bulk/create', [WorkOrderController::class, 'bulkCreate'])->name('work-orders.bulk.create');
+        Route::post('/work-orders/bulk', [WorkOrderController::class, 'bulkStore'])->name('work-orders.bulk.store');
+        Route::get('/work-orders/{workOrder}', [WorkOrderController::class, 'show'])->name('work-orders.show');
+        Route::get('/work-orders/{workOrder}/edit', [WorkOrderController::class, 'edit'])->name('work-orders.edit');
+        Route::put('/work-orders/{workOrder}', [WorkOrderController::class, 'update'])->name('work-orders.update');
+        Route::post('/work-orders/{workOrder}/plans', [WorkOrderController::class, 'storePlan'])->name('work-orders.plans.store');
+        Route::post('/work-orders/{workOrder}/wip', [WorkOrderController::class, 'storeWip'])->name('work-orders.wip.store');
+
+        // Trees
+        Route::get('/trees', [TreeController::class, 'index'])->name('trees.index');
+        Route::get('/trees/generate/{plan}', [TreeController::class, 'generate'])->name('trees.generate');
+        Route::post('/trees/generate/{plan}', [TreeController::class, 'store'])->name('trees.store');
+        Route::get('/trees/{tree}/history', [ScanController::class, 'history'])->name('trees.history');
+        Route::get('/trees/{tree}', [TreeController::class, 'show'])->name('trees.show');
+        Route::patch('/trees/{tree}', [TreeController::class, 'update'])->name('trees.update');
+        Route::get('/trees/{tree}/traveler', [TreeController::class, 'traveler'])->name('trees.traveler');
+        Route::get('/trees/{tree}/barcode', [TreeController::class, 'barcode'])->name('trees.barcode');
+
+        // Scan
+        Route::get('/scan', [ScanController::class, 'index'])->name('scan.index');
+        Route::post('/scan', [ScanController::class, 'process'])->name('scan.process');
+        Route::post('/stage-label', [ScanController::class, 'stageLabel'])->name('stage-label');
+
+        // Scan Oven
+        Route::get('/scan-oven', [ScanController::class, 'scanOven'])->name('scan-oven.index');
+        Route::post('/scan-oven', [ScanController::class, 'processOven'])->name('scan-oven.process');
+
+        // Dashboard
+        Route::get('/dashboard', [LostWaxDashboardController::class, 'index'])->name('dashboard');
+
+        // Production Status
+        Route::get('/production-status', [ProductionStatusController::class, 'index'])->name('production-status');
+        Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
+        Route::get('/production-status/export', [ProductionStatusController::class, 'exportCsv'])->name('production-status.export');
+    });
 });
 
 Route::get('/debug-session', function () {

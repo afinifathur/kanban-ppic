@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('production_histories', function (Blueprint $table) {
-            $table->tinyInteger('line_number')->after('to_dept')->nullable(); 
+            $table->tinyInteger('line_number')->after('to_dept')->nullable();
         });
     }
 

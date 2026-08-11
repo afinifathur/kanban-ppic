@@ -34,7 +34,7 @@ class DefectTypeController extends Controller
         ]);
 
         $defectType->update([
-            'name' => $request->name
+            'name' => $request->name,
         ]);
 
         return redirect()->route('settings.defect-types.index')->with('success', 'Jenis kerusakan berhasil diperbarui.');
