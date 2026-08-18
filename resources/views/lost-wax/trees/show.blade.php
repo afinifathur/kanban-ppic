@@ -58,20 +58,38 @@
             </div>
 
             <div class="border-t border-slate-200 pt-4">
-                <div class="text-xs text-slate-500 mb-2">Work Order</div>
-                <a href="{{ route('lost-wax.work-orders.show', $tree->workOrder) }}" class="text-amber-600 hover:text-amber-700 font-semibold">
-                    {{ $tree->workOrder->et_code }}
-                </a>
-                <div class="text-sm text-slate-600 mt-1">
-                    {{ optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-' }}
-                    &mdash;
-                    {{ optional($tree->workOrder->itemReference)->item_name_snapshot ?? '-' }}
-                </div>
-                @if($tree->plan)
+                @if($tree->work_order_id)
+                    <div class="text-xs text-slate-500 mb-2">Work Order</div>
+                    <a href="{{ route('lost-wax.work-orders.show', $tree->workOrder) }}" class="text-amber-600 hover:text-amber-700 font-semibold">
+                        {{ $tree->getSourceCode() }}
+                    </a>
                     <div class="text-sm text-slate-600 mt-1">
-                        Wave {{ str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) }}
-                        ({{ $tree->plan->plan_type }}: {{ number_format($tree->plan->planned_quantity) }} pcs)
+                        {{ $tree->getSourceItemCode() ?? '-' }}
+                        &mdash;
+                        {{ $tree->getSourceProduct() ?? '-' }}
                     </div>
+                    @if($tree->plan)
+                        <div class="text-sm text-slate-600 mt-1">
+                            Wave {{ str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) }}
+                            ({{ $tree->plan->plan_type }}: {{ number_format($tree->plan->planned_quantity) }} pcs)
+                        </div>
+                    @endif
+                @elseif($tree->lost_wax_print_order_line_id)
+                    <div class="text-xs text-slate-500 mb-2">Perintah Cetak</div>
+                    <a href="{{ route('lost-wax.print-orders.show', $tree->printOrderLine->lost_wax_print_order_id) }}" class="text-amber-600 hover:text-amber-700 font-semibold">
+                        {{ $tree->getSourcePrintOrderNumber() }}
+                    </a>
+                    <div class="text-sm text-slate-600 mt-1">
+                        Customer Code: {{ $tree->getSourceCode() ?? '-' }} ({{ $tree->getSourceCustomer() ?? '-' }})
+                    </div>
+                    <div class="text-sm text-slate-600 mt-1">
+                        Item: {{ $tree->getSourceProduct() ?? '-' }}
+                    </div>
+                    @if($tree->getSourceSize() || $tree->getSourceAisi())
+                        <div class="text-sm text-slate-600 mt-1">
+                            Size: {{ $tree->getSourceSize() ?? '-' }} &middot; AISI: {{ $tree->getSourceAisi() ?? '-' }}
+                        </div>
+                    @endif
                 @endif
             </div>
         </div>

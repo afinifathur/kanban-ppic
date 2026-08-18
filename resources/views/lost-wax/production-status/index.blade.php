@@ -133,21 +133,25 @@
                     <tbody class="divide-y divide-slate-100">
                         @php $sk = ['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7']; @endphp
                         @forelse($rows as $row)
-                            <tr class="hover:bg-slate-50 cursor-pointer" data-wo-id="{{ $row['wo_id'] }}">
+                            <tr class="hover:bg-slate-50 cursor-pointer" 
+                                data-source-type="{{ $row['source_type'] }}" 
+                                data-source-id="{{ $row['source_id'] }}">
                                 <td class="px-2.5 py-1.5 font-mono font-bold text-slate-800 text-[11px]">
-                                    <a href="#" class="hover:text-amber-600 et-detail-link" data-wo-id="{{ $row['wo_id'] }}">{{ $row['et_code'] }}</a>
+                                    <a href="#" class="hover:text-amber-600 et-detail-link" 
+                                        data-source-type="{{ $row['source_type'] }}" 
+                                        data-source-id="{{ $row['source_id'] }}">{{ $row['code'] }}</a>
                                 </td>
-                                <td class="px-2.5 py-1.5 text-slate-700 text-[11px] max-w-[220px] truncate">{{ $row['item_name'] }}</td>
+                                <td class="px-2.5 py-1.5 text-slate-700 text-[11px] max-w-[220px] truncate" title="{{ $row['product_name'] }}">{{ $row['product_name'] }}</td>
                                 <td class="px-2.5 py-1.5 text-slate-600 text-[11px]">{{ $row['aisi'] }}</td>
-                                <td class="px-2.5 py-1.5 text-right font-mono text-slate-700 text-[11px]">{{ number_format($row['po_qty'],0,',','.') }}</td>
-                                <td class="px-2.5 py-1.5 text-right font-mono text-slate-700 text-[11px]">{{ number_format($row['plan_qty'],0,',','.') }}</td>
+                                <td class="px-2.5 py-1.5 text-right font-mono text-slate-700 text-[11px]">{{ number_format($row['planned_qty'],0,',','.') }}</td>
+                                <td class="px-2.5 py-1.5 text-right font-mono text-slate-700 text-[11px]">{{ number_format($row['scheduled_qty'],0,',','.') }}</td>
                                 <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['total_lap']>0?'font-bold text-slate-800':'text-slate-300' }}">{{ $row['total_lap'] }}</td>
-                                <td class="px-2.5 py-1.5 text-center text-slate-300 text-[11px]">&mdash;</td>
+                                <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['actual_defect']>0?'text-red-600 font-bold':'text-slate-300' }}">{{ $row['actual_defect'] > 0 ? $row['actual_defect'] : '—' }}</td>
                                 @foreach($sk as $s) <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row[$s]>0?'cell-layer-active':'text-slate-300' }}">{{ $row[$s] }}</td> <td class="px-2.5 py-1.5 text-center text-slate-300 text-[11px]">&mdash;</td> @endforeach
-                                <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['oven']>0?'cell-oven':'text-slate-300' }}">{{ $row['oven'] }}</td>
+                                <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['oven_qty']>0?'cell-oven':'text-slate-300' }}">{{ $row['oven_qty'] }}</td>
                                 <td class="px-2.5 py-1.5 text-center text-[10px]">
-                                    <span class="inline-block px-1.5 py-0.5 rounded-full font-bold {{ $row['prod_status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['prod_status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
-                                        {{ $row['prod_status']==='ACTIVE'?'ACTIVE':($row['prod_status']==='COMPLETED'?'SELESAI':$row['prod_status']) }}</span>
+                                    <span class="inline-block px-1.5 py-0.5 rounded-full font-bold {{ $row['status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
+                                        {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}</span>
                                 </td>
                             </tr>
                         @empty
@@ -198,16 +202,16 @@
                 @php $sk = ['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7']; @endphp
                 @forelse($rows as $row)
                     <tr>
-                        <td class="left"><strong>{{ $row['et_code'] }}</strong></td>
-                        <td class="prod-name">{{ $row['item_name'] }}</td>
+                        <td class="left"><strong>{{ $row['code'] }}</strong></td>
+                        <td class="prod-name">{{ $row['product_name'] }}</td>
                         <td>{{ $row['aisi'] }}</td>
-                        <td class="right">{{ number_format($row['po_qty'],0,',','.') }}</td>
-                        <td class="right">{{ number_format($row['plan_qty'],0,',','.') }}</td>
+                        <td class="right">{{ number_format($row['planned_qty'],0,',','.') }}</td>
+                        <td class="right">{{ number_format($row['scheduled_qty'],0,',','.') }}</td>
                         <td class="right"><strong>{{ $row['total_lap'] }}</strong></td>
-                        <td>{{ $row['total_rusak'] ?? '—' }}</td>
-                        @foreach($sk as $s) <td class="{{ $row[$s]>0?'ps-cell-green':'' }}"><strong>{{ $row[$s] }}</strong></td> <td class="{{ ($row['total_rusak']??0)>0?'ps-cell-red':'' }}">—</td> @endforeach
-                        <td class="{{ $row['oven']>0?'ps-cell-oven':'' }}"><strong>{{ $row['oven'] }}</strong></td>
-                        <td>{{ $row['prod_status']==='ACTIVE'?'ACTIVE':($row['prod_status']==='COMPLETED'?'SELESAI':$row['prod_status']) }}</td>
+                        <td>{{ $row['actual_defect'] > 0 ? $row['actual_defect'] : '—' }}</td>
+                        @foreach($sk as $s) <td class="{{ $row[$s]>0?'ps-cell-green':'' }}"><strong>{{ $row[$s] }}</strong></td> <td class="{{ ($row['actual_defect']??0)>0?'ps-cell-red':'' }}">—</td> @endforeach
+                        <td class="{{ $row['oven_qty']>0?'ps-cell-oven':'' }}"><strong>{{ $row['oven_qty'] }}</strong></td>
+                        <td>{{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="23" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
@@ -229,11 +233,47 @@
 
     <script>
         document.addEventListener('DOMContentLoaded',function(){
-            document.querySelectorAll('.et-detail-link').forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();openETDetail(this.dataset.woId)})});
+            document.querySelectorAll('.et-detail-link').forEach(function(l){
+                l.addEventListener('click',function(e){
+                    e.preventDefault();
+                    openETDetail(this.dataset.sourceType, this.dataset.sourceId);
+                });
+            });
+            document.querySelectorAll('#prodStatusTable tbody tr').forEach(function(r){
+                r.addEventListener('click',function(e){
+                    if(e.target.tagName !== 'A' && !e.target.closest('a')) {
+                        openETDetail(this.dataset.sourceType, this.dataset.sourceId);
+                    }
+                });
+            });
             document.getElementById('etDetailModal').addEventListener('click',function(e){if(e.target===this)closeETDetail()});
             document.addEventListener('keydown',function(e){if(e.key==='Escape')closeETDetail()})
         });
-        function openETDetail(woId){var m=document.getElementById('etDetailModal'),c=document.getElementById('etDetailContent'),t=document.getElementById('modalTitle'),s=document.getElementById('modalSubtitle');m.classList.remove('hidden');c.innerHTML='<div class="text-center py-8 text-slate-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';t.textContent='Detail Kode Cust';s.textContent='';fetch('{{ route('lost-wax.production-status.trees') }}?work_order_id='+woId).then(function(r){return r.json()}).then(function(d){t.textContent='Detail Kode Cust: '+(d.et_code||'-');s.textContent=d.item_name||d.tree_count+' Trees';if(!d.trees||d.trees.length===0){c.innerHTML='<p class="text-slate-500 text-sm text-center py-8">Belum ada Tree untuk Kode Cust ini.</p>';return}var h='<div class="space-y-3"><div class="text-xs text-slate-500 mb-3">'+d.trees.length+' Tree</div>';d.trees.forEach(function(x){var sc=x.current_stage==='oven'?'bg-teal-100 text-teal-800':'bg-amber-100 text-amber-800';var ai=x.aging_status==='too_fast'?'\u26A0\uFE0F':(x.aging_status==='too_long'?'\u274C':'');h+='<div class="border border-slate-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="font-mono font-bold text-sm">'+x.tree_number+' &mdash; '+(x.barcode||'-')+'</span><span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold '+sc+'">'+(x.current_stage_label||'-')+'</span></div><div class="grid grid-cols-3 gap-2 text-xs text-slate-600"><div><span class="text-slate-400">Qty:</span> <span class="font-bold">'+x.quantity+' PCS</span></div><div><span class="text-slate-400">Last Scan:</span> '+(x.last_scan_at||'-')+'</div><div><span class="text-slate-400">Aging:</span> '+(x.aging_label||'-')+' '+ai+'</div></div></div>'});c.innerHTML=h+'</div>'}).catch(function(){c.innerHTML='<p class="text-red-500 text-sm text-center py-8">Gagal memuat data.</p>'})}
+        function openETDetail(sourceType, sourceId){
+            var m=document.getElementById('etDetailModal'),c=document.getElementById('etDetailContent'),t=document.getElementById('modalTitle'),s=document.getElementById('modalSubtitle');
+            m.classList.remove('hidden');
+            c.innerHTML='<div class="text-center py-8 text-slate-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
+            t.textContent='Detail Kode Cust';
+            s.textContent='';
+            var url = '{{ route('lost-wax.production-status.trees') }}';
+            if (sourceType === 'legacy_work_order') {
+                url += '?work_order_id=' + sourceId;
+            } else {
+                url += '?print_order_line_id=' + sourceId;
+            }
+            fetch(url).then(function(r){return r.json()}).then(function(d){
+                t.textContent='Detail Kode Cust: '+(d.et_code||'-');
+                s.textContent=d.item_name||d.tree_count+' Trees';
+                if(!d.trees||d.trees.length===0){c.innerHTML='<p class="text-slate-500 text-sm text-center py-8">Belum ada Tree untuk Kode Cust ini.</p>';return}
+                var h='<div class="space-y-3"><div class="text-xs text-slate-500 mb-3">'+d.trees.length+' Tree</div>';
+                d.trees.forEach(function(x){
+                    var sc=x.current_stage==='oven'?'bg-teal-100 text-teal-800':'bg-amber-100 text-amber-800';
+                    var ai=x.aging_status==='too_fast'?'\u26A0\uFE0F':(x.aging_status==='too_long'?'\u274C':'');
+                    h+='<div class="border border-slate-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="font-mono font-bold text-sm">'+x.tree_number+' &mdash; '+(x.barcode||'-')+'</span><span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold '+sc+'">'+(x.current_stage_label||'-')+'</span></div><div class="grid grid-cols-3 gap-2 text-xs text-slate-600"><div><span class="text-slate-400">Qty:</span> <span class="font-bold">'+x.quantity+' PCS</span></div><div><span class="text-slate-400">Last Scan:</span> '+(x.last_scan_at||'-')+'</div><div><span class="text-slate-400">Aging:</span> '+(x.aging_label||'-')+' '+ai+'</div></div></div>';
+                });
+                c.innerHTML=h+'</div>';
+            }).catch(function(){c.innerHTML='<p class="text-red-500 text-sm text-center py-8">Gagal memuat data.</p>'});
+        }
         function closeETDetail(){document.getElementById('etDetailModal').classList.add('hidden')}
     </script>
 @endsection

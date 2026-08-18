@@ -15,7 +15,7 @@ class TreeController extends Controller
 
     public function index()
     {
-        $trees = LostWaxTree::with(['workOrder.itemReference', 'plan'])
+        $trees = LostWaxTree::with(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])
             ->orderByDesc('id')
             ->paginate(20);
 
@@ -91,7 +91,7 @@ class TreeController extends Controller
 
     public function show(LostWaxTree $tree)
     {
-        $tree->load(['workOrder.itemReference', 'plan']);
+        $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         return view('lost-wax.trees.show', compact('tree'));
     }
@@ -113,7 +113,7 @@ class TreeController extends Controller
 
     public function traveler(LostWaxTree $tree)
     {
-        $tree->load(['workOrder.itemReference', 'plan']);
+        $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         return view('lost-wax.trees.traveler', compact('tree'));
     }

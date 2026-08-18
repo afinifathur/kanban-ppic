@@ -3,71 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traveler - {{ $tree->barcode }}</title>
+    <title>Traveler Cards</title>
     <script src="{{ asset('js/tailwindcss.js') }}"></script>
     <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #f3f4f6; /* bg-gray-100 */
+        }
+        
+        .print-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .traveler-card {
+            background: #fff;
+            width: 85mm;
+            min-height: 54mm;
+            border: 1px solid #cbd5e1;
+            padding: 6mm;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
         @media print {
             @page {
-                size: 85mm 54mm;
-                margin: 0;
+                size: A4 portrait;
+                margin: 5mm;
             }
             body {
-                width: 85mm;
-                min-height: 54mm;
+                background: #fff !important;
+                min-height: auto !important;
+            }
+            .print-container {
+                display: block !important;
+                padding: 0 !important;
+                gap: 0 !important;
+            }
+            .traveler-card {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+                margin-top: 0 !important;
+                margin-bottom: 6mm !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                border: 1px solid #000 !important;
+                box-shadow: none !important;
+                float: left;
+                clear: both;
             }
             .no-print {
                 display: none !important;
             }
         }
-        body {
-            font-family: 'Courier New', monospace;
-            background: #fff;
-        }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen bg-gray-100">
-    <div class="bg-white p-[6mm] mx-auto" style="width: 85mm; min-height: 54mm; border: 1px solid #e5e7eb;">
-        <div class="text-center border-2 border-black p-2 rounded text-[10px]">
-            <div class="font-bold text-xs mb-1">LOST WAX TRAVELER</div>
+<body class="min-h-screen">
+    @php
+        if (request()->has('ids')) {
+            $ids = explode(',', request()->input('ids'));
+            $treesList = \App\Models\LostWaxTree::with(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])
+                ->whereIn('id', $ids)
+                ->get();
+        } else {
+            $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
+            $treesList = collect([$tree]);
+        }
+    @endphp
 
-            <div class="border-t border-black pt-1 mb-1">
-                <div class="font-bold">{{ $tree->workOrder->et_code }}</div>
-                <div class="text-[8px]">{{ optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-' }}</div>
-                <div class="text-[8px] truncate">{{ optional($tree->workOrder->itemReference)->item_name_snapshot ?? '-' }}</div>
-                @if(optional($tree->workOrder->itemReference)->aisi_snapshot)
-                    <div class="text-[8px]">AISI: {{ $tree->workOrder->itemReference->aisi_snapshot }}</div>
-                @endif
+    <div class="print-container">
+        @foreach($treesList as $t)
+            <div class="traveler-card">
+                <div class="text-center border-2 border-black p-2 rounded text-[10px]">
+                    <div class="font-bold text-xs mb-1">LOST WAX TRAVELER</div>
+
+                    <div class="border-t border-black pt-1 mb-1">
+                        <div class="font-bold">{{ $t->getSourcePrintOrderNumber() ?? $t->getSourceCode() }}</div>
+                        <div class="text-[8px]">{{ $t->getSourceItemCode() ?? '-' }}</div>
+                        <div class="text-[8px] truncate">{{ $t->getSourceProduct() ?? '-' }}</div>
+                        @if($t->getSourceAisi())
+                            <div class="text-[8px]">AISI: {{ $t->getSourceAisi() }}</div>
+                        @endif
+                    </div>
+
+                    <div class="border-t border-black pt-1 mb-1">
+                        <img src="{{ route('lost-wax.trees.barcode', $t) }}" alt="Barcode" class="mx-auto" style="height: 50px; max-width: 100%;">
+                    </div>
+
+                    <div class="font-bold text-xs tracking-wider mb-1">{{ $t->barcode }}</div>
+
+                    <div class="border-t border-black pt-1">
+                        <div class="flex justify-between text-[8px]">
+                            <span>TREE:</span>
+                            <span class="font-bold">{{ str_pad((string) $t->tree_number, 3, '0', STR_PAD_LEFT) }}</span>
+                        </div>
+                        <div class="flex justify-between text-[8px]">
+                            <span>QTY:</span>
+                            <span class="font-bold">{{ number_format($t->quantity) }} PCS</span>
+                        </div>
+                        <div class="flex justify-between text-[8px]">
+                            <span>DATE:</span>
+                            <span class="font-bold">{{ $t->production_date->format('d-m-Y') }}</span>
+                        </div>
+                        <div class="flex justify-between text-[8px]">
+                            <span>PLAN:</span>
+                            <span class="font-bold">{{ optional($t->plan)->wave_number ? 'Wave '.str_pad((string) $t->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
+                        </div>
+                        <div class="flex justify-between text-[8px]">
+                            <span>CODE:</span>
+                            <span class="font-bold">{{ $t->barcode }}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-
-            <div class="border-t border-black pt-1 mb-1">
-                <img src="{{ route('lost-wax.trees.barcode', $tree) }}" alt="Barcode" class="mx-auto" style="height: 50px; max-width: 100%;">
-            </div>
-
-            <div class="font-bold text-xs tracking-wider mb-1">{{ $tree->barcode }}</div>
-
-            <div class="border-t border-black pt-1">
-                <div class="flex justify-between text-[8px]">
-                    <span>TREE:</span>
-                    <span class="font-bold">{{ str_pad((string) $tree->tree_number, 3, '0', STR_PAD_LEFT) }}</span>
-                </div>
-                <div class="flex justify-between text-[8px]">
-                    <span>QTY:</span>
-                    <span class="font-bold">{{ number_format($tree->quantity) }} PCS</span>
-                </div>
-                <div class="flex justify-between text-[8px]">
-                    <span>DATE:</span>
-                    <span class="font-bold">{{ $tree->production_date->format('d-m-Y') }}</span>
-                </div>
-                <div class="flex justify-between text-[8px]">
-                    <span>PLAN:</span>
-                    <span class="font-bold">{{ optional($tree->plan)->wave_number ? 'Wave '.str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
-                </div>
-                <div class="flex justify-between text-[8px]">
-                    <span>CODE:</span>
-                    <span class="font-bold">{{ $tree->barcode }}</span>
-                </div>
-            </div>
-        </div>
+        @endforeach
     </div>
 
     <div class="no-print fixed bottom-4 left-1/2 -translate-x-1/2 flex gap-3">

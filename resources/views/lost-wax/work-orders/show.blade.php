@@ -74,9 +74,20 @@
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="font-bold text-slate-800">Tree List ({{ $generatedTrees->count() }})</h2>
-                    <span class="text-xs text-slate-500">
-                        Total: {{ number_format($generatedTrees->sum('quantity')) }} pcs
-                    </span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-500 font-medium">
+                            Total: {{ number_format($generatedTrees->sum('quantity')) }} pcs
+                        </span>
+                        @if($generatedTrees->count() > 0)
+                            @php
+                                $allIds = $generatedTrees->pluck('id')->implode(',');
+                            @endphp
+                            <a href="{{ route('lost-wax.trees.traveler', ['tree' => $generatedTrees->first()->id, 'ids' => $allIds]) }}" target="_blank"
+                                class="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold py-1.5 px-3 rounded shadow-sm inline-flex items-center gap-1">
+                                <i class="fas fa-print"></i> Print All
+                            </a>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="overflow-x-auto">

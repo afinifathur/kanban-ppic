@@ -9,6 +9,7 @@ class LostWaxTree extends Model
     protected $fillable = [
         'work_order_id',
         'work_order_plan_id',
+        'lost_wax_print_order_line_id',
         'barcode',
         'tree_number',
         'quantity',
@@ -38,6 +39,11 @@ class LostWaxTree extends Model
         return $this->belongsTo(LostWaxWorkOrderPlan::class, 'work_order_plan_id');
     }
 
+    public function printOrderLine()
+    {
+        return $this->belongsTo(LostWaxPrintOrderLine::class, 'lost_wax_print_order_line_id');
+    }
+
     public function getHumanBarcodeAttribute(): string
     {
         $barcode = $this->barcode;
@@ -51,12 +57,103 @@ class LostWaxTree extends Model
 
     public function getIsCorrectableAttribute(): bool
     {
-        return in_array($this->status, ['generated', 'ready_for_coating']);
+        return $this->work_order_id !== null && in_array($this->status, ['generated', 'ready_for_coating']);
     }
 
     public function scanEvents()
     {
         return $this->hasMany(LostWaxScanEvent::class, 'tree_id');
+    }
+
+    // Compatibility Helpers for Explicit Traceability
+    public function getSourceTypeAttribute(): string
+    {
+        if ($this->work_order_id) {
+            return 'work_order';
+        }
+        if ($this->lost_wax_print_order_line_id) {
+            return 'print_order_line';
+        }
+
+        return 'unknown';
+    }
+
+    public function getSourceCode(): ?string
+    {
+        if ($this->work_order_id) {
+            return $this->workOrder?->et_code;
+        }
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->code;
+        }
+
+        return null;
+    }
+
+    public function getSourcePrintOrderNumber(): ?string
+    {
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->printOrder?->print_order_number;
+        }
+
+        return null;
+    }
+
+    public function getSourceCustomer(): ?string
+    {
+        if ($this->work_order_id) {
+            return $this->workOrder?->customer_name;
+        }
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->customer;
+        }
+
+        return null;
+    }
+
+    public function getSourceProduct(): ?string
+    {
+        if ($this->work_order_id) {
+            return $this->workOrder?->itemReference?->item_name_snapshot;
+        }
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->item_name;
+        }
+
+        return null;
+    }
+
+    public function getSourceItemCode(): ?string
+    {
+        if ($this->work_order_id) {
+            return $this->workOrder?->itemReference?->item_code_snapshot;
+        }
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->code; // code is the snapshot item/cust code (e.g. AB61)
+        }
+
+        return null;
+    }
+
+    public function getSourceAisi(): ?string
+    {
+        if ($this->work_order_id) {
+            return $this->workOrder?->itemReference?->aisi_snapshot;
+        }
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->aisi;
+        }
+
+        return null;
+    }
+
+    public function getSourceSize(): ?string
+    {
+        if ($this->lost_wax_print_order_line_id) {
+            return $this->printOrderLine?->size;
+        }
+
+        return null;
     }
 
     public function getCurrentStageLabelAttribute(): string

@@ -11,7 +11,7 @@
 
 @section('content')
     <div class="space-y-4">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-end gap-3">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-end justify-between gap-3">
             <div>
                 <label class="block text-xs font-medium text-slate-700 mb-1">Filter ET</label>
                 <form method="GET" class="flex items-end gap-2">
@@ -22,6 +22,18 @@
                     @endif
                 </form>
             </div>
+
+            @if($trees->count() > 0)
+                <div>
+                    @php
+                        $allIds = $trees->pluck('id')->implode(',');
+                    @endphp
+                    <a href="{{ route('lost-wax.trees.traveler', ['tree' => $trees->first()->id, 'ids' => $allIds]) }}" target="_blank"
+                        class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5">
+                        <i class="fas fa-print"></i> Print Halaman Ini ({{ $trees->count() }} Tree)
+                    </a>
+                </div>
+            @endif
         </div>
 
         @forelse($trees as $tree)
@@ -46,10 +58,10 @@
                             Qty {{ number_format($tree->quantity) }} pcs
                         </div>
                         <div class="text-xs text-slate-400 mt-1 flex flex-wrap gap-3">
-                            <span>ET: {{ $tree->workOrder->et_code ?? '-' }}</span>
+                            <span>ET/PC: {{ $tree->getSourceCode() ?? '-' }}</span>
                             <span>{{ optional($tree->plan)->wave_number ? 'Wave '.str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
                             <span>Tgl: {{ $tree->production_date->format('d-m-Y') }}</span>
-                            <span>Item: {{ optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-' }}</span>
+                            <span>Item: {{ $tree->getSourceItemCode() ?? '-' }}</span>
                             @if($tree->last_scan_at)
                                 <span class="text-slate-400">Last: {{ $tree->last_scan_at->format('H:i d/m') }}</span>
                             @endif

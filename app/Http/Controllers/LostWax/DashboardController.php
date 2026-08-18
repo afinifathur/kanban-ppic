@@ -25,8 +25,12 @@ class DashboardController extends Controller
         $searchResult = $search ? $this->barcodeSearch($search) : null;
         $etAggregate = $this->buildEtAggregate($filterEt);
 
+        $legacyEts = LostWaxWorkOrder::pluck('et_code');
+        $newEts = \App\Models\LostWaxPrintOrderLine::pluck('code');
+        $allEts = $legacyEts->concat($newEts)->unique()->sort()->values();
+
         $filters = [
-            'ets' => LostWaxWorkOrder::pluck('et_code')->unique()->sort()->values(),
+            'ets' => $allEts,
             'stages' => config('lost_wax.stages', []),
             'aging' => ['too_fast' => 'Terlalu Cepat', 'normal' => 'Normal', 'too_long' => 'Terlalu Lama'],
             'current_et' => $filterEt,
@@ -52,7 +56,10 @@ class DashboardController extends Controller
 
     private function buildOverview(): array
     {
-        $activeWos = LostWaxWorkOrder::whereIn('status', ['draft', 'planned', 'active'])->count();
+        $activeLegacy = LostWaxWorkOrder::whereIn('status', ['draft', 'planned', 'active'])->count();
+        $activePrintOrders = \App\Models\LostWaxPrintOrder::whereIn('status', ['DRAFT', 'ISSUED', 'PRINTED'])->count();
+        $activeWos = $activeLegacy + $activePrintOrders;
+
         $totalTrees = LostWaxTree::count();
         $inProcess = LostWaxTree::whereNotNull('current_stage')
             ->where('current_stage', '!=', 'oven')
@@ -146,7 +153,7 @@ class DashboardController extends Controller
             ->selectRaw('tree_id, MAX(id) as event_id')
             ->groupBy('tree_id');
 
-        $query = LostWaxTree::with(['workOrder.itemReference', 'scanEvents' => function ($q) {
+        $query = LostWaxTree::with(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan', 'scanEvents' => function ($q) {
             $q->where('result', 'success')->latest()->limit(2);
         }])
             ->leftJoinSub($latestEventIds, 'latest_event', function ($join) {
@@ -160,8 +167,12 @@ class DashboardController extends Controller
             });
 
         if ($filterEt) {
-            $woIds = LostWaxWorkOrder::where('et_code', 'like', "%{$filterEt}%")->pluck('id');
-            $query->whereIn('lost_wax_trees.work_order_id', $woIds);
+            $woIds = LostWaxWorkOrder::where('et_code', 'like', "%{$filterEt}%")->pluck('id')->toArray();
+            $lineIds = \App\Models\LostWaxPrintOrderLine::where('code', 'like', "%{$filterEt}%")->pluck('id')->toArray();
+            $query->where(function ($q) use ($woIds, $lineIds) {
+                $q->whereIn('lost_wax_trees.work_order_id', $woIds)
+                    ->orWhereIn('lost_wax_trees.lost_wax_print_order_line_id', $lineIds);
+            });
         }
 
         if ($filterStage) {
@@ -192,9 +203,9 @@ class DashboardController extends Controller
                 'tree' => $tree,
                 'barcode' => $tree->barcode,
                 'tree_number' => $tree->tree_number,
-                'et_code' => $tree->workOrder->et_code ?? '-',
-                'item_code' => optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-',
-                'item_name' => optional($tree->workOrder->itemReference)->item_name_snapshot ?? '-',
+                'et_code' => $tree->getSourceCode() ?? '-',
+                'item_code' => $tree->getSourceItemCode() ?? '-',
+                'item_name' => $tree->getSourceProduct() ?? '-',
                 'quantity' => $tree->quantity,
                 'current_stage' => $tree->current_stage,
                 'current_stage_label' => $tree->current_stage_label,
@@ -211,7 +222,7 @@ class DashboardController extends Controller
 
     private function barcodeSearch(string $search): ?array
     {
-        $tree = LostWaxTree::with(['workOrder.itemReference', 'scanEvents' => function ($q) {
+        $tree = LostWaxTree::with(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan', 'scanEvents' => function ($q) {
             $q->where('result', 'success')->latest()->limit(1);
         }])
             ->where('barcode', $search)
@@ -225,10 +236,10 @@ class DashboardController extends Controller
                 'tree' => $tree,
                 'barcode' => $tree->barcode,
                 'tree_number' => $tree->tree_number,
-                'et_code' => $tree->workOrder->et_code ?? '-',
-                'item_code' => optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-',
-                'item_name' => optional($tree->workOrder->itemReference)->item_name_snapshot ?? '-',
-                'aisi' => optional($tree->workOrder->itemReference)->aisi_snapshot ?? '-',
+                'et_code' => $tree->getSourceCode() ?? '-',
+                'item_code' => $tree->getSourceItemCode() ?? '-',
+                'item_name' => $tree->getSourceProduct() ?? '-',
+                'aisi' => $tree->getSourceAisi() ?? '-',
                 'quantity' => $tree->quantity,
                 'current_stage' => $tree->current_stage,
                 'current_stage_label' => $tree->current_stage_label,
@@ -273,6 +284,9 @@ class DashboardController extends Controller
 
     private function buildEtAggregate(string $filterEt = ''): array
     {
+        $result = [];
+
+        // 1. Legacy active work orders
         $orderQuery = LostWaxWorkOrder::with(['itemReference', 'plans', 'wipEntries'])
             ->whereIn('status', ['draft', 'planned', 'active']);
 
@@ -280,9 +294,7 @@ class DashboardController extends Controller
             $orderQuery->where('et_code', 'like', "%{$filterEt}%");
         }
 
-        $workOrders = $orderQuery->orderByDesc('id')->limit(20)->get();
-
-        $result = [];
+        $workOrders = $orderQuery->orderByDesc('id')->limit(15)->get();
 
         foreach ($workOrders as $wo) {
             $treeStats = LostWaxTree::where('work_order_id', $wo->id)
@@ -326,6 +338,67 @@ class DashboardController extends Controller
                 'assembly_output' => $wo->assembly_output_quantity,
                 'tree_count' => $wo->tree_count,
                 'tree_quantity' => $wo->tree_quantity,
+                'distribution' => $distribution,
+                'has_anomaly' => $hasAnomaly,
+                'has_aging_issue' => $hasAgingIssue,
+            ];
+        }
+
+        // 2. Active print order lines (New flow)
+        $lineQuery = \App\Models\LostWaxPrintOrderLine::with(['printOrder', 'productionPlan', 'trees'])
+            ->whereHas('printOrder', function ($q) {
+                $q->whereIn('status', ['DRAFT', 'ISSUED', 'PRINTED']);
+            });
+
+        if ($filterEt) {
+            $lineQuery->where('code', 'like', "%{$filterEt}%");
+        }
+
+        $lines = $lineQuery->orderByDesc('id')->limit(15)->get();
+
+        foreach ($lines as $line) {
+            $treeStats = LostWaxTree::where('lost_wax_print_order_line_id', $line->id)
+                ->selectRaw("COALESCE(current_stage, 'sebelum_scan') as stage_key, COUNT(*) as count, SUM(quantity) as total_qty")
+                ->groupBy('current_stage')
+                ->orderBy('current_stage')
+                ->get();
+
+            $stages = config('lost_wax.stages', []);
+            $distribution = [];
+
+            foreach ($treeStats as $stat) {
+                $key = $stat->stage_key;
+                $label = $key === 'sebelum_scan' ? 'Sebelum Scan' : ($stages[$key] ?? $key);
+                $distribution[$key] = [
+                    'label' => $label,
+                    'count' => $stat->count,
+                    'qty' => (int) $stat->total_qty,
+                ];
+            }
+
+            $hasAnomaly = LostWaxScanEvent::whereHas('tree', function ($q) use ($line) {
+                $q->where('lost_wax_print_order_line_id', $line->id);
+            })->where('result', 'rejected')->exists();
+
+            $hasAgingIssue = LostWaxScanEvent::whereHas('tree', function ($q) use ($line) {
+                $q->where('lost_wax_print_order_line_id', $line->id);
+            })->where('aging_status', 'too_long')
+                ->where('result', 'success')
+                ->exists();
+
+            $result[] = [
+                'wo' => null,
+                'print_order_line' => $line,
+                'et_code' => $line->code,
+                'item_code' => $line->code,
+                'item_name' => $line->item_name,
+                'po_number' => $line->printOrder?->print_order_number ?? '-',
+                'po_quantity' => $line->productionPlan?->qty_planned ?? 0,
+                'net_requirement' => $line->qty_ordered,
+                'planned_quantity' => $line->qty_ordered,
+                'assembly_output' => $line->qty_actual_good ?? 0,
+                'tree_count' => $line->trees->count(),
+                'tree_quantity' => $line->trees->sum('quantity'),
                 'distribution' => $distribution,
                 'has_anomaly' => $hasAnomaly,
                 'has_aging_issue' => $hasAgingIssue,

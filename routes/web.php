@@ -79,7 +79,29 @@ Route::middleware(['auth'])->group(function () {
 
     // Lost Wax Routes
     Route::prefix('lost-wax')->name('lost-wax.')->group(function () {
-        Route::get('/', fn () => redirect()->route('lost-wax.work-orders.index'));
+        Route::get('/', fn () => redirect()->route('lost-wax.print-orders.plans'));
+
+        // Print Orders (Perencanaan Perintah Cetak)
+        Route::get('/print-orders/plans', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'plans'])->name('print-orders.plans');
+        Route::get('/print-orders', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'index'])->name('print-orders.index');
+        Route::get('/print-orders/create', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'create'])->name('print-orders.create');
+        Route::post('/print-orders', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'store'])->name('print-orders.store');
+        Route::get('/print-orders/{printOrder}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'show'])->name('print-orders.show');
+        Route::get('/print-orders/{printOrder}/edit', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'edit'])->name('print-orders.edit');
+        Route::put('/print-orders/{printOrder}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'update'])->name('print-orders.update');
+        Route::post('/print-orders/{printOrder}/status', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'updateStatus'])->name('print-orders.update-status');
+        Route::get('/print-orders/{printOrder}/print', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'print'])->name('print-orders.print');
+        Route::delete('/print-orders/{printOrder}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroy'])->name('print-orders.destroy');
+
+        // Actual Hasil Cetak
+        Route::get('/outcomes', [\App\Http\Controllers\LostWax\OutcomeController::class, 'index'])->name('outcomes.index');
+        Route::get('/outcomes/{printOrder}/edit', [\App\Http\Controllers\LostWax\OutcomeController::class, 'editOutcome'])->name('outcomes.edit');
+        Route::put('/outcomes/{printOrder}', [\App\Http\Controllers\LostWax\OutcomeController::class, 'updateOutcome'])->name('outcomes.update');
+
+        // Perintah Rangkai (Assembly)
+        Route::get('/assemblies', [\App\Http\Controllers\LostWax\AssemblyController::class, 'index'])->name('assemblies.index');
+        Route::get('/assemblies/{line}/create', [\App\Http\Controllers\LostWax\AssemblyController::class, 'create'])->name('assemblies.create');
+        Route::post('/assemblies/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'store'])->name('assemblies.store');
 
         // Work Orders
         Route::get('/work-orders', [WorkOrderController::class, 'index'])->name('work-orders.index');

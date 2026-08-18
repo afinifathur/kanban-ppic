@@ -35,4 +35,23 @@ class ProductionPlan extends Model
     {
         return $this->hasMany(ProductionItem::class, 'plan_id');
     }
+
+    public function printOrderLines()
+    {
+        return $this->hasMany(LostWaxPrintOrderLine::class, 'production_plan_id');
+    }
+
+    public function getQtyScheduledAttribute(): int
+    {
+        return (int) $this->printOrderLines()
+            ->whereHas('printOrder', function ($query) {
+                $query->whereIn('status', ['DRAFT', 'ISSUED', 'PRINTED']);
+            })
+            ->sum('qty_ordered');
+    }
+
+    public function getQtyRemainingScheduledAttribute(): int
+    {
+        return $this->qty_planned - $this->qty_scheduled;
+    }
 }

@@ -12,7 +12,7 @@ class ScanService
     public function process(string $barcode, int $operatorId): array
     {
         return DB::transaction(function () use ($barcode, $operatorId) {
-            $tree = LostWaxTree::with('workOrder')
+            $tree = LostWaxTree::with(['workOrder', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])
                 ->lockForUpdate()
                 ->where('barcode', $barcode)
                 ->first();
@@ -52,7 +52,7 @@ class ScanService
                 'last_scan_at' => $scannedAt,
             ]);
 
-            $tree->load('workOrder.itemReference');
+            $tree->load(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
             return [
                 'success' => true,
@@ -98,7 +98,7 @@ class ScanService
                 'anomaly_reason' => $reason,
             ]);
 
-            $tree->load('workOrder.itemReference');
+            $tree->load(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
             return [
                 'success' => false,
@@ -154,7 +154,7 @@ class ScanService
     public function processOvenScan(string $barcode, int $operatorId): array
     {
         return DB::transaction(function () use ($barcode, $operatorId) {
-            $tree = LostWaxTree::with('workOrder')
+            $tree = LostWaxTree::with(['workOrder', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])
                 ->lockForUpdate()
                 ->where('barcode', $barcode)
                 ->first();
@@ -219,7 +219,7 @@ class ScanService
                 'last_scan_at' => $scannedAt,
             ]);
 
-            $tree->load('workOrder.itemReference');
+            $tree->load(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
             return [
                 'success' => true,
@@ -244,7 +244,7 @@ class ScanService
             'anomaly_reason' => $reason,
         ]);
 
-        $tree->load('workOrder.itemReference');
+        $tree->load(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         return [
             'success' => false,

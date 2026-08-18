@@ -29,7 +29,7 @@ class ScanController extends Controller
             ]);
         }
 
-        $tree = LostWaxTree::with('workOrder')->where('barcode', $barcode)->first();
+        $tree = LostWaxTree::with(['workOrder', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])->where('barcode', $barcode)->first();
 
         if (! $tree) {
             return response()->json([
@@ -75,7 +75,7 @@ class ScanController extends Controller
 
     public function history(LostWaxTree $tree)
     {
-        $tree->load(['workOrder.itemReference', 'workOrder.plans']);
+        $tree->load(['workOrder.itemReference', 'workOrder.plans', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         $events = LostWaxScanEvent::with('operator')
             ->where('tree_id', $tree->id)
@@ -120,16 +120,16 @@ class ScanController extends Controller
 
     private function treeInfo(LostWaxTree $tree): array
     {
-        $tree->load('workOrder.itemReference');
+        $tree->load(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         return [
             'id' => $tree->id,
             'barcode' => $tree->barcode,
             'tree_number' => $tree->tree_number,
             'quantity' => $tree->quantity,
-            'et_code' => $tree->workOrder->et_code ?? '-',
-            'item_code' => optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-',
-            'item_name' => optional($tree->workOrder->itemReference)->item_name_snapshot ?? '-',
+            'et_code' => $tree->getSourceCode() ?? '-',
+            'item_code' => $tree->getSourceItemCode() ?? '-',
+            'item_name' => $tree->getSourceProduct() ?? '-',
             'current_stage' => $tree->current_stage,
             'current_stage_label' => $tree->current_stage_label,
             'last_scan_at' => $tree->last_scan_at?->format('H:i:s'),
