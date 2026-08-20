@@ -7,7 +7,7 @@ Laravel 12 app "FIFO Tracking / Kanban PPIC" — steel/forge production tracking
 - Run tests: `composer test` (runs `config:clear` then `php artisan test`). Tests use sqlite `:memory:` via `phpunit.xml` — no DB setup needed. Single test: `php artisan test --filter=...`
 - Format: `vendor/bin/pint`
 - All-in-one dev: `composer dev` (serve + queue + pail + vite)
-- Seeded login: `admin@ppic.com` / `password` (`database/seeders/DatabaseSeeder.php`)
+- Seeded login: `adminppicpf@peroniks.com` / `password` (`database/seeders/DatabaseSeeder.php`)
 
 ## Frontend — do not touch Vite
 

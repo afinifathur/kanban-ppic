@@ -39,7 +39,7 @@ class DemoDataAndManualScanTest extends TestCase
 
     public function test_demo_command_creates_expected_records(): void
     {
-        $user = User::factory()->create(['email' => 'admin@ppic.com']);
+        $user = User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
 
         $this->artisan('lost-wax:seed-demo', ['--yes' => true])
             ->expectsOutputToContain('Work Order dibuat')
@@ -81,7 +81,7 @@ class DemoDataAndManualScanTest extends TestCase
 
     public function test_demo_command_is_idempotent(): void
     {
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
 
         $this->artisan('lost-wax:seed-demo', ['--yes' => true])->assertSuccessful();
         $firstCount = LostWaxWorkOrder::count();
@@ -96,7 +96,7 @@ class DemoDataAndManualScanTest extends TestCase
 
     public function test_fresh_option_recreates(): void
     {
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
 
         $this->artisan('lost-wax:seed-demo', ['--yes' => true])->assertSuccessful();
         $firstMaxId = LostWaxWorkOrder::max('id');
@@ -114,7 +114,7 @@ class DemoDataAndManualScanTest extends TestCase
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::create(2026, 8, 11, 8, 0, 0));
 
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
 
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
@@ -172,7 +172,7 @@ class DemoDataAndManualScanTest extends TestCase
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::create(2026, 8, 11, 8, 0, 0));
 
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
         $ovenTree = LostWaxTree::where('current_stage', 'oven')->first();
@@ -196,7 +196,7 @@ class DemoDataAndManualScanTest extends TestCase
 
     public function test_scan_page_shows_operator_screen(): void
     {
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
         $user = User::first();
@@ -214,7 +214,7 @@ class DemoDataAndManualScanTest extends TestCase
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::create(2026, 8, 11, 8, 0, 0));
 
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
         $affectedTree = LostWaxTree::whereHas('scanEvents', function ($q) {
@@ -240,7 +240,7 @@ class DemoDataAndManualScanTest extends TestCase
 
     public function test_tree_index_shows_all_stages(): void
     {
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
         $user = User::first();
@@ -254,7 +254,7 @@ class DemoDataAndManualScanTest extends TestCase
 
     public function test_work_order_index_shows_demo_wos(): void
     {
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
         $user = User::first();
@@ -273,7 +273,7 @@ class DemoDataAndManualScanTest extends TestCase
     {
         \Carbon\Carbon::setTestNow(\Carbon\Carbon::create(2026, 8, 11, 8, 0, 0));
 
-        User::factory()->create(['email' => 'admin@ppic.com']);
+        User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
         $this->artisan('lost-wax:seed-demo', ['--yes' => true]);
 
         $layer4Tree = LostWaxTree::where('current_stage', 'layer_4')->first();

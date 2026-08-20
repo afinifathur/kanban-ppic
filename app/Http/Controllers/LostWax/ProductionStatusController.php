@@ -16,10 +16,20 @@ class ProductionStatusController extends Controller
     {
         $search = trim($request->input('search', ''));
         $filter = $request->input('filter', 'active');
+        $customer = trim($request->input('customer', ''));
+        $po_number = trim($request->input('po_number', ''));
+        $aisi = trim($request->input('aisi', ''));
 
-        $rows = $this->getAggregatedRows($search, $filter);
+        $rows = $this->getAggregatedRows($search, $filter, $customer, $po_number, $aisi);
 
-        return view('lost-wax.production-status.index', compact('rows', 'search', 'filter'));
+        $allCustomers = $this->getDistinctFieldValues('customer');
+        $allPos = $this->getDistinctFieldValues('po_number');
+        $allAisi = $this->getDistinctFieldValues('aisi');
+
+        return view('lost-wax.production-status.index', compact(
+            'rows', 'search', 'filter', 'customer', 'po_number', 'aisi',
+            'allCustomers', 'allPos', 'allAisi'
+        ));
     }
 
     public function trees(Request $request)
@@ -107,8 +117,11 @@ class ProductionStatusController extends Controller
     {
         $search = trim($request->input('search', ''));
         $filter = $request->input('filter', 'all');
+        $customer = trim($request->input('customer', ''));
+        $po_number = trim($request->input('po_number', ''));
+        $aisi = trim($request->input('aisi', ''));
 
-        $rows = $this->getAggregatedRows($search, $filter);
+        $rows = $this->getAggregatedRows($search, $filter, $customer, $po_number, $aisi);
 
         $filename = 'lost-wax-production-status-'.now()->format('Ymd-His').'.csv';
 
@@ -122,18 +135,32 @@ class ProductionStatusController extends Controller
             fputcsv($output, [
                 'Kode Cust', 'Product Name', 'AISI',
                 'PO Qty', 'Plan Qty', 'Total Lap.', 'Total Rusak',
-                'Lap.1', 'Rusak', 'Lap.2', 'Rusak', 'Lap.3', 'Rusak',
-                'Lap.4', 'Rusak', 'Lap.5', 'Rusak', 'Lap.6', 'Rusak',
-                'Lap.7', 'Rusak', 'Oven', 'Status',
+                'Cetak', 'R', 'Rangkai', 'R',
+                'Lap.1', 'R', 'Lap.2', 'R', 'Lap.3', 'R',
+                'Lap.4', 'R', 'Lap.5', 'R', 'Lap.6', 'R',
+                'Lap.7', 'R', 'Oven', 'Status',
             ]);
 
             foreach ($rows as $row) {
                 fputcsv($output, [
                     $row['code'], $row['product_name'], $row['aisi'],
-                    $row['planned_qty'], $row['scheduled_qty'], $row['total_lap'], $row['actual_defect'],
-                    $row['layer_1'], '-', $row['layer_2'], '-', $row['layer_3'], '-',
-                    $row['layer_4'], '-', $row['layer_5'], '-', $row['layer_6'], '-',
-                    $row['layer_7'], '-', $row['oven_qty'], $row['status'],
+                    $row['planned_qty'] > 0 ? $row['planned_qty'] : '-',
+                    $row['scheduled_qty'] > 0 ? $row['scheduled_qty'] : '-',
+                    $row['total_lap'] > 0 ? $row['total_lap'] : '-',
+                    $row['overall_defect'] > 0 ? $row['overall_defect'] : '-',
+                    $row['actual_good'] > 0 ? $row['actual_good'] : '-',
+                    $row['actual_defect'] > 0 ? $row['actual_defect'] : '-',
+                    $row['assembly_qty'] > 0 ? $row['assembly_qty'] : '-',
+                    $row['before_scan_qty'] > 0 ? $row['before_scan_qty'] : '-',
+                    $row['layer_1'] > 0 ? $row['layer_1'] : '-', '-',
+                    $row['layer_2'] > 0 ? $row['layer_2'] : '-', '-',
+                    $row['layer_3'] > 0 ? $row['layer_3'] : '-', '-',
+                    $row['layer_4'] > 0 ? $row['layer_4'] : '-', '-',
+                    $row['layer_5'] > 0 ? $row['layer_5'] : '-', '-',
+                    $row['layer_6'] > 0 ? $row['layer_6'] : '-', '-',
+                    $row['layer_7'] > 0 ? $row['layer_7'] : '-', '-',
+                    $row['oven_qty'] > 0 ? $row['oven_qty'] : '-',
+                    $row['status'],
                 ]);
             }
 
@@ -143,7 +170,7 @@ class ProductionStatusController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
-    private function getAggregatedRows(string $search = '', string $filter = 'all'): array
+    private function getAggregatedRows(string $search = '', string $filter = 'all', string $customer = '', string $po_number = '', string $aisi = ''): array
     {
         // 1. Fetch Legacy Work Orders
         $woQuery = LostWaxWorkOrder::with(['itemReference', 'plans']);
@@ -158,6 +185,32 @@ class ProductionStatusController extends Controller
                     });
             });
         }
+        if ($customer !== '') {
+            $woQuery->where('customer_name', 'like', "%{$customer}%");
+        }
+        if ($po_number !== '') {
+            $woQuery->where('po_number', 'like', "%{$po_number}%");
+        }
+        if ($aisi !== '') {
+            $woQuery->whereHas('itemReference', function ($q) use ($aisi) {
+                $q->where('aisi_snapshot', 'like', "%{$aisi}%");
+            });
+        }
+
+        // Apply RBAC Product Scope
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            if ($scope === 'FLANGE_STAINLESS') {
+                $woQuery->whereIn('family_code', ['3', '4']);
+            } elseif ($scope === 'FLANGE_BESI') {
+                $woQuery->whereIn('family_code', ['6']);
+            } elseif ($scope === 'FITTING_STAINLESS') {
+                $woQuery->whereIn('family_code', ['1', '2']);
+            } else {
+                $woQuery->whereRaw('1=0');
+            }
+        }
+
         $legacyWos = $woQuery->orderBy('et_code')->get();
 
         $woIds = $legacyWos->pluck('id')->toArray();
@@ -189,6 +242,49 @@ class ProductionStatusController extends Controller
             $totalLap = array_sum($layerQtys);
             $totalTreeQty = $totalLap + $ovenQty + ($stageMap['sebelum_scan'] ?? 0);
 
+            $scheduledQty = (int) $wo->planned_quantity;
+            $cetak_good = (int) $wo->moulding_output_quantity;
+            $cetak_defect = ($cetak_good > 0) ? max(0, $scheduledQty - $cetak_good) : 0;
+
+            $rangkai_good = (int) $wo->assembly_output_quantity;
+            if ($totalTreeQty > 0) {
+                $rangkai_good = $totalTreeQty;
+            }
+            $rangkai_defect = ($rangkai_good > 0) ? max(0, $cetak_good - $rangkai_good) : 0;
+
+            // Display values based on stage movement:
+            $ctk_display = 0;
+            $r_ctk_display = 0;
+            if ($rangkai_good > 0) {
+                if ($rangkai_good < $cetak_good) {
+                    $ctk_display = $cetak_good;
+                    $r_ctk_display = $cetak_defect;
+                }
+            } else {
+                $ctk_display = $cetak_good;
+                $r_ctk_display = $cetak_defect;
+            }
+
+            $total_scanned = $totalLap + $ovenQty;
+            $rgki_display = 0;
+            $r_rgki_display = 0;
+            if ($total_scanned > 0) {
+                if ($total_scanned < $rangkai_good) {
+                    $rgki_display = $rangkai_good;
+                    $r_rgki_display = $rangkai_defect;
+                }
+            } else {
+                if ($rangkai_good > 0) {
+                    $rgki_display = $rangkai_good;
+                    $r_rgki_display = $rangkai_defect;
+                }
+            }
+
+            $before_scan_qty = $stageMap['sebelum_scan'] ?? 0;
+            if ($totalTreeQty == 0 && $rangkai_good > 0) {
+                $before_scan_qty = $rangkai_good;
+            }
+
             if ($totalTreeQty > 0) {
                 $prodStatus = ($ovenQty > 0 && $ovenQty === $totalTreeQty) ? 'COMPLETED' : 'ACTIVE';
             } else {
@@ -205,10 +301,16 @@ class ProductionStatusController extends Controller
                 'aisi' => optional($wo->itemReference)->aisi_snapshot ?? '-',
                 'size' => '-',
                 'planned_qty' => (int) $wo->po_quantity,
-                'scheduled_qty' => (int) $wo->planned_quantity,
-                'actual_good' => (int) $wo->assembly_output_quantity,
-                'actual_defect' => 0,
-                'assembly_qty' => $totalTreeQty,
+                'scheduled_qty' => $scheduledQty,
+                'actual_good' => $cetak_good,
+                'actual_defect' => $cetak_defect,
+                'assembly_qty' => $rangkai_good,
+                'before_scan_qty' => $before_scan_qty,
+                'ctk_display' => $ctk_display,
+                'r_ctk_display' => $r_ctk_display,
+                'rgki_display' => $rgki_display,
+                'r_rgki_display' => $r_rgki_display,
+                'overall_defect' => $cetak_defect + $rangkai_defect,
                 'total_lap' => $totalLap,
                 'tree_count' => $wo->trees()->count(),
                 'layer_1' => $layerQtys['layer_1'],
@@ -220,8 +322,7 @@ class ProductionStatusController extends Controller
                 'layer_7' => $layerQtys['layer_7'],
                 'oven_qty' => $ovenQty,
                 'status' => $prodStatus,
-                'prod_status' => $prodStatus, // Keep compatible
-                'before_scan_qty' => $stageMap['sebelum_scan'] ?? 0,
+                'prod_status' => $prodStatus,
             ];
         }
 
@@ -240,21 +341,35 @@ class ProductionStatusController extends Controller
                     });
             });
         }
+        if ($customer !== '') {
+            $planQuery->where('customer', 'like', "%{$customer}%");
+        }
+        if ($po_number !== '') {
+            $planQuery->where('po_number', 'like', "%{$po_number}%");
+        }
+        if ($aisi !== '') {
+            $planQuery->where('aisi', 'like', "%{$aisi}%");
+        }
+
+        // Apply RBAC Product Scope
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $planQuery->where('product_scope', $scope);
+        }
 
         $plans = $planQuery->get();
 
         foreach ($plans as $plan) {
             $lines = $plan->printOrderLines;
             $scheduledQty = 0;
-            $actualGood = 0;
-            $actualDefect = 0;
+            $cetak_good = 0;
+            $cetak_defect = 0;
 
             foreach ($lines as $line) {
                 // Exclude cancelled print orders
                 if ($line->printOrder && $line->printOrder->status !== 'CANCELLED') {
                     $scheduledQty += $line->qty_ordered;
-                    $actualGood += $line->qty_actual_good ?? 0;
-                    $actualDefect += $line->qty_actual_defect ?? 0;
+                    $cetak_good += $line->qty_actual_good ?? 0;
+                    $cetak_defect += $line->qty_actual_defect ?? 0;
                 }
             }
 
@@ -287,6 +402,37 @@ class ProductionStatusController extends Controller
             $totalLap = array_sum($layerQtys);
             $totalTreeQty = $totalLap + $ovenQty + $stageMap['sebelum_scan'];
 
+            $rangkai_good = $totalTreeQty;
+            $rangkai_defect = ($rangkai_good > 0) ? max(0, $cetak_good - $rangkai_good) : 0;
+
+            // Display values:
+            $ctk_display = 0;
+            $r_ctk_display = 0;
+            if ($rangkai_good > 0) {
+                if ($rangkai_good < $cetak_good) {
+                    $ctk_display = $cetak_good;
+                    $r_ctk_display = $cetak_defect;
+                }
+            } else {
+                $ctk_display = $cetak_good;
+                $r_ctk_display = $cetak_defect;
+            }
+
+            $total_scanned = $totalLap + $ovenQty;
+            $rgki_display = 0;
+            $r_rgki_display = 0;
+            if ($total_scanned > 0) {
+                if ($total_scanned < $rangkai_good) {
+                    $rgki_display = $rangkai_good;
+                    $r_rgki_display = $rangkai_defect;
+                }
+            } else {
+                if ($rangkai_good > 0) {
+                    $rgki_display = $rangkai_good;
+                    $r_rgki_display = $rangkai_defect;
+                }
+            }
+
             if ($totalTreeQty > 0) {
                 $prodStatus = ($ovenQty > 0 && $ovenQty === $totalTreeQty) ? 'COMPLETED' : 'ACTIVE';
             } else {
@@ -306,9 +452,15 @@ class ProductionStatusController extends Controller
                 'size' => $plan->size ?? '-',
                 'planned_qty' => $plan->qty_planned,
                 'scheduled_qty' => $scheduledQty,
-                'actual_good' => $actualGood,
-                'actual_defect' => $actualDefect,
+                'actual_good' => $cetak_good,
+                'actual_defect' => $cetak_defect,
                 'assembly_qty' => $totalTreeQty,
+                'before_scan_qty' => $stageMap['sebelum_scan'],
+                'ctk_display' => $ctk_display,
+                'r_ctk_display' => $r_ctk_display,
+                'rgki_display' => $rgki_display,
+                'r_rgki_display' => $r_rgki_display,
+                'overall_defect' => $cetak_defect + $rangkai_defect,
                 'total_lap' => $totalLap,
                 'tree_count' => $planTrees->count(),
                 'layer_1' => $layerQtys['layer_1'],
@@ -320,12 +472,11 @@ class ProductionStatusController extends Controller
                 'layer_7' => $layerQtys['layer_7'],
                 'oven_qty' => $ovenQty,
                 'status' => $prodStatus,
-                'prod_status' => $prodStatus, // Keep compatible
-                'before_scan_qty' => $stageMap['sebelum_scan'],
+                'prod_status' => $prodStatus,
             ];
         }
 
-        // Apply filters
+        // Apply status filters
         if ($filter === 'active') {
             $rows = array_values(array_filter($rows, fn ($r) => $r['status'] === 'ACTIVE'));
         } elseif ($filter === 'completed') {
@@ -333,5 +484,86 @@ class ProductionStatusController extends Controller
         }
 
         return $rows;
+    }
+
+    private function getDistinctFieldValues(string $field): array
+    {
+        $scope = auth()->user()->product_scope;
+
+        if ($field === 'customer') {
+            $legacyQuery = LostWaxWorkOrder::whereNotNull('customer_name')->distinct();
+            $newFlowQuery = ProductionPlan::whereNotNull('customer')->distinct();
+
+            if (auth()->user()->hasRole('ppic') && $scope) {
+                if ($scope === 'FLANGE_STAINLESS') {
+                    $legacyQuery->whereIn('family_code', ['3', '4']);
+                } elseif ($scope === 'FLANGE_BESI') {
+                    $legacyQuery->whereIn('family_code', ['6']);
+                } elseif ($scope === 'FITTING_STAINLESS') {
+                    $legacyQuery->whereIn('family_code', ['1', '2']);
+                } else {
+                    $legacyQuery->whereRaw('1=0');
+                }
+
+                $newFlowQuery->where('product_scope', $scope);
+            }
+
+            $legacy = $legacyQuery->pluck('customer_name')->toArray();
+            $newFlow = $newFlowQuery->pluck('customer')->toArray();
+
+            return array_values(array_unique(array_filter(array_merge($legacy, $newFlow))));
+        }
+
+        if ($field === 'po_number') {
+            $legacyQuery = LostWaxWorkOrder::whereNotNull('po_number')->distinct();
+            $newFlowQuery = ProductionPlan::whereNotNull('po_number')->distinct();
+
+            if (auth()->user()->hasRole('ppic') && $scope) {
+                if ($scope === 'FLANGE_STAINLESS') {
+                    $legacyQuery->whereIn('family_code', ['3', '4']);
+                } elseif ($scope === 'FLANGE_BESI') {
+                    $legacyQuery->whereIn('family_code', ['6']);
+                } elseif ($scope === 'FITTING_STAINLESS') {
+                    $legacyQuery->whereIn('family_code', ['1', '2']);
+                } else {
+                    $legacyQuery->whereRaw('1=0');
+                }
+
+                $newFlowQuery->where('product_scope', $scope);
+            }
+
+            $legacy = $legacyQuery->pluck('po_number')->toArray();
+            $newFlow = $newFlowQuery->pluck('po_number')->toArray();
+
+            return array_values(array_unique(array_filter(array_merge($legacy, $newFlow))));
+        }
+
+        if ($field === 'aisi') {
+            $legacyQuery = \App\Models\LostWaxItemReference::whereNotNull('aisi_snapshot')->distinct();
+            $newFlowQuery = ProductionPlan::whereNotNull('aisi')->distinct();
+
+            if (auth()->user()->hasRole('ppic') && $scope) {
+                $legacyQuery->whereHas('workOrders', function ($q) use ($scope) {
+                    if ($scope === 'FLANGE_STAINLESS') {
+                        $q->whereIn('family_code', ['3', '4']);
+                    } elseif ($scope === 'FLANGE_BESI') {
+                        $q->whereIn('family_code', ['6']);
+                    } elseif ($scope === 'FITTING_STAINLESS') {
+                        $q->whereIn('family_code', ['1', '2']);
+                    } else {
+                        $q->whereRaw('1=0');
+                    }
+                });
+
+                $newFlowQuery->where('product_scope', $scope);
+            }
+
+            $legacy = $legacyQuery->pluck('aisi_snapshot')->toArray();
+            $newFlow = $newFlowQuery->pluck('aisi')->toArray();
+
+            return array_values(array_unique(array_filter(array_merge($legacy, $newFlow))));
+        }
+
+        return [];
     }
 }

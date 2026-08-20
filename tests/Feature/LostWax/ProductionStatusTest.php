@@ -629,4 +629,222 @@ class ProductionStatusTest extends TestCase
             ->assertOk()
             ->assertSee('Production Status');
     }
+
+    public function test_compact_layout_and_early_flow_columns_rendered(): void
+    {
+        $user = User::factory()->create();
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status'));
+        $response->assertOk();
+        $response->assertSee('CTK');
+        $response->assertSee('RGKI');
+        $response->assertSee('Tot Lap');
+        $response->assertSee('Tot Rsk');
+        $response->assertSee('L1');
+        $response->assertSee('Oven');
+    }
+
+    public function test_filter_customer_works(): void
+    {
+        $user = User::factory()->create();
+        $ref = $this->createReference();
+
+        $wo1 = $this->createWorkOrder($ref, ['et_code' => 'ET-CUST1', 'customer_name' => 'Customer A']);
+        $this->createPlan($wo1);
+
+        $wo2 = $this->createWorkOrder($ref, ['et_code' => 'ET-CUST2', 'customer_name' => 'Customer B']);
+        $this->createPlan($wo2);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['customer' => 'Customer A', 'filter' => 'all']));
+        $response->assertOk();
+        $response->assertSee('ET-CUST1');
+        $response->assertDontSee('ET-CUST2');
+    }
+
+    public function test_filter_po_number_works(): void
+    {
+        $user = User::factory()->create();
+        $ref = $this->createReference();
+
+        $wo1 = $this->createWorkOrder($ref, ['et_code' => 'ET-PO1', 'po_number' => 'PO-XYZ-999']);
+        $this->createPlan($wo1);
+
+        $wo2 = $this->createWorkOrder($ref, ['et_code' => 'ET-PO2', 'po_number' => 'PO-ABC-111']);
+        $this->createPlan($wo2);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['po_number' => 'PO-XYZ-999', 'filter' => 'all']));
+        $response->assertOk();
+        $response->assertSee('ET-PO1');
+        $response->assertDontSee('ET-PO2');
+    }
+
+    public function test_filter_aisi_works(): void
+    {
+        $user = User::factory()->create();
+
+        $ref1 = $this->createReference(['aisi_snapshot' => 'SUS304']);
+        $wo1 = $this->createWorkOrder($ref1, ['et_code' => 'ET-AISI1']);
+        $this->createPlan($wo1);
+
+        $ref2 = $this->createReference([
+            'master_item_key' => 'LY027',
+            'item_code_snapshot' => 'LY027',
+            'aisi_snapshot' => 'SUS316',
+        ]);
+        $wo2 = $this->createWorkOrder($ref2, ['et_code' => 'ET-AISI2']);
+        $this->createPlan($wo2);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['aisi' => 'SUS304', 'filter' => 'all']));
+        $response->assertOk();
+        $response->assertSee('ET-AISI1');
+        $response->assertDontSee('ET-AISI2');
+    }
+
+    public function test_combined_filters_work(): void
+    {
+        $user = User::factory()->create();
+
+        $ref1 = $this->createReference(['aisi_snapshot' => 'SUS304']);
+        $wo1 = $this->createWorkOrder($ref1, ['et_code' => 'ET-OK', 'customer_name' => 'Cust A', 'po_number' => 'PO-100']);
+        $this->createPlan($wo1);
+
+        $wo2 = $this->createWorkOrder($ref1, ['et_code' => 'ET-WRONG', 'customer_name' => 'Cust B', 'po_number' => 'PO-100']);
+        $this->createPlan($wo2);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'customer' => 'Cust A',
+            'po_number' => 'PO-100',
+            'aisi' => 'SUS304',
+            'filter' => 'all',
+        ]));
+        $response->assertOk();
+        $response->assertSee('ET-OK');
+        $response->assertDontSee('ET-WRONG');
+    }
+
+    public function test_rbac_product_scope_on_production_status(): void
+    {
+        // Set up Spatie Role for testing
+        $ppicRole = \Spatie\Permission\Models\Role::findOrCreate('ppic');
+        $accessExecution = \Spatie\Permission\Models\Permission::findOrCreate('access_execution');
+        $ppicRole->givePermissionTo($accessExecution);
+
+        // User PPIC Flange (can only see flange stainless)
+        $ppicFlange = User::factory()->create([
+            'email' => 'ppicflange_test@peroniks.com',
+            'product_scope' => 'FLANGE_STAINLESS',
+        ]);
+        $ppicFlange->assignRole('ppic');
+
+        // Legacy Work Orders (with family code '3' = Flange Stainless 304, family code '1' = Fitting Stainless 304)
+        $ref = $this->createReference();
+        $woFlange = $this->createWorkOrder($ref, ['et_code' => 'WO-FLANGE', 'family_code' => '3']);
+        $this->createPlan($woFlange);
+
+        $woFitting = $this->createWorkOrder($ref, ['et_code' => 'WO-FITTING', 'family_code' => '1']);
+        $this->createPlan($woFitting);
+
+        // PPIC Flange should only see WO-FLANGE
+        $response = $this->actingAs($ppicFlange)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response->assertOk();
+        $response->assertSee('WO-FLANGE');
+        $response->assertDontSee('WO-FITTING');
+
+        // SPV User should see both
+        $spvRole = \Spatie\Permission\Models\Role::findOrCreate('spv');
+        $spvRole->givePermissionTo($accessExecution);
+        $spvUser = User::factory()->create(['product_scope' => null]);
+        $spvUser->assignRole('spv');
+
+        $response2 = $this->actingAs($spvUser)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response2->assertOk();
+        $response2->assertSee('WO-FLANGE');
+        $response2->assertSee('WO-FITTING');
+    }
+
+    public function test_production_status_scenarios_from_user(): void
+    {
+        $user = User::factory()->create();
+        $ref = $this->createReference([
+            'master_item_key' => 'LY099',
+            'item_code_snapshot' => 'LY099',
+        ]);
+
+        // Scenario 1: 45 CTK -> 45 RGKI, tanpa rusak
+        // CTK -, R -, RGKI 45, R -
+        $wo1 = $this->createWorkOrder($ref, ['et_code' => 'WO-SCEN1', 'po_quantity' => 45, 'stock_quantity' => 0, 'net_requirement_quantity' => 45]);
+        $this->createPlan($wo1, ['planned_quantity' => 45]);
+        $wo1->wipEntries()->create(['stage' => 'moulding', 'quantity' => 45, 'produced_at' => now()]);
+        $wo1->wipEntries()->create(['stage' => 'assembly', 'quantity' => 45, 'produced_at' => now()]);
+        $this->createTree($wo1, 45, '1110826901', 1);
+
+        $response1 = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response1->assertOk();
+        $rows = $response1->viewData('rows');
+        $row1 = collect($rows)->firstWhere('code', 'WO-SCEN1');
+        $this->assertEquals(0, $row1['ctk_display']); // CTK -
+        $this->assertEquals(0, $row1['r_ctk_display']); // R -
+        $this->assertEquals(45, $row1['rgki_display']); // RGKI 45
+        $this->assertEquals(0, $row1['r_rgki_display']); // R -
+
+        // Scenario 2: 45 plan -> 43 CTK + 2 rusak
+        // CTK 43, R 2
+        $wo2 = $this->createWorkOrder($ref, ['et_code' => 'WO-SCEN2', 'po_quantity' => 45, 'stock_quantity' => 0, 'net_requirement_quantity' => 45]);
+        $this->createPlan($wo2, ['planned_quantity' => 45]);
+        $wo2->wipEntries()->create(['stage' => 'moulding', 'quantity' => 43, 'produced_at' => now()]);
+
+        $response2 = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $rows = $response2->viewData('rows');
+        $row2 = collect($rows)->firstWhere('code', 'WO-SCEN2');
+        $this->assertEquals(43, $row2['ctk_display']); // CTK 43
+        $this->assertEquals(2, $row2['r_ctk_display']); // R 2
+        $this->assertEquals(0, $row2['rgki_display']); // RGKI -
+
+        // Scenario 3: 43 CTK -> 40 RGKI + 3 rusak saat rangkai
+        // CTK 43, R 2, RGKI 40, R 3
+        $wo3 = $this->createWorkOrder($ref, ['et_code' => 'WO-SCEN3', 'po_quantity' => 45, 'stock_quantity' => 0, 'net_requirement_quantity' => 45]);
+        $this->createPlan($wo3, ['planned_quantity' => 45]);
+        $wo3->wipEntries()->create(['stage' => 'moulding', 'quantity' => 43, 'produced_at' => now()]);
+        $wo3->wipEntries()->create(['stage' => 'assembly', 'quantity' => 40, 'produced_at' => now()]);
+        $this->createTree($wo3, 40, '1110826902', 2);
+
+        $response3 = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $rows = $response3->viewData('rows');
+        $row3 = collect($rows)->firstWhere('code', 'WO-SCEN3');
+        $this->assertEquals(43, $row3['ctk_display']); // CTK 43
+        $this->assertEquals(2, $row3['r_ctk_display']); // R 2
+        $this->assertEquals(40, $row3['rgki_display']); // RGKI 40
+        $this->assertEquals(3, $row3['r_rgki_display']); // R 3
+
+        // Scenario 4: 40 RGKI -> 40 L1 tanpa rusak
+        // RGKI -, R -, L1 40, R -
+        $wo4 = $this->createWorkOrder($ref, ['et_code' => 'WO-SCEN4', 'po_quantity' => 40, 'stock_quantity' => 0, 'net_requirement_quantity' => 40]);
+        $this->createPlan($wo4, ['planned_quantity' => 40]);
+        $wo4->wipEntries()->create(['stage' => 'moulding', 'quantity' => 40, 'produced_at' => now()]);
+        $wo4->wipEntries()->create(['stage' => 'assembly', 'quantity' => 40, 'produced_at' => now()]);
+        $tree4 = $this->createTree($wo4, 40, '1110826903', 3);
+        $tree4->update(['current_stage' => 'layer_1']);
+
+        $response4 = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $rows = $response4->viewData('rows');
+        $row4 = collect($rows)->firstWhere('code', 'WO-SCEN4');
+        $this->assertEquals(0, $row4['rgki_display']); // RGKI -
+        $this->assertEquals(0, $row4['r_rgki_display']); // R -
+        $this->assertEquals(40, $row4['layer_1']); // L1 40
+
+        // Scenario 5: Sebagian quantity berpindah dari L1 ke L2
+        $wo5 = $this->createWorkOrder($ref, ['et_code' => 'WO-SCEN5', 'po_quantity' => 40, 'stock_quantity' => 0, 'net_requirement_quantity' => 40]);
+        $this->createPlan($wo5, ['planned_quantity' => 40]);
+        $wo5->wipEntries()->create(['stage' => 'moulding', 'quantity' => 40, 'produced_at' => now()]);
+        $wo5->wipEntries()->create(['stage' => 'assembly', 'quantity' => 40, 'produced_at' => now()]);
+        $tree5a = $this->createTree($wo5, 25, '1110826904', 4);
+        $tree5a->update(['current_stage' => 'layer_1']);
+        $tree5b = $this->createTree($wo5, 15, '1110826905', 5);
+        $tree5b->update(['current_stage' => 'layer_2']);
+
+        $response5 = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $rows = $response5->viewData('rows');
+        $row5 = collect($rows)->firstWhere('code', 'WO-SCEN5');
+        $this->assertEquals(25, $row5['layer_1']); // L1 25
+        $this->assertEquals(15, $row5['layer_2']); // L2 15
+    }
 }

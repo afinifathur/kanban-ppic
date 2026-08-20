@@ -21,6 +21,30 @@
 
 @section('content')
     <style>
+        .compact-th {
+            padding: 4px 5px !important;
+            font-size: 10px !important;
+            line-height: 1.15;
+            vertical-align: middle;
+            text-align: center;
+        }
+        .compact-td {
+            padding: 4px 5px !important;
+            font-size: 10px !important;
+            line-height: 1.15;
+            vertical-align: middle;
+        }
+        .prod-name-cell {
+            max-width: 140px;
+            white-space: normal;
+            word-wrap: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.15;
+        }
+
         @media screen {
             .cell-layer-active { background: #d1fae5; color: #065f46; font-weight: 700; }
             .cell-oven { background: #ccfbf1; color: #0f766e; font-weight: 700; }
@@ -43,6 +67,7 @@
                 padding: 0 !important;
                 background: white !important;
                 flex-direction: row !important;
+                font-family: Arial, Helvetica, sans-serif !important;
             }
             body { display: block !important; }
 
@@ -60,113 +85,246 @@
             .divide-y { border: none !important; }
             .no-print { display: none !important; }
 
-            .print-header { text-align: center; margin-bottom: 5mm; }
-            .print-header .company { font-size: 13px; font-weight: 700; margin: 0; }
-            .print-header .title { font-size: 12px; font-weight: 700; margin: 2mm 0; }
-            .print-header .subtitle { font-size: 8px; color: #555; margin: 0 0 1mm 0; }
-            .print-header .meta { font-size: 8px; color: #555; margin: 0; }
+            .print-header { text-align: center; margin-bottom: 5mm; font-family: Arial, Helvetica, sans-serif !important; }
+            .print-header .company { font-size: 12px; font-weight: 700; color: #1F2937; margin: 0; }
+            .print-header .title { font-size: 14px; font-weight: 700; color: #1F2937; margin: 1.5mm 0; }
+            .print-header .subtitle { font-size: 9px; color: #475569; margin: 0 0 1mm 0; }
+            .print-header .meta { font-size: 9px; color: #475569; margin: 0; }
 
-            .ps-table { width: 100%; border-collapse: collapse; font-size: 7px; }
-            .ps-table th, .ps-table td { border: 0.5px solid #888; padding: 1.5px 2px; text-align: center; vertical-align: middle; word-break: break-word; }
-            .ps-table th { background: #1e293b !important; color: white !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .ps-table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                font-size: 11px;
+                table-layout: fixed;
+                font-family: Arial, Helvetica, sans-serif !important;
+            }
+            .ps-table th, .ps-table td { 
+                border: 0.5px solid #888; 
+                padding: 2px 2px; 
+                text-align: center; 
+                vertical-align: middle; 
+                overflow: hidden;
+            }
+            .ps-table th { 
+                background: #1F2937 !important;
+                color: white !important; 
+                font-weight: 700; 
+                font-size: 9px;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+                line-height: 1.15;
+            }
             .ps-table td.left { text-align: left; }
             .ps-table td.right { text-align: right; }
-            .ps-table td.prod-name { text-align: left; font-size: 6.5px; }
+            .ps-table td.prod-name { text-align: left; }
 
-            .ps-cell-green { background: #d1fae5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .ps-cell-oven { background: #ccfbf1 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .ps-cell-red { background: #fee2e2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .ps-cell-green { 
+                background: #DCFCE7 !important;
+                color: #166534 !important;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+            }
+            .ps-cell-oven { 
+                background: #DCFCE7 !important;
+                color: #166534 !important;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+            }
+            .ps-cell-red { 
+                background: #FEE2E2 !important;
+                color: #DC2626 !important;
+                font-weight: bold;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+            }
 
             thead { display: table-header-group !important; }
             tr { break-inside: avoid !important; page-break-inside: avoid !important; }
 
-            @page { size: A4 landscape; margin: 6mm; }
+            @page { size: A4 landscape; margin: 5mm; }
         }
     </style>
 
     {{-- WEB UI --}}
     <div class="production-status-web space-y-4">
         <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-            <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                <form method="GET" class="flex gap-2 items-center flex-1 w-full">
-                    <input type="hidden" name="filter" value="{{ $filter }}">
-                    <div class="relative flex-1">
-                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input type="text" name="search" value="{{ $search }}"
-                            placeholder="Cari Kode Cust / Product Name / PO..."
-                            class="w-full pl-9 pr-4 py-2 rounded-lg border-slate-300 text-sm focus:border-amber-500 focus:ring-amber-500">
+            <form method="GET" action="{{ route('lost-wax.production-status') }}" class="space-y-3 w-full">
+                <input type="hidden" name="filter" value="{{ $filter }}">
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Search</label>
+                        <div class="relative">
+                            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" name="search" value="{{ $search }}"
+                                placeholder="Kode / Product / PO..."
+                                class="w-full pl-9 pr-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
+                        </div>
                     </div>
-                    <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold py-2 px-4 rounded-lg">Cari</button>
-                    @if($search) <a href="{{ route('lost-wax.production-status', ['filter' => $filter]) }}" class="text-xs text-slate-500 hover:text-slate-700">Clear</a> @endif
-                </form>
-                <div class="flex gap-1 bg-slate-100 rounded-lg p-1">
-                    <a href="{{ route('lost-wax.production-status', ['filter' => 'active', 'search' => $search]) }}" class="px-3 py-1.5 rounded-md text-xs font-bold {{ $filter==='active' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">ACTIVE</a>
-                    <a href="{{ route('lost-wax.production-status', ['filter' => 'completed', 'search' => $search]) }}" class="px-3 py-1.5 rounded-md text-xs font-bold {{ $filter==='completed' ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">COMPLETED</a>
-                    <a href="{{ route('lost-wax.production-status', ['filter' => 'all', 'search' => $search]) }}" class="px-3 py-1.5 rounded-md text-xs font-bold {{ $filter==='all' ? 'bg-slate-600 text-white' : 'text-slate-600 hover:bg-slate-200' }}">ALL</a>
+                    
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Customer</label>
+                        <input type="text" name="customer" value="{{ $customer }}" list="customer_list"
+                            placeholder="Pilih Customer..."
+                            class="w-full px-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
+                        <datalist id="customer_list">
+                            @foreach($allCustomers as $c)
+                                <option value="{{ $c }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">P.O. Number</label>
+                        <input type="text" name="po_number" value="{{ $po_number }}" list="po_list"
+                            placeholder="Pilih PO..."
+                            class="w-full px-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
+                        <datalist id="po_list">
+                            @foreach($allPos as $po)
+                                <option value="{{ $po }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">AISI</label>
+                        <input type="text" name="aisi" value="{{ $aisi }}" list="aisi_list"
+                            placeholder="Pilih AISI..."
+                            class="w-full px-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
+                        <datalist id="aisi_list">
+                            @foreach($allAisi as $a)
+                                <option value="{{ $a }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
                 </div>
-            </div>
+
+                <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 pt-1 border-t border-slate-100">
+                    <div class="flex gap-2">
+                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-4 rounded-lg shadow-sm">
+                            Filter
+                        </button>
+                        <a href="{{ route('lost-wax.production-status', ['filter' => $filter]) }}" 
+                           class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-1.5 px-4 rounded-lg shadow-sm text-center">
+                            Reset
+                        </a>
+                    </div>
+
+                    <div class="flex gap-1 bg-slate-100 rounded-lg p-1">
+                        <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'active'])) }}" 
+                           class="px-2.5 py-1 rounded-md text-[10px] font-bold {{ $filter==='active' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
+                            ACTIVE
+                        </a>
+                        <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'completed'])) }}" 
+                           class="px-2.5 py-1 rounded-md text-[10px] font-bold {{ $filter==='completed' ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
+                            COMPLETED
+                        </a>
+                        <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'all'])) }}" 
+                           class="px-2.5 py-1 rounded-md text-[10px] font-bold {{ $filter==='all' ? 'bg-slate-600 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
+                            ALL
+                        </a>
+                    </div>
+                </div>
+            </form>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-xs whitespace-nowrap border-collapse" id="prodStatusTable">
+                <table class="w-full text-[10px] whitespace-nowrap border-collapse" id="prodStatusTable">
                     <thead>
                         <tr class="bg-slate-800 text-white">
-                            <th class="px-2.5 py-2 text-left font-semibold min-w-[95px]">Kode Cust</th>
-                            <th class="px-2.5 py-2 text-left font-semibold min-w-[180px]">Product Name</th>
-                            <th class="px-2.5 py-2 text-left font-semibold min-w-[50px]">AISI</th>
-                            <th class="px-2.5 py-2 text-right font-semibold min-w-[50px]">PO</th>
-                            <th class="px-2.5 py-2 text-right font-semibold min-w-[50px]">Plan</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[50px]">Total Lap.</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[50px]">Total Rusak</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L1</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L2</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L3</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L4</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L5</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L6</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[42px]">L7</th><th class="px-2.5 py-2 text-center font-semibold text-slate-400 min-w-[30px]">R</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[48px]">Oven</th>
-                            <th class="px-2.5 py-2 text-center font-semibold min-w-[70px]">Status</th>
+                            <th class="compact-th text-left min-w-[80px]">Kode Cust</th>
+                            <th class="compact-th text-left min-w-[130px] max-w-[140px]">Product Name</th>
+                            <th class="compact-th text-left min-w-[40px]">AISI</th>
+                            <th class="compact-th text-right min-w-[40px]">PO</th>
+                            <th class="compact-th text-right min-w-[40px]">Plan</th>
+                            <th class="compact-th text-center min-w-[45px]">Tot Lap</th>
+                            <th class="compact-th text-center min-w-[45px]">Tot Rsk</th>
+                            
+                            <!-- Cetak/Rangkai flow columns -->
+                            <th class="compact-th text-center min-w-[32px]">CTK</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[32px]">RGKI</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            
+                            <!-- Coating flow columns -->
+                            <th class="compact-th text-center min-w-[30px]">L1</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[30px]">L2</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[30px]">L3</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[30px]">L4</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[30px]">L5</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[30px]">L6</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[30px]">L7</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
+                            <th class="compact-th text-center min-w-[38px]">Oven</th>
+                            <th class="compact-th text-center min-w-[60px]">Status</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        @php $sk = ['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7']; @endphp
                         @forelse($rows as $row)
                             <tr class="hover:bg-slate-50 cursor-pointer" 
                                 data-source-type="{{ $row['source_type'] }}" 
                                 data-source-id="{{ $row['source_id'] }}">
-                                <td class="px-2.5 py-1.5 font-mono font-bold text-slate-800 text-[11px]">
+                                <td class="compact-td font-mono font-bold text-slate-800">
                                     <a href="#" class="hover:text-amber-600 et-detail-link" 
                                         data-source-type="{{ $row['source_type'] }}" 
                                         data-source-id="{{ $row['source_id'] }}">{{ $row['code'] }}</a>
                                 </td>
-                                <td class="px-2.5 py-1.5 text-slate-700 text-[11px] max-w-[220px] truncate" title="{{ $row['product_name'] }}">{{ $row['product_name'] }}</td>
-                                <td class="px-2.5 py-1.5 text-slate-600 text-[11px]">{{ $row['aisi'] }}</td>
-                                <td class="px-2.5 py-1.5 text-right font-mono text-slate-700 text-[11px]">{{ number_format($row['planned_qty'],0,',','.') }}</td>
-                                <td class="px-2.5 py-1.5 text-right font-mono text-slate-700 text-[11px]">{{ number_format($row['scheduled_qty'],0,',','.') }}</td>
-                                <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['total_lap']>0?'font-bold text-slate-800':'text-slate-300' }}">{{ $row['total_lap'] }}</td>
-                                <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['actual_defect']>0?'text-red-600 font-bold':'text-slate-300' }}">{{ $row['actual_defect'] > 0 ? $row['actual_defect'] : '—' }}</td>
-                                @foreach($sk as $s) <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row[$s]>0?'cell-layer-active':'text-slate-300' }}">{{ $row[$s] }}</td> <td class="px-2.5 py-1.5 text-center text-slate-300 text-[11px]">&mdash;</td> @endforeach
-                                <td class="px-2.5 py-1.5 text-center font-mono text-[11px] {{ $row['oven_qty']>0?'cell-oven':'text-slate-300' }}">{{ $row['oven_qty'] }}</td>
-                                <td class="px-2.5 py-1.5 text-center text-[10px]">
-                                    <span class="inline-block px-1.5 py-0.5 rounded-full font-bold {{ $row['status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
-                                        {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}</span>
+                                <td class="compact-td text-slate-700">
+                                    <div class="prod-name-cell" title="{{ $row['product_name'] }}">{{ $row['product_name'] }}</div>
+                                </td>
+                                <td class="compact-td text-slate-600">{{ $row['aisi'] }}</td>
+                                <td class="compact-td text-right font-mono text-slate-700">{{ $row['planned_qty'] > 0 ? number_format($row['planned_qty'], 0, ',', '.') : '-' }}</td>
+                                <td class="compact-td text-right font-mono text-slate-700">{{ $row['scheduled_qty'] > 0 ? number_format($row['scheduled_qty'], 0, ',', '.') : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['total_lap']>0?'font-bold text-slate-800':'text-slate-400' }}">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['overall_defect']>0?'text-red-600 font-bold':'text-slate-400' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
+                                
+                                <!-- CTK & R after CTK -->
+                                <td class="compact-td text-center font-mono {{ $row['ctk_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['ctk_display'] > 0 ? $row['ctk_display'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['r_ctk_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['r_ctk_display'] > 0 ? $row['r_ctk_display'] : '-' }}</td>
+                                
+                                <!-- RGKI & R after RGKI -->
+                                <td class="compact-td text-center font-mono {{ $row['rgki_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['rgki_display'] > 0 ? $row['rgki_display'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['r_rgki_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['r_rgki_display'] > 0 ? $row['r_rgki_display'] : '-' }}</td>
+                                
+                                <!-- L1 - L7 with R spacers -->
+                                @foreach(['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7'] as $s)
+                                    <td class="compact-td text-center font-mono {{ $row[$s]>0?'cell-layer-active':'text-slate-400' }}">{{ $row[$s] > 0 ? $row[$s] : '-' }}</td>
+                                    <td class="compact-td text-center text-slate-400">-</td>
+                                @endforeach
+                                
+                                <td class="compact-td text-center font-mono {{ $row['oven_qty']>0?'cell-oven':'text-slate-400' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
+                                <td class="compact-td text-center">
+                                    <span class="inline-block px-1.5 py-0.5 rounded-full font-bold text-[9px] {{ $row['status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
+                                        {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}
+                                    </span>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="23" class="px-6 py-12 text-center text-slate-500"><i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>Tidak ada data.</td></tr>
+                            <tr><td colspan="27" class="px-6 py-12 text-center text-slate-500"><i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>Tidak ada data.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
-        <div class="text-xs text-slate-500">{{ count($rows) }} Kode Cust ditampilkan. @if($search) Filter: <strong>{{ $search }}</strong> @endif &middot; Status: <strong>{{ strtoupper($filter) }}</strong></div>
+        <div class="text-xs text-slate-500">
+            {{ count($rows) }} Kode Cust ditampilkan.
+            @if($search) Filter: <strong>{{ $search }}</strong> @endif
+            @if($customer) &middot; Customer: <strong>{{ $customer }}</strong> @endif
+            @if($po_number) &middot; PO: <strong>{{ $po_number }}</strong> @endif
+            @if($aisi) &middot; AISI: <strong>{{ $aisi }}</strong> @endif
+            &middot; Status: <strong>{{ strtoupper($filter) }}</strong>
+        </div>
     </div>
 
     {{-- PRINT REPORT --}}
     <div class="production-status-print">
-
         <div class="print-header">
             <p class="company">PT. PERONI KARYA SENTRA</p>
             <p class="title">LOST WAX &mdash; PRODUCTION STATUS</p>
@@ -174,10 +332,42 @@
             <p class="meta">
                 Tanggal: {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp; Filter: {{ strtoupper($filter) }}
                 @if($search) &nbsp;|&nbsp; Search: {{ $search }} @endif
+                @if($customer) &nbsp;|&nbsp; Customer: {{ $customer }} @endif
+                @if($po_number) &nbsp;|&nbsp; PO: {{ $po_number }} @endif
+                @if($aisi) &nbsp;|&nbsp; AISI: {{ $aisi }} @endif
             </p>
         </div>
 
         <table class="ps-table">
+            <colgroup>
+                <col style="width: 24mm;"> <!-- Kode Cust -->
+                <col style="width: 65mm;"> <!-- Product Name -->
+                <col style="width: 14mm;"> <!-- AISI -->
+                <col style="width: 10mm;"> <!-- PO -->
+                <col style="width: 10mm;"> <!-- Plan -->
+                <col style="width: 12mm;"> <!-- Total Lap. -->
+                <col style="width: 12mm;"> <!-- Total Rusak -->
+                <col style="width: 8mm;">  <!-- Cetak -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- Rangkai -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L1 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L2 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L3 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L4 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L5 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L6 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 8mm;">  <!-- L7 -->
+                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 9mm;">  <!-- Oven -->
+                <col style="width: 14mm;"> <!-- Status -->
+            </colgroup>
             <thead>
                 <tr>
                     <th class="left">Kode Cust</th>
@@ -185,8 +375,14 @@
                     <th>AISI</th>
                     <th>PO</th>
                     <th>Plan</th>
-                    <th>Total Lap.</th>
-                    <th>Total Rusak</th>
+                    <th>TOTAL<br>LAP.</th>
+                    <th>TOTAL<br>RUSAK</th>
+                    
+                    <!-- Cetak/Rangkai flow columns -->
+                    <th>CTK</th><th>R</th>
+                    <th>RANG-<br>KAI</th><th>R</th>
+                    
+                    <!-- Coating flow columns -->
                     <th>L1</th><th>R</th>
                     <th>L2</th><th>R</th>
                     <th>L3</th><th>R</th>
@@ -199,22 +395,39 @@
                 </tr>
             </thead>
             <tbody>
-                @php $sk = ['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7']; @endphp
                 @forelse($rows as $row)
                     <tr>
-                        <td class="left"><strong>{{ $row['code'] }}</strong></td>
-                        <td class="prod-name">{{ $row['product_name'] }}</td>
-                        <td>{{ $row['aisi'] }}</td>
-                        <td class="right">{{ number_format($row['planned_qty'],0,',','.') }}</td>
-                        <td class="right">{{ number_format($row['scheduled_qty'],0,',','.') }}</td>
-                        <td class="right"><strong>{{ $row['total_lap'] }}</strong></td>
-                        <td>{{ $row['actual_defect'] > 0 ? $row['actual_defect'] : '—' }}</td>
-                        @foreach($sk as $s) <td class="{{ $row[$s]>0?'ps-cell-green':'' }}"><strong>{{ $row[$s] }}</strong></td> <td class="{{ ($row['actual_defect']??0)>0?'ps-cell-red':'' }}">—</td> @endforeach
-                        <td class="{{ $row['oven_qty']>0?'ps-cell-oven':'' }}"><strong>{{ $row['oven_qty'] }}</strong></td>
-                        <td>{{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}</td>
+                        <td class="left" style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            {{ $row['code'] }}
+                        </td>
+                        <td class="prod-name left">
+                            <div style="max-height: 2.3em; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; word-wrap: break-word;">
+                                {{ $row['product_name'] }}
+                            </div>
+                        </td>
+                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $row['aisi'] }}</td>
+                        <td class="right">{{ $row['planned_qty'] > 0 ? number_format($row['planned_qty'],0,',','.') : '-' }}</td>
+                        <td class="right">{{ $row['scheduled_qty'] > 0 ? number_format($row['scheduled_qty'],0,',','.') : '-' }}</td>
+                        <td class="right" style="font-weight: bold;">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
+                        <td class="{{ $row['overall_defect'] > 0 ? 'ps-cell-red' : '' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
+                        
+                        <!-- Cetak/Rangkai values -->
+                        <td class="{{ $row['ctk_display']>0?'ps-cell-green':'' }}">{{ $row['ctk_display'] > 0 ? $row['ctk_display'] : '-' }}</td>
+                        <td class="{{ $row['r_ctk_display']>0?'ps-cell-green':'' }}">{{ $row['r_ctk_display'] > 0 ? $row['r_ctk_display'] : '-' }}</td>
+                        <td class="{{ $row['rgki_display']>0?'ps-cell-green':'' }}">{{ $row['rgki_display'] > 0 ? $row['rgki_display'] : '-' }}</td>
+                        <td class="{{ $row['r_rgki_display']>0?'ps-cell-green':'' }}">{{ $row['r_rgki_display'] > 0 ? $row['r_rgki_display'] : '-' }}</td>
+                        
+                        <!-- Coating values -->
+                        @foreach(['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7'] as $s)
+                            <td class="{{ $row[$s]>0?'ps-cell-green':'' }}">{{ $row[$s] > 0 ? $row[$s] : '-' }}</td>
+                            <td>-</td>
+                        @endforeach
+                        
+                        <td class="{{ $row['oven_qty']>0?'ps-cell-oven':'' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
+                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="23" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
+                    <tr><td colspan="27" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
                 @endforelse
             </tbody>
         </table>

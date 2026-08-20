@@ -96,7 +96,7 @@ class LostWaxSeedDemo extends Command
         $this->info('Successes   : '.LostWaxScanEvent::where('result', 'success')->count());
         $this->info('Rejected    : '.LostWaxScanEvent::where('result', 'rejected')->count());
         $this->info('');
-        $this->info('Login: admin@ppic.com / password');
+        $this->info('Login: adminppicpf@peroniks.com / password');
         $this->info('Buka /lost-wax/scan untuk test scan manual.');
         $this->info('Buka /lost-wax/trees untuk lihat daftar tree.');
         $this->info('Buka /lost-wax/work-orders untuk lihat Work Order.');
@@ -113,7 +113,7 @@ class LostWaxSeedDemo extends Command
 
     private function getOperatorId(): int
     {
-        return \App\Models\User::where('email', 'admin@ppic.com')->value('id')
+        return \App\Models\User::where('email', 'adminppicpf@peroniks.com')->value('id')
             ?? \App\Models\User::first()?->id
             ?? 1;
     }

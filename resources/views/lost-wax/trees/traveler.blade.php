@@ -15,44 +15,72 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 15px;
+            gap: 30px;
             padding: 20px;
+        }
+
+        .print-page {
+            background: #fff;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            display: grid;
+            grid-template-columns: repeat(2, 92mm);
+            grid-template-rows: repeat(3, 88mm);
+            gap: 4mm;
+            padding: 10mm;
+            box-sizing: border-box;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
         }
 
         .traveler-card {
             background: #fff;
-            width: 85mm;
-            min-height: 54mm;
-            border: 1px solid #cbd5e1;
-            padding: 6mm;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px dashed #cbd5e1;
+            padding: 4mm;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
         }
 
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 5mm;
+                margin: 8mm 6mm;
             }
             body {
                 background: #fff !important;
                 min-height: auto !important;
+                margin: 0 !important;
             }
             .print-container {
                 display: block !important;
                 padding: 0 !important;
-                gap: 0 !important;
+                margin: 0 !important;
+            }
+            .print-page {
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                padding: 0 !important;
+                gap: 4mm !important;
+                width: 188mm !important;
+                height: 272mm !important;
+                margin: 0 auto !important;
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .print-page:last-child {
+                page-break-after: avoid !important;
             }
             .traveler-card {
+                width: 92mm !important;
+                height: 88mm !important;
+                min-height: 88mm !important;
+                border: 1px dashed #000 !important;
+                padding: 3mm !important;
+                box-shadow: none !important;
                 break-inside: avoid !important;
                 page-break-inside: avoid !important;
-                margin-top: 0 !important;
-                margin-bottom: 6mm !important;
-                margin-left: 0 !important;
-                margin-right: 0 !important;
-                border: 1px solid #000 !important;
-                box-shadow: none !important;
-                float: left;
-                clear: both;
             }
             .no-print {
                 display: none !important;
@@ -74,49 +102,53 @@
     @endphp
 
     <div class="print-container">
-        @foreach($treesList as $t)
-            <div class="traveler-card">
-                <div class="text-center border-2 border-black p-2 rounded text-[10px]">
-                    <div class="font-bold text-xs mb-1">LOST WAX TRAVELER</div>
+        @foreach($treesList->chunk(6) as $pageChunk)
+            <div class="print-page">
+                @foreach($pageChunk as $t)
+                    <div class="traveler-card">
+                        <div class="h-full flex flex-col justify-between text-center border-2 border-black p-3 rounded">
+                            <div>
+                                <div class="font-bold text-xs mb-1">LOST WAX TRAVELER</div>
+                                <div class="border-t border-black pt-1 mb-1 text-[10px]">
+                                    <div class="font-bold">{{ $t->getSourcePrintOrderNumber() ?? $t->getSourceCode() }}</div>
+                                    <div class="text-[9px] font-semibold mt-0.5">{{ $t->getSourceItemCode() ?? '-' }}</div>
+                                    <div class="text-[9px] truncate max-w-full block">{{ $t->getSourceProduct() ?? '-' }}</div>
+                                    @if($t->getSourceAisi())
+                                        <div class="text-[9px] font-semibold">AISI: {{ $t->getSourceAisi() }}</div>
+                                    @endif
+                                </div>
+                            </div>
 
-                    <div class="border-t border-black pt-1 mb-1">
-                        <div class="font-bold">{{ $t->getSourcePrintOrderNumber() ?? $t->getSourceCode() }}</div>
-                        <div class="text-[8px]">{{ $t->getSourceItemCode() ?? '-' }}</div>
-                        <div class="text-[8px] truncate">{{ $t->getSourceProduct() ?? '-' }}</div>
-                        @if($t->getSourceAisi())
-                            <div class="text-[8px]">AISI: {{ $t->getSourceAisi() }}</div>
-                        @endif
+                            <div class="flex flex-col items-center justify-center my-1">
+                                <img src="{{ route('lost-wax.trees.barcode', $t) }}" alt="Barcode" class="mx-auto" style="height: 48px; max-width: 100%;">
+                                <div class="font-bold text-[10px] tracking-wider mt-1">{{ $t->barcode }}</div>
+                            </div>
+
+                            <div class="border-t border-black pt-1 text-[9px] space-y-0.5">
+                                <div class="flex justify-between">
+                                    <span>TREE:</span>
+                                    <span class="font-bold">{{ str_pad((string) $t->tree_number, 3, '0', STR_PAD_LEFT) }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>QTY:</span>
+                                    <span class="font-bold">{{ number_format($t->quantity) }} PCS</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>DATE:</span>
+                                    <span class="font-bold">{{ $t->production_date->format('d-m-Y') }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>PLAN:</span>
+                                    <span class="font-bold">{{ optional($t->plan)->wave_number ? 'Wave '.str_pad((string) $t->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>CODE:</span>
+                                    <span class="font-bold">{{ $t->barcode }}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-
-                    <div class="border-t border-black pt-1 mb-1">
-                        <img src="{{ route('lost-wax.trees.barcode', $t) }}" alt="Barcode" class="mx-auto" style="height: 50px; max-width: 100%;">
-                    </div>
-
-                    <div class="font-bold text-xs tracking-wider mb-1">{{ $t->barcode }}</div>
-
-                    <div class="border-t border-black pt-1">
-                        <div class="flex justify-between text-[8px]">
-                            <span>TREE:</span>
-                            <span class="font-bold">{{ str_pad((string) $t->tree_number, 3, '0', STR_PAD_LEFT) }}</span>
-                        </div>
-                        <div class="flex justify-between text-[8px]">
-                            <span>QTY:</span>
-                            <span class="font-bold">{{ number_format($t->quantity) }} PCS</span>
-                        </div>
-                        <div class="flex justify-between text-[8px]">
-                            <span>DATE:</span>
-                            <span class="font-bold">{{ $t->production_date->format('d-m-Y') }}</span>
-                        </div>
-                        <div class="flex justify-between text-[8px]">
-                            <span>PLAN:</span>
-                            <span class="font-bold">{{ optional($t->plan)->wave_number ? 'Wave '.str_pad((string) $t->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
-                        </div>
-                        <div class="flex justify-between text-[8px]">
-                            <span>CODE:</span>
-                            <span class="font-bold">{{ $t->barcode }}</span>
-                        </div>
-                    </div>
-                </div>
+                @endforeach
             </div>
         @endforeach
     </div>

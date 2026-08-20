@@ -29,7 +29,7 @@ class DatabaseSeeder extends Seeder
 
         $adminUser = User::factory()->create([
             'name' => 'Admin PPIC',
-            'email' => 'admin@ppic.com',
+            'email' => 'adminppicpf@peroniks.com',
             'password' => bcrypt('password'),
         ]);
         $adminUser->assignRole($adminRole);

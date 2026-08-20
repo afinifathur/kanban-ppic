@@ -33,7 +33,7 @@ class DashboardTest extends TestCase
 
     private function seedMinimalData(): void
     {
-        $user = User::factory()->create(['email' => 'admin@ppic.com']);
+        $user = User::factory()->create(['email' => 'adminppicpf@peroniks.com']);
 
         // 3 Work Orders with varied families
         $specs = [
