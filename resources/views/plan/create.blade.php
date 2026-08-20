@@ -63,7 +63,7 @@
                 { type: 'numeric' },
                 { type: 'text' },
                 {
-                    type: 'dropdown',
+                    type: 'autocomplete',
                     source: customerList,
                     strict: false // Allow manual entry if not in list
                 },

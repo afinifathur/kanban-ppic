@@ -16,6 +16,13 @@ class OutcomeController extends Controller
         $query = \App\Models\LostWaxPrintOrder::with(['lines.trees', 'creator'])
             ->where('status', '!=', 'DRAFT');
 
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $query->whereHas('lines.productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', $scope);
+            });
+        }
+
         if ($request->filled('print_order_number')) {
             $query->where('print_order_number', 'like', '%'.$request->print_order_number.'%');
         }
@@ -30,6 +37,7 @@ class OutcomeController extends Controller
      */
     public function editOutcome(\App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         if ($printOrder->status !== 'ISSUED') {
             return redirect()->route('lost-wax.outcomes.index')
                 ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED.');
@@ -45,6 +53,7 @@ class OutcomeController extends Controller
      */
     public function updateOutcome(Request $request, \App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         if ($printOrder->status !== 'ISSUED') {
             return redirect()->route('lost-wax.outcomes.index')
                 ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED.');
@@ -89,6 +98,20 @@ class OutcomeController extends Controller
                 ->with('success', 'Actual Hasil Cetak berhasil disimpan.');
         } catch (\InvalidArgumentException $e) {
             return back()->withInput()->with('error', $e->getMessage());
+        }
+    }
+
+    protected function authorizePrintOrder(\App\Models\LostWaxPrintOrder $printOrder)
+    {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $unauthorized = $printOrder->lines()->whereHas('productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', '!=', $scope);
+            })->exists();
+
+            if ($unauthorized) {
+                abort(403, 'Unauthorized.');
+            }
         }
     }
 }

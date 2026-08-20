@@ -17,6 +17,13 @@ class AssemblyController extends Controller
         $query = \App\Models\LostWaxPrintOrderLine::with(['printOrder', 'trees'])
             ->whereNotNull('qty_actual_good');
 
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $query->whereHas('productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', $scope);
+            });
+        }
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -53,6 +60,7 @@ class AssemblyController extends Controller
      */
     public function create(\App\Models\LostWaxPrintOrderLine $line, Request $request)
     {
+        $this->authorizeLine($line);
         if ($line->qty_actual_good === null) {
             return redirect()->route('lost-wax.assemblies.index')
                 ->with('error', 'Hasil cetak belum dicatat untuk item ini.');
@@ -96,6 +104,7 @@ class AssemblyController extends Controller
      */
     public function store(Request $request, \App\Models\LostWaxPrintOrderLine $line)
     {
+        $this->authorizeLine($line);
         $request->validate([
             'quantities' => 'required|array|min:1',
             'quantities.*' => 'required|integer|min:1',
@@ -198,5 +207,16 @@ class AssemblyController extends Controller
         }
 
         return '1'; // Fitting SS304 (Default)
+    }
+
+    protected function authorizeLine(\App\Models\LostWaxPrintOrderLine $line)
+    {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $plan = $line->productionPlan;
+            if (! $plan || $plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
+        }
     }
 }

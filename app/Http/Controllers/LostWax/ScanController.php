@@ -38,6 +38,17 @@ class ScanController extends Controller
             ]);
         }
 
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $plan = $tree->printOrderLine?->productionPlan;
+            if (! $plan || $plan->product_scope !== $scope) {
+                return response()->json([
+                    'success' => false,
+                    'reason' => 'Unauthorized product scope.',
+                ]);
+            }
+        }
+
         $nextStage = $this->scanService->getNextExpectedStage($tree);
 
         if (! $nextStage) {
@@ -75,6 +86,14 @@ class ScanController extends Controller
 
     public function history(LostWaxTree $tree)
     {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $plan = $tree->printOrderLine?->productionPlan;
+            if (! $plan || $plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
+        }
+
         $tree->load(['workOrder.itemReference', 'workOrder.plans', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         $events = LostWaxScanEvent::with('operator')
@@ -107,6 +126,26 @@ class ScanController extends Controller
                 'success' => false,
                 'reason' => 'Barcode tidak boleh kosong.',
             ]);
+        }
+
+        $tree = LostWaxTree::with(['workOrder', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])->where('barcode', $barcode)->first();
+
+        if (! $tree) {
+            return response()->json([
+                'success' => false,
+                'reason' => 'Barcode tidak ditemukan.',
+            ]);
+        }
+
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $plan = $tree->printOrderLine?->productionPlan;
+            if (! $plan || $plan->product_scope !== $scope) {
+                return response()->json([
+                    'success' => false,
+                    'reason' => 'Unauthorized product scope.',
+                ]);
+            }
         }
 
         $result = $this->scanService->processOvenScan($barcode, auth()->id() ?? 1);

@@ -22,6 +22,15 @@ class TreeController extends Controller
             'printOrderLine.productionPlan',
         ]);
 
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if ($isPpic && $scope) {
+            $treesQuery->whereHas('printOrderLine.productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', $scope);
+            });
+        }
+
         if ($request->filled('barcode')) {
             $val = $request->barcode;
             $treesQuery->where(function ($q) use ($val) {
@@ -59,25 +68,48 @@ class TreeController extends Controller
             ->paginate(50)
             ->withQueryString();
 
-        $uniqueCodes = cache()->remember('lost_wax_trees_unique_codes', 60, function () {
-            $newCodes = \DB::table('lost_wax_print_order_lines')->whereNotNull('code')->distinct()->pluck('code')->toArray();
-            $legacyCodes = \DB::table('lost_wax_work_orders')->whereNotNull('et_code')->distinct()->pluck('et_code')->toArray();
+        if ($isPpic && $scope) {
+            $uniqueCodes = \DB::table('lost_wax_print_order_lines')
+                ->join('production_plans', 'lost_wax_print_order_lines.production_plan_id', '=', 'production_plans.id')
+                ->where('production_plans.product_scope', $scope)
+                ->whereNotNull('lost_wax_print_order_lines.code')
+                ->distinct()
+                ->pluck('lost_wax_print_order_lines.code')
+                ->toArray();
 
-            return array_unique(array_filter(array_merge($newCodes, $legacyCodes)));
-        });
+            $uniqueCustomers = \DB::table('lost_wax_print_order_lines')
+                ->join('production_plans', 'lost_wax_print_order_lines.production_plan_id', '=', 'production_plans.id')
+                ->where('production_plans.product_scope', $scope)
+                ->whereNotNull('lost_wax_print_order_lines.customer')
+                ->distinct()
+                ->pluck('lost_wax_print_order_lines.customer')
+                ->toArray();
+        } else {
+            $uniqueCodes = cache()->remember('lost_wax_trees_unique_codes', 60, function () {
+                $newCodes = \DB::table('lost_wax_print_order_lines')->whereNotNull('code')->distinct()->pluck('code')->toArray();
+                $legacyCodes = \DB::table('lost_wax_work_orders')->whereNotNull('et_code')->distinct()->pluck('et_code')->toArray();
 
-        $uniqueCustomers = cache()->remember('lost_wax_trees_unique_customers', 60, function () {
-            $newCusts = \DB::table('lost_wax_print_order_lines')->whereNotNull('customer')->distinct()->pluck('customer')->toArray();
-            $legacyCusts = \DB::table('lost_wax_work_orders')->whereNotNull('customer_name')->distinct()->pluck('customer_name')->toArray();
+                return array_unique(array_filter(array_merge($newCodes, $legacyCodes)));
+            });
 
-            return array_unique(array_filter(array_merge($newCusts, $legacyCusts)));
-        });
+            $uniqueCustomers = cache()->remember('lost_wax_trees_unique_customers', 60, function () {
+                $newCusts = \DB::table('lost_wax_print_order_lines')->whereNotNull('customer')->distinct()->pluck('customer')->toArray();
+                $legacyCusts = \DB::table('lost_wax_work_orders')->whereNotNull('customer_name')->distinct()->pluck('customer_name')->toArray();
+
+                return array_unique(array_filter(array_merge($newCusts, $legacyCusts)));
+            });
+        }
 
         return view('lost-wax.trees.index', compact('trees', 'uniqueCodes', 'uniqueCustomers'));
     }
 
     public function generate(LostWaxWorkOrderPlan $plan)
     {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            abort(403, 'Unauthorized.');
+        }
+
         $plan->load('workOrder.itemReference');
         $workOrder = $plan->workOrder;
 
@@ -114,6 +146,11 @@ class TreeController extends Controller
 
     public function store(Request $request, LostWaxWorkOrderPlan $plan)
     {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            abort(403, 'Unauthorized.');
+        }
+
         $validated = $request->validate([
             'default_qty' => 'required|integer|min:1',
             'quantities' => 'required|array|min:1',
@@ -143,6 +180,7 @@ class TreeController extends Controller
 
     public function show(LostWaxTree $tree)
     {
+        $this->authorizeTree($tree);
         $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         return view('lost-wax.trees.show', compact('tree'));
@@ -150,6 +188,7 @@ class TreeController extends Controller
 
     public function update(Request $request, LostWaxTree $tree)
     {
+        $this->authorizeTree($tree);
         $validated = $request->validate([
             'quantity' => 'required|integer|min:1',
         ]);
@@ -165,6 +204,7 @@ class TreeController extends Controller
 
     public function traveler(LostWaxTree $tree)
     {
+        $this->authorizeTree($tree);
         $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
         return view('lost-wax.trees.traveler', compact('tree'));
@@ -172,6 +212,7 @@ class TreeController extends Controller
 
     public function barcode(LostWaxTree $tree)
     {
+        $this->authorizeTree($tree);
         $generator = new BarcodeGeneratorPNG;
 
         $barcodeData = $generator->getBarcode($tree->barcode, $generator::TYPE_CODE_128, 2, 60);
@@ -186,5 +227,16 @@ class TreeController extends Controller
         $barcodeData = $generator->getBarcode($value, $generator::TYPE_CODE_128, 2, 60);
 
         return response($barcodeData)->header('Content-Type', 'image/png');
+    }
+
+    protected function authorizeTree(LostWaxTree $tree)
+    {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $plan = $tree->printOrderLine?->productionPlan;
+            if (! $plan || $plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
+        }
     }
 }

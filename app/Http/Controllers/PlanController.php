@@ -10,6 +10,8 @@ class PlanController extends Controller
     public function index(Request $request)
     {
         $date = $request->query('date');
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
 
         if ($date) {
             // Detail View for a specific date
@@ -17,6 +19,10 @@ class PlanController extends Controller
             $direction = $request->query('direction', 'asc');
 
             $query = ProductionPlan::whereDate('created_at', $date);
+
+            if ($isPpic && $scope) {
+                $query->where('product_scope', $scope);
+            }
 
             if ($sort) {
                 if ($sort === 'hasil_cor') {
@@ -30,24 +36,39 @@ class PlanController extends Controller
             }
 
             $plans = $query->get();
-            $planTitle = ProductionPlan::whereDate('created_at', $date)->whereNotNull('title')->value('title');
+
+            $titleQuery = ProductionPlan::whereDate('created_at', $date)->whereNotNull('title');
+            if ($isPpic && $scope) {
+                $titleQuery->where('product_scope', $scope);
+            }
+            $planTitle = $titleQuery->value('title');
 
             return view('plan.list', compact('plans', 'date', 'planTitle', 'sort', 'direction'));
         }
 
         // Summary View (Default)
-        $dailyStats = ProductionPlan::selectRaw('
+        $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+        $groupConcat = $driver === 'sqlite'
+            ? 'GROUP_CONCAT(DISTINCT customer)'
+            : 'GROUP_CONCAT(DISTINCT customer SEPARATOR ", ")';
+
+        $statsQuery = ProductionPlan::selectRaw("
                 DATE(created_at) as date, 
                 MAX(title) as title,
                 COUNT(*) as items_count, 
                 SUM(qty_planned) as total_planned, 
                 SUM(qty_remaining) as total_remaining,
-                COUNT(CASE WHEN status = "planning" THEN 1 END) as planning_count,
-                COUNT(CASE WHEN status = "active" THEN 1 END) as active_count,
-                COUNT(CASE WHEN status = "completed" THEN 1 END) as completed_count,
-                GROUP_CONCAT(DISTINCT customer SEPARATOR ", ") as unique_customers
-            ')
-            ->groupBy('date')
+                COUNT(CASE WHEN status = 'planning' THEN 1 END) as planning_count,
+                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
+                {$groupConcat} as unique_customers
+            ");
+
+        if ($isPpic && $scope) {
+            $statsQuery->where('product_scope', $scope);
+        }
+
+        $dailyStats = $statsQuery->groupBy('date')
             ->orderByDesc('date')
             ->get();
 
@@ -77,10 +98,14 @@ class PlanController extends Controller
             'plans.*.qty_planned' => 'required|integer',
             'plans.*.line_number' => 'required',
             'plans.*.customer' => 'nullable|string',
+            'plans.*.product_scope' => 'nullable|string|in:FLANGE_STAINLESS,FLANGE_BESI,FITTING_STAINLESS',
         ]);
 
         $customDate = $data['date'] ?? null;
         $customTitle = $data['title'] ?? null;
+        $user = auth()->user();
+        $userScope = $user->product_scope;
+        $isPpic = $user->hasRole('ppic');
 
         $skippedCount = 0;
         foreach ($data['plans'] as $plan) {
@@ -101,6 +126,16 @@ class PlanController extends Controller
                 continue;
             }
 
+            // Determine or force scope
+            $itemScope = $plan['product_scope'] ?? null;
+            if ($isPpic && $userScope) {
+                $itemScope = $userScope;
+            } else {
+                if (! $itemScope) {
+                    $itemScope = ProductionPlan::determineProductScopeFromItem($plan['item_name'], $plan['aisi']);
+                }
+            }
+
             $newPlan = [
                 'code' => $code,
                 'title' => $customTitle,
@@ -114,6 +149,7 @@ class PlanController extends Controller
                 'qty_remaining' => $plan['qty_planned'],
                 'line_number' => $lineNumber,
                 'customer' => $plan['customer'] ?? null,
+                'product_scope' => $itemScope,
                 'status' => 'planning',
             ];
 
@@ -173,11 +209,21 @@ class PlanController extends Controller
 
     public function edit(ProductionPlan $plan)
     {
+        $user = auth()->user();
+        if ($user->hasRole('ppic') && $user->product_scope && $plan->product_scope !== $user->product_scope) {
+            abort(403, 'Unauthorized.');
+        }
+
         return view('plan.edit', compact('plan'));
     }
 
     public function update(Request $request, ProductionPlan $plan)
     {
+        $user = auth()->user();
+        if ($user->hasRole('ppic') && $user->product_scope && $plan->product_scope !== $user->product_scope) {
+            abort(403, 'Unauthorized.');
+        }
+
         $data = $request->validate([
             'line_number' => 'required|integer',
             'customer' => 'nullable|string',
@@ -189,7 +235,12 @@ class PlanController extends Controller
             'weight' => 'nullable|numeric',
             'qty_planned' => 'required|integer|min:1',
             'status' => 'required|in:planning,active,completed',
+            'product_scope' => 'nullable|string|in:FLANGE_STAINLESS,FLANGE_BESI,FITTING_STAINLESS',
         ]);
+
+        if ($user->hasRole('ppic') && $user->product_scope) {
+            $data['product_scope'] = $user->product_scope;
+        }
 
         // Calculate new qty_remaining if qty_planned changed
         if ($data['qty_planned'] != $plan->qty_planned) {
@@ -205,6 +256,11 @@ class PlanController extends Controller
 
     public function destroy(ProductionPlan $plan)
     {
+        $user = auth()->user();
+        if ($user->hasRole('ppic') && $user->product_scope && $plan->product_scope !== $user->product_scope) {
+            abort(403, 'Unauthorized.');
+        }
+
         // Check if there are items associated with this plan
         if ($plan->items()->exists()) {
             return back()->with('error', 'Tidak bisa menghapus rencana yang sudah memiliki data produksi.');
@@ -222,8 +278,13 @@ class PlanController extends Controller
             'title' => 'required|string|max:255',
         ]);
 
-        ProductionPlan::whereDate('created_at', $request->date)
-            ->update(['title' => $request->title]);
+        $query = ProductionPlan::whereDate('created_at', $request->date);
+        $user = auth()->user();
+        if ($user->hasRole('ppic') && $user->product_scope) {
+            $query->where('product_scope', $user->product_scope);
+        }
+
+        $query->update(['title' => $request->title]);
 
         return back()->with('success', 'Judul Rencana berhasil diperbarui.');
     }

@@ -13,18 +13,21 @@ class PrintOrderController extends Controller
      */
     public function plans(Request $request)
     {
-        // 1. Datalists for Autocomplete Search
-        $uniqueCodes = \App\Models\ProductionPlan::whereNotNull('code')
-            ->where('code', '!=', '')
-            ->distinct()
-            ->orderBy('code')
-            ->pluck('code');
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
 
-        $uniqueCustomers = \App\Models\ProductionPlan::whereNotNull('customer')
-            ->where('customer', '!=', '')
-            ->distinct()
-            ->orderBy('customer')
-            ->pluck('customer');
+        // 1. Datalists for Autocomplete Search
+        $uniqueCodesQuery = \App\Models\ProductionPlan::whereNotNull('code')->where('code', '!=', '');
+        if ($isPpic && $scope) {
+            $uniqueCodesQuery->where('product_scope', $scope);
+        }
+        $uniqueCodes = $uniqueCodesQuery->distinct()->orderBy('code')->pluck('code');
+
+        $uniqueCustomersQuery = \App\Models\ProductionPlan::whereNotNull('customer')->where('customer', '!=', '');
+        if ($isPpic && $scope) {
+            $uniqueCustomersQuery->where('product_scope', $scope);
+        }
+        $uniqueCustomers = $uniqueCustomersQuery->distinct()->orderBy('customer')->pluck('customer');
 
         // 2. Rencana Cetak (Plan Items)
         $plansQuery = \App\Models\ProductionPlan::query()
@@ -33,6 +36,10 @@ class PrintOrderController extends Controller
                     $q->whereIn('status', ['DRAFT', 'ISSUED']);
                 });
             }], 'qty_ordered');
+
+        if ($isPpic && $scope) {
+            $plansQuery->where('product_scope', $scope);
+        }
 
         if ($request->filled('date')) {
             $plansQuery->whereDate('created_at', $request->date);
@@ -71,6 +78,12 @@ class PrintOrderController extends Controller
         // 3. Dokumen Perintah Cetak (Print Orders)
         $printOrdersQuery = \App\Models\LostWaxPrintOrder::with(['creator', 'lines']);
 
+        if ($isPpic && $scope) {
+            $printOrdersQuery->whereHas('lines.productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', $scope);
+            });
+        }
+
         if ($request->filled('print_order_number')) {
             $printOrdersQuery->where('print_order_number', 'like', '%'.$request->print_order_number.'%');
         }
@@ -107,6 +120,18 @@ class PrintOrderController extends Controller
                 ->with('error', 'Pilih minimal satu item rencana untuk membuat perintah cetak.');
         }
 
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if ($isPpic && $scope) {
+            $unauthorizedCount = \App\Models\ProductionPlan::whereIn('id', $planIds)
+                ->where('product_scope', '!=', $scope)
+                ->count();
+            if ($unauthorizedCount > 0) {
+                abort(403, 'Unauthorized.');
+            }
+        }
+
         $plans = \App\Models\ProductionPlan::whereIn('id', $planIds)->get();
 
         if ($plans->isEmpty()) {
@@ -130,9 +155,15 @@ class PrintOrderController extends Controller
      */
     public function store(Request $request)
     {
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
         if ($request->input('action') === 'close_plan') {
             $planId = $request->input('production_plan_id');
             $plan = \App\Models\ProductionPlan::findOrFail($planId);
+            if ($isPpic && $scope && $plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
             $plan->update(['is_closed' => true]);
 
             return redirect()->back()->with('success', 'Rencana produksi '.$plan->code.' berhasil ditutup (CLOSED).');
@@ -141,6 +172,9 @@ class PrintOrderController extends Controller
         if ($request->input('action') === 'open_plan') {
             $planId = $request->input('production_plan_id');
             $plan = \App\Models\ProductionPlan::findOrFail($planId);
+            if ($isPpic && $scope && $plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
             $plan->update(['is_closed' => false]);
 
             return redirect()->back()->with('success', 'Rencana produksi '.$plan->code.' berhasil dibuka kembali (OPEN).');
@@ -156,6 +190,9 @@ class PrintOrderController extends Controller
 
         foreach ($request->items as $itemData) {
             $plan = \App\Models\ProductionPlan::findOrFail($itemData['production_plan_id']);
+            if ($isPpic && $scope && $plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
             if ($plan->is_closed) {
                 return redirect()->route('lost-wax.print-orders.plans')
                     ->with('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
@@ -196,6 +233,7 @@ class PrintOrderController extends Controller
      */
     public function show(\App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         $printOrder->load(['creator', 'lines.productionPlan']);
 
         return view('lost-wax.print-orders.show', compact('printOrder'));
@@ -206,6 +244,7 @@ class PrintOrderController extends Controller
      */
     public function edit(\App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         if ($printOrder->status !== 'DRAFT') {
             return redirect()->route('lost-wax.print-orders.show', $printOrder)
                 ->with('error', 'Hanya dokumen berstatus DRAFT yang dapat diedit.');
@@ -221,6 +260,7 @@ class PrintOrderController extends Controller
      */
     public function update(Request $request, \App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         if ($printOrder->status !== 'DRAFT') {
             return redirect()->route('lost-wax.print-orders.show', $printOrder)
                 ->with('error', 'Hanya dokumen berstatus DRAFT yang dapat diperbarui.');
@@ -257,6 +297,7 @@ class PrintOrderController extends Controller
      */
     public function updateStatus(Request $request, \App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         $targetStatus = $request->input('status');
 
         if (! in_array($targetStatus, ['DRAFT', 'ISSUED', 'CANCELLED'])) {
@@ -295,6 +336,7 @@ class PrintOrderController extends Controller
      */
     public function print(\App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         $printOrder->load(['creator', 'lines']);
 
         return view('lost-wax.print-orders.print', compact('printOrder'));
@@ -305,6 +347,7 @@ class PrintOrderController extends Controller
      */
     public function destroy(\App\Models\LostWaxPrintOrder $printOrder)
     {
+        $this->authorizePrintOrder($printOrder);
         if ($printOrder->status !== 'DRAFT') {
             return redirect()->route('lost-wax.print-orders.show', $printOrder)
                 ->with('error', 'Hanya dokumen berstatus DRAFT yang dapat dihapus.');
@@ -340,5 +383,19 @@ class PrintOrderController extends Controller
 
             return 'PC-'.$dateStr.'-'.str_pad($sequence, 4, '0', STR_PAD_LEFT);
         });
+    }
+
+    protected function authorizePrintOrder(\App\Models\LostWaxPrintOrder $printOrder)
+    {
+        $scope = auth()->user()->product_scope;
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $unauthorized = $printOrder->lines()->whereHas('productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', '!=', $scope);
+            })->exists();
+
+            if ($unauthorized) {
+                abort(403, 'Unauthorized.');
+            }
+        }
     }
 }

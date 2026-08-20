@@ -19,6 +19,7 @@ class ProductionPlan extends Model
         'qty_remaining',
         'line_number',
         'customer',
+        'product_scope',
         'status',
         'is_closed',
         'created_at',
@@ -32,6 +33,29 @@ class ProductionPlan extends Model
         'weight' => 'decimal:2',
         'is_closed' => 'boolean',
     ];
+
+    public static function determineProductScopeFromItem(string $itemName, ?string $aisi = null): ?string
+    {
+        $itemNameLower = strtolower($itemName);
+        $aisiLower = $aisi ? strtolower($aisi) : '';
+
+        // Check if it's fitting first
+        if (str_contains($itemNameLower, 'fitting') || str_contains($itemNameLower, 'elbow') || str_contains($itemNameLower, 'tee') || str_contains($itemNameLower, 'reducer')) {
+            return 'FITTING_STAINLESS';
+        }
+
+        // Check if it's flange
+        if (str_contains($itemNameLower, 'flange') || str_contains($itemNameLower, 'blind')) {
+            if (str_contains($itemNameLower, 'besi') || str_contains($itemNameLower, 'iron') || str_contains($itemNameLower, 'steel') && ! str_contains($itemNameLower, 'stainless') && ! str_contains($itemNameLower, 'ss')) {
+                return 'FLANGE_BESI';
+            }
+            if (str_contains($itemNameLower, 'stainless') || str_contains($itemNameLower, 'ss') || str_contains($aisiLower, '304') || str_contains($aisiLower, '316') || str_contains($aisiLower, 'cf8') || str_contains($aisiLower, 'cf8m')) {
+                return 'FLANGE_STAINLESS';
+            }
+        }
+
+        return null;
+    }
 
     public function items()
     {

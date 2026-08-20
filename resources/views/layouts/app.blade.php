@@ -162,7 +162,9 @@
                         {{ explode(' ', Auth::user()->name)[0] }}
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Admin</span>
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold truncate" title="{{ Auth::user()->roles->pluck('name')->first() ?? 'User' }}{{ Auth::user()->product_scope ? ' - '.Auth::user()->product_scope : '' }}">
+                            {{ Auth::user()->roles->pluck('name')->first() ?? 'User' }}{{ Auth::user()->product_scope ? ' - '.Auth::user()->product_scope : '' }}
+                        </span>
                         <form action="{{ route('logout') }}" method="POST" class="inline">
                             @csrf
                             <button type="submit"
@@ -200,6 +202,7 @@
                 </li>
 
                 <!-- 2. PLANNING -->
+                @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic')))
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Planning</span>
                 </li>
@@ -211,6 +214,7 @@
                         <span class="text-sm sidebar-text ml-2">Daftar Rencana</span>
                     </a>
                 </li>
+                @endif
 
                 <!-- 3. PRODUKSI -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
@@ -279,6 +283,7 @@
                     </button>
                     <ul id="lostWaxMenu"
                         class="{{ $isLostWaxSidebarOpen ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic')))
                         <li>
                             <a href="{{ route('lost-wax.print-orders.plans') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.print-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
@@ -287,6 +292,8 @@
                                 <span class="text-sm sidebar-text">Perintah Cetak</span>
                             </a>
                         </li>
+                        @endif
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'spv')))
                         <li>
                             <a href="{{ route('lost-wax.outcomes.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.outcomes.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
@@ -327,6 +334,7 @@
                                 <span class="text-sm sidebar-text">Scan Oven</span>
                             </a>
                         </li>
+                        @endif
                         @php
                             $lostWaxDepts = [
                                 'cor' => 'fa-fire',
