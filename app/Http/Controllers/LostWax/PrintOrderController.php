@@ -13,8 +13,26 @@ class PrintOrderController extends Controller
      */
     public function plans(Request $request)
     {
-        // 1. Rencana Cetak (Plan Items)
-        $plansQuery = \App\Models\ProductionPlan::query();
+        // 1. Datalists for Autocomplete Search
+        $uniqueCodes = \App\Models\ProductionPlan::whereNotNull('code')
+            ->where('code', '!=', '')
+            ->distinct()
+            ->orderBy('code')
+            ->pluck('code');
+
+        $uniqueCustomers = \App\Models\ProductionPlan::whereNotNull('customer')
+            ->where('customer', '!=', '')
+            ->distinct()
+            ->orderBy('customer')
+            ->pluck('customer');
+
+        // 2. Rencana Cetak (Plan Items)
+        $plansQuery = \App\Models\ProductionPlan::query()
+            ->withSum(['printOrderLines as qty_scheduled' => function ($query) {
+                $query->whereHas('printOrder', function ($q) {
+                    $q->whereIn('status', ['DRAFT', 'ISSUED']);
+                });
+            }], 'qty_ordered');
 
         if ($request->filled('date')) {
             $plansQuery->whereDate('created_at', $request->date);
@@ -28,11 +46,29 @@ class PrintOrderController extends Controller
             $plansQuery->where('code', 'like', '%'.$request->code.'%');
         }
 
+        $statusFilter = $request->input('status', 'active');
+        if ($statusFilter === 'closed') {
+            $plansQuery->where('is_closed', true);
+        } elseif ($statusFilter === 'all') {
+            // No filter on is_closed or remaining qty for 'Semua'
+        } else {
+            // Default: 'active'
+            $plansQuery->where('is_closed', false);
+
+            $subquery = DB::table('lost_wax_print_order_lines')
+                ->join('lost_wax_print_orders', 'lost_wax_print_order_lines.lost_wax_print_order_id', '=', 'lost_wax_print_orders.id')
+                ->whereColumn('lost_wax_print_order_lines.production_plan_id', 'production_plans.id')
+                ->whereIn('lost_wax_print_orders.status', ['DRAFT', 'ISSUED'])
+                ->selectRaw('COALESCE(SUM(lost_wax_print_order_lines.qty_ordered), 0)');
+
+            $plansQuery->whereRaw('qty_planned > ('.$subquery->toSql().')', $subquery->getBindings());
+        }
+
         $plans = $plansQuery->orderBy('id', 'desc')
             ->paginate(15, ['*'], 'plans_page')
             ->withQueryString();
 
-        // 2. Dokumen Perintah Cetak (Print Orders)
+        // 3. Dokumen Perintah Cetak (Print Orders)
         $printOrdersQuery = \App\Models\LostWaxPrintOrder::with(['creator', 'lines']);
 
         if ($request->filled('print_order_number')) {
@@ -43,9 +79,12 @@ class PrintOrderController extends Controller
             ->paginate(15, ['*'], 'orders_page')
             ->withQueryString();
 
-        $activeTab = $request->query('plans_page') ? 'plans' : ($request->query('orders_page') ? 'orders' : 'plans');
+        $activeTab = $request->query('tab');
+        if (! in_array($activeTab, ['plans', 'orders'])) {
+            $activeTab = $request->query('orders_page') ? 'orders' : 'plans';
+        }
 
-        return view('lost-wax.print-orders.plans', compact('plans', 'printOrders', 'activeTab'));
+        return view('lost-wax.print-orders.plans', compact('plans', 'printOrders', 'activeTab', 'uniqueCodes', 'uniqueCustomers'));
     }
 
     /**
@@ -75,6 +114,11 @@ class PrintOrderController extends Controller
                 ->with('error', 'Item rencana tidak ditemukan.');
         }
 
+        if ($plans->contains('is_closed', true)) {
+            return redirect()->route('lost-wax.print-orders.plans')
+                ->with('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+        }
+
         $date = $request->input('scheduled_date', date('Y-m-d'));
         $printOrderNumber = $this->generateNextPrintOrderNumber($date);
 
@@ -86,6 +130,22 @@ class PrintOrderController extends Controller
      */
     public function store(Request $request)
     {
+        if ($request->input('action') === 'close_plan') {
+            $planId = $request->input('production_plan_id');
+            $plan = \App\Models\ProductionPlan::findOrFail($planId);
+            $plan->update(['is_closed' => true]);
+
+            return redirect()->back()->with('success', 'Rencana produksi '.$plan->code.' berhasil ditutup (CLOSED).');
+        }
+
+        if ($request->input('action') === 'open_plan') {
+            $planId = $request->input('production_plan_id');
+            $plan = \App\Models\ProductionPlan::findOrFail($planId);
+            $plan->update(['is_closed' => false]);
+
+            return redirect()->back()->with('success', 'Rencana produksi '.$plan->code.' berhasil dibuka kembali (OPEN).');
+        }
+
         $request->validate([
             'scheduled_date' => 'required|date',
             'print_order_number' => 'required|string|unique:lost_wax_print_orders,print_order_number',
@@ -93,6 +153,14 @@ class PrintOrderController extends Controller
             'items.*.production_plan_id' => 'required|exists:production_plans,id',
             'items.*.qty_ordered' => 'required|integer|min:1',
         ]);
+
+        foreach ($request->items as $itemData) {
+            $plan = \App\Models\ProductionPlan::findOrFail($itemData['production_plan_id']);
+            if ($plan->is_closed) {
+                return redirect()->route('lost-wax.print-orders.plans')
+                    ->with('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+            }
+        }
 
         $printOrder = DB::transaction(function () use ($request) {
             $order = \App\Models\LostWaxPrintOrder::create([

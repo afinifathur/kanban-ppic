@@ -20,6 +20,7 @@ class ProductionPlan extends Model
         'line_number',
         'customer',
         'status',
+        'is_closed',
         'created_at',
         'updated_at',
     ];
@@ -29,6 +30,7 @@ class ProductionPlan extends Model
         'qty_remaining' => 'integer',
         'line_number' => 'integer',
         'weight' => 'decimal:2',
+        'is_closed' => 'boolean',
     ];
 
     public function items()
@@ -43,9 +45,13 @@ class ProductionPlan extends Model
 
     public function getQtyScheduledAttribute(): int
     {
+        if (array_key_exists('qty_scheduled', $this->attributes)) {
+            return (int) $this->attributes['qty_scheduled'];
+        }
+
         return (int) $this->printOrderLines()
             ->whereHas('printOrder', function ($query) {
-                $query->whereIn('status', ['DRAFT', 'ISSUED', 'PRINTED']);
+                $query->whereIn('status', ['DRAFT', 'ISSUED']);
             })
             ->sum('qty_ordered');
     }

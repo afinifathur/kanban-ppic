@@ -3,92 +3,234 @@
 @section('top_bar')
     <div class="flex items-center justify-between w-full">
         <div>
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">Tree / Traveler</h1>
-            <p class="text-gray-500 text-[10px]">Daftar Tree Lost Wax, barcode &amp; traveler</p>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight">Rangkaian / Traveler</h1>
+            <p class="text-gray-500 text-[10px]">Daftar Rangkaian Lost Wax, barcode &amp; traveler</p>
         </div>
     </div>
 @endsection
 
 @section('content')
     <div class="space-y-4">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Filter ET</label>
-                <form method="GET" class="flex items-end gap-2">
-                    <input type="text" name="et_filter" value="{{ request('et_filter') }}" placeholder="ET26-0232" class="rounded-lg border-slate-300 text-sm w-40">
-                    <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-1.5 px-3 rounded">Filter</button>
-                    @if(request('et_filter'))
-                        <a href="{{ route('lost-wax.trees.index') }}" class="text-xs text-slate-500 hover:text-slate-700 py-1.5">Clear</a>
-                    @endif
-                </form>
-            </div>
-
-            @if($trees->count() > 0)
+        <!-- Form Pencarian & Filter -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <form method="GET" action="{{ route('lost-wax.trees.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div>
-                    @php
-                        $allIds = $trees->pluck('id')->implode(',');
-                    @endphp
-                    <a href="{{ route('lost-wax.trees.traveler', ['tree' => $trees->first()->id, 'ids' => $allIds]) }}" target="_blank"
-                        class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5">
-                        <i class="fas fa-print"></i> Print Halaman Ini ({{ $trees->count() }} Tree)
-                    </a>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Cari Rangkaian / Kode Produksi</label>
+                    <input type="text" name="barcode" value="{{ request('barcode') }}" placeholder="Contoh: 1110826001" 
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kode Cust</label>
+                    <input type="text" name="code" list="code-list" value="{{ request('code') }}" placeholder="Contoh: AB01" 
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
+                    <datalist id="code-list">
+                        @foreach($uniqueCodes as $uCode)
+                            <option value="{{ $uCode }}"></option>
+                        @endforeach
+                    </datalist>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Customer</label>
+                    <input type="text" name="customer" list="customer-list" value="{{ request('customer') }}" placeholder="Contoh: PT. ABC" 
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
+                    <datalist id="customer-list">
+                        @foreach($uniqueCustomers as $uCust)
+                            <option value="{{ $uCust }}"></option>
+                        @endforeach
+                    </datalist>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Item / Product</label>
+                    <input type="text" name="item" value="{{ request('item') }}" placeholder="Contoh: Flange" 
+                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
+                </div>
+                <div class="md:col-span-4 flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-colors">
+                            <i class="fas fa-search"></i> Cari &amp; Filter
+                        </button>
+                        @if(request()->anyFilled(['barcode', 'code', 'customer', 'item']))
+                            <a href="{{ route('lost-wax.trees.index') }}" class="text-xs text-slate-500 hover:text-slate-700 font-bold py-2 px-3 transition-colors">
+                                Reset Filter
+                            </a>
+                        @endif
+                    </div>
+                    
+                    @if($trees->count() > 0)
+                        <div class="flex items-center gap-2">
+                            <!-- Tombol Bulk Print Terpilih -->
+                            <button type="button" id="bulk-print-btn" disabled 
+                                class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-all">
+                                <i class="fas fa-print"></i> Cetak Terpilih (<span id="checked-count">0</span> Rangkaian)
+                            </button>
+                            <!-- Tombol Cetak Semua Halaman Ini -->
+                            <a href="{{ route('lost-wax.trees.traveler', ['tree' => $trees->first()->id, 'ids' => $trees->pluck('id')->implode(',')]) }}" target="_blank"
+                                class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-colors">
+                                <i class="fas fa-print"></i> Cetak Halaman Ini ({{ $trees->count() }} Rangkaian)
+                            </a>
+                        </div>
+                    @endif
+                </div>
+            </form>
+        </div>
+
+        <!-- Tabel Daftar Rangkaian -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left text-sm text-slate-600">
+                    <thead class="bg-slate-50/75 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <tr>
+                            <th class="p-4 w-10 text-center">
+                                <input type="checkbox" id="select-all" class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
+                            </th>
+                            <th class="p-4 w-40">Kode Rangkaian</th>
+                            <th class="p-4 w-20 text-center">Qty</th>
+                            <th class="p-4 w-28 text-center">Kode Cust</th>
+                            <th class="p-4 w-36">Customer</th>
+                            <th class="p-4">Produk / Item</th>
+                            <th class="p-4 w-24 text-center">Wave</th>
+                            <th class="p-4 w-40">Status/Lapisan</th>
+                            <th class="p-4 w-36 text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        @forelse($trees as $tree)
+                            <tr class="hover:bg-slate-50/50 transition-colors">
+                                <td class="p-4 text-center">
+                                    <input type="checkbox" name="tree_ids[]" value="{{ $tree->id }}" class="tree-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
+                                </td>
+                                <td class="p-4 font-mono font-bold text-slate-800">
+                                    <a href="{{ route('lost-wax.trees.show', $tree) }}" class="hover:text-amber-600 transition-colors">
+                                        {{ $tree->barcode }}
+                                    </a>
+                                </td>
+                                <td class="p-4 text-center font-bold text-slate-800">
+                                    {{ number_format($tree->quantity) }}
+                                </td>
+                                <td class="p-4 text-center font-mono text-xs font-semibold text-slate-700">
+                                    {{ $tree->getSourceCode() ?? '-' }}
+                                </td>
+                                <td class="p-4 font-semibold text-slate-700 truncate max-w-[150px]" title="{{ $tree->getSourceCustomer() }}">
+                                    {{ $tree->getSourceCustomer() ?? '-' }}
+                                </td>
+                                <td class="p-4 font-medium text-slate-700 leading-tight">
+                                    <div class="font-bold text-slate-800">{{ $tree->getSourceProduct() ?? '-' }}</div>
+                                    <div class="text-[10px] text-slate-400 font-mono mt-0.5">{{ $tree->getSourceItemCode() ?? '-' }}</div>
+                                </td>
+                                <td class="p-4 text-center text-xs font-semibold text-slate-500 font-mono">
+                                    {{ optional($tree->plan)->wave_number ? 'Wave '.str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}
+                                </td>
+                                <td class="p-4 text-xs font-medium">
+                                    <div class="flex flex-col gap-1">
+                                        @if($tree->current_stage)
+                                            <span class="inline-block px-2 py-0.5 rounded-full w-fit font-bold
+                                                {{ $tree->current_stage === 'oven' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
+                                                {{ $tree->current_stage_label }}
+                                            </span>
+                                        @else
+                                            <span class="inline-block px-2 py-0.5 rounded-full w-fit bg-blue-100 text-blue-800 font-bold">
+                                                Sebelum Scan
+                                            </span>
+                                        @endif
+                                        <span class="text-[10px] text-slate-400 italic">({{ $tree->status }})</span>
+                                    </div>
+                                </td>
+                                <td class="p-4 text-center">
+                                    <div class="flex items-center justify-center gap-1.5">
+                                        <a href="{{ route('lost-wax.trees.traveler', $tree) }}" target="_blank"
+                                            class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2.5 rounded transition-colors inline-flex items-center gap-1"
+                                            title="Cetak Traveler">
+                                            <i class="fas fa-print"></i> Cetak
+                                        </a>
+                                        <a href="{{ route('lost-wax.trees.show', $tree) }}" 
+                                            class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1 px-2.5 rounded transition-colors"
+                                            title="Lihat Detail">
+                                            Detail
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="9" class="p-12 text-center text-slate-400 font-medium">
+                                    <div class="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border border-dashed border-slate-300">
+                                        <i class="fas fa-sitemap text-slate-400 text-2xl"></i>
+                                    </div>
+                                    <h3 class="text-slate-600 font-bold">Belum ada Rangkaian</h3>
+                                    <p class="text-sm mt-1 text-slate-400">Silakan sesuaikan filter atau generate Rangkaian baru.</p>
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if($trees->hasPages())
+                <div class="p-4 border-t border-slate-200 bg-slate-50/50">
+                    {{ $trees->links() }}
                 </div>
             @endif
         </div>
-
-        @forelse($trees as $tree)
-            <a href="{{ route('lost-wax.trees.show', $tree) }}"
-                class="block bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md hover:border-amber-300 transition-all group">
-                <div class="flex items-center justify-between gap-4">
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-2 mb-1 flex-wrap">
-                            <span class="text-slate-800 font-bold text-base group-hover:text-amber-600 transition-colors">{{ $tree->barcode }}</span>
-                            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{{ $tree->status }}</span>
-                            @if($tree->current_stage)
-                                <span class="text-[10px] px-2 py-0.5 rounded-full
-                                    {{ $tree->current_stage === 'oven' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700' }}">
-                                    {{ $tree->current_stage_label }}
-                                </span>
-                            @else
-                                <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Sebelum Scan</span>
-                            @endif
-                        </div>
-                        <div class="text-sm text-slate-500">
-                            Tree #{{ str_pad((string) $tree->tree_number, 3, '0', STR_PAD_LEFT) }} &middot;
-                            Qty {{ number_format($tree->quantity) }} pcs
-                        </div>
-                        <div class="text-xs text-slate-400 mt-1 flex flex-wrap gap-3">
-                            <span>ET/PC: {{ $tree->getSourceCode() ?? '-' }}</span>
-                            <span>{{ optional($tree->plan)->wave_number ? 'Wave '.str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
-                            <span>Tgl: {{ $tree->production_date->format('d-m-Y') }}</span>
-                            <span>Item: {{ $tree->getSourceItemCode() ?? '-' }}</span>
-                            @if($tree->last_scan_at)
-                                <span class="text-slate-400">Last: {{ $tree->last_scan_at->format('H:i d/m') }}</span>
-                            @endif
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <a href="{{ route('lost-wax.trees.traveler', $tree) }}" target="_blank"
-                            class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1 px-2 rounded"
-                            onclick="event.stopPropagation()" title="Print Traveler">
-                            <i class="fas fa-print"></i>
-                        </a>
-                        <div class="text-slate-300 group-hover:text-amber-500 transition-colors">
-                            <i class="fas fa-chevron-right fa-lg"></i>
-                        </div>
-                    </div>
-                </div>
-            </a>
-        @empty
-            <div class="bg-white rounded-xl shadow-sm border border-dashed border-slate-300 p-12 text-center">
-                <div class="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-sitemap text-slate-400 text-2xl"></i>
-                </div>
-                <h3 class="text-slate-600 font-bold">Belum ada Tree</h3>
-                <p class="text-slate-400 text-sm mt-1">Generate Tree dari Work Order Plan untuk memulai.</p>
-            </div>
-        @endforelse
-
-        <div>{{ $trees->links() }}</div>
     </div>
+
+    <!-- Script Javascript untuk Checkbox dan Bulk Print -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const selectAllCheckbox = document.getElementById('select-all');
+            const treeCheckboxes = document.querySelectorAll('.tree-checkbox');
+            const bulkPrintBtn = document.getElementById('bulk-print-btn');
+            const checkedCountSpan = document.getElementById('checked-count');
+
+            function updateBulkPrintButton() {
+                const checkedIds = Array.from(treeCheckboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+
+                const count = checkedIds.length;
+                checkedCountSpan.textContent = count;
+
+                if (count > 0) {
+                    bulkPrintBtn.disabled = false;
+                    bulkPrintBtn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                    bulkPrintBtn.classList.add('bg-amber-600', 'hover:bg-amber-700', 'text-white', 'cursor-pointer');
+                } else {
+                    bulkPrintBtn.disabled = true;
+                    bulkPrintBtn.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white', 'cursor-pointer');
+                    bulkPrintBtn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                }
+            }
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function() {
+                    treeCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+                    updateBulkPrintButton();
+                });
+            }
+
+            treeCheckboxes.forEach(cb => {
+                cb.addEventListener('change', function() {
+                    const allChecked = Array.from(treeCheckboxes).every(c => c.checked);
+                    if (selectAllCheckbox) {
+                        selectAllCheckbox.checked = allChecked;
+                    }
+                    updateBulkPrintButton();
+                });
+            });
+
+            if (bulkPrintBtn) {
+                bulkPrintBtn.addEventListener('click', function() {
+                    const checkedIds = Array.from(treeCheckboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+
+                    if (checkedIds.length > 0) {
+                        // existing traveler print route format: /lost-wax/trees/{first_id}/traveler?ids=id1,id2...
+                        const firstId = checkedIds[0];
+                        const idsQuery = checkedIds.join(',');
+                        const printUrl = `{{ route('lost-wax.trees.traveler', ':firstId') }}`.replace(':firstId', firstId) + '?ids=' + idsQuery;
+                        window.open(printUrl, '_blank');
+                    }
+                });
+            }
+        });
+    </script>
 @endsection

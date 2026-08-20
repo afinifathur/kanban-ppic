@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laporan Kerja Cetak Lilin - {{ $printOrder->print_order_number }}</title>
+    <title>Perintah Cetak Lilin - {{ $printOrder->print_order_number }}</title>
     <script src="{{ asset('js/tailwindcss.js') }}"></script>
     <style>
         @media print {
@@ -13,14 +13,11 @@
                 -webkit-print-color-adjust: exact;
             }
             @page {
-                size: A4 landscape;
-                margin: 8mm;
+                size: A4 portrait;
+                margin: 5mm;
             }
             .no-print {
                 display: none !important;
-            }
-            .print-border {
-                border-color: #000000 !important;
             }
         }
         body {
@@ -29,107 +26,225 @@
         }
     </style>
 </head>
-<body class="p-6 bg-slate-50 print:bg-white print:p-0" onload="window.print()">
+<body class="p-4 bg-slate-50 print:bg-white print:p-0" onload="window.print()">
 
-    <div class="max-w-6xl mx-auto bg-white p-6 shadow-sm border border-slate-200 print:border-none print:shadow-none print:w-full print:p-0">
+    <div class="max-w-4xl mx-auto bg-white p-6 shadow-sm border border-slate-200 print:border-none print:shadow-none print:w-full print:p-0">
         
-        <!-- Document Title Header -->
-        <div class="text-center mb-6 border-b-2 border-black pb-4">
-            <h1 class="text-2xl font-bold uppercase tracking-wider">FORM LAPORAN KERJA CETAK LILIN</h1>
-            <p class="text-xs text-slate-500 font-mono mt-1 no-print">Sistem FIFO Tracking | No. Dokumen: {{ $printOrder->print_order_number }}</p>
+        <!-- ========================================== -->
+        <!-- FORM 1: FORM LAPORAN KERJA CETAK LILIN     -->
+        <!-- ========================================== -->
+        <div class="text-center mb-2 border-b border-black pb-1">
+            <h1 class="text-base font-extrabold uppercase tracking-wider">FORM LAPORAN KERJA CETAK LILIN</h1>
         </div>
 
-        <!-- Metadata & Manual Handwriting Fields -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-sm font-bold border border-black p-4 rounded print:border-black print:rounded-none">
+        <!-- Metadata & Handwriting Fields (Form 1) -->
+        <div class="grid grid-cols-4 gap-2 mb-2 text-xs border border-black p-2 font-bold">
             <div>
-                <p class="text-slate-500 text-xs font-bold uppercase print:text-black">NO. DOKUMEN</p>
-                <p class="text-base font-mono">{{ $printOrder->print_order_number }}</p>
+                <p class="text-[9px] text-slate-500 uppercase print:text-black">NO. DOKUMEN</p>
+                <p class="font-mono text-sm">{{ $printOrder->print_order_number }}</p>
             </div>
             <div>
-                <p class="text-slate-500 text-xs font-bold uppercase print:text-black">TANGGAL PERINTAH</p>
-                <p class="text-base font-medium">{{ $printOrder->scheduled_date->format('d/m/Y') }}</p>
+                <p class="text-[9px] text-slate-500 uppercase print:text-black">TANGGAL PERINTAH</p>
+                <p class="text-sm">{{ $printOrder->scheduled_date->format('d/m/Y') }}</p>
             </div>
-            <div class="col-span-2 grid grid-cols-2 gap-2 border-l border-slate-300 pl-4 print:border-black">
-                <div>
-                    <span class="text-xs text-slate-400 print:text-black uppercase block">MESIN :</span>
-                    <span class="inline-block w-full border-b border-black h-5 mt-1"></span>
+            <div class="col-span-2 grid grid-cols-2 gap-1 border-l border-black pl-2">
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">MESIN :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
                 </div>
-                <div>
-                    <span class="text-xs text-slate-400 print:text-black uppercase block">SHIFT :</span>
-                    <span class="inline-block w-full border-b border-black h-5 mt-1"></span>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">SHIFT :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
                 </div>
-                <div>
-                    <span class="text-xs text-slate-400 print:text-black uppercase block">HARI :</span>
-                    <span class="inline-block w-full border-b border-black h-5 mt-1"></span>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">HARI :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
                 </div>
-                <div>
-                    <span class="text-xs text-slate-400 print:text-black uppercase block">TANGGAL (AKTUAL) :</span>
-                    <span class="inline-block w-full border-b border-black h-5 mt-1"></span>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">TGL AKTUAL :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
                 </div>
             </div>
         </div>
 
-        <!-- 10 Columns Table -->
-        <table class="w-full border-collapse border border-black mb-8 text-sm">
+        <!-- Table Form 1 -->
+        <table class="w-full border-collapse border border-black text-xs mb-2 table-fixed">
             <thead>
-                <tr class="bg-slate-100 text-black border-b border-black font-bold text-xs uppercase">
-                    <th class="border border-black px-2 py-2 text-center w-8">NO</th>
-                    <th class="border border-black px-2 py-2 text-center w-36">NO.PO / SPK</th>
-                    <th class="border border-black px-2 py-2 text-left">NAMA PRODUK</th>
-                    <th class="border border-black px-2 py-2 text-center w-24">UKURAN</th>
-                    <th class="border border-black px-2 py-2 text-center w-28">QTY PRODUKSI</th>
-                    <th class="border border-black px-2 py-2 text-center w-16">AISI</th>
-                    <th class="border border-black px-2 py-2 text-center w-24">LOGO PROD</th>
-                    <th class="border border-black px-2 py-2 text-center w-24">INITIAL CUST</th>
-                    <th class="border border-black px-2 py-2 text-center w-20 text-blue-600 print:text-black font-extrabold">HASIL</th>
-                    <th class="border border-black px-2 py-2 text-center w-20 text-red-600 print:text-black font-extrabold">RUSAK</th>
+                <tr class="bg-slate-100 text-black border-b border-black font-bold text-[9px] uppercase text-center">
+                    <th class="border border-black p-1 w-[4%]">NO</th>
+                    <th class="border border-black p-1 w-[15%]">NO.PO / SPK</th>
+                    <th class="border border-black p-1 text-left w-[36%]">NAMA PRODUK</th>
+                    <th class="border border-black p-1 w-[10%]">UKURAN</th>
+                    <th class="border border-black p-1 w-[10%]">QTY PRODUKSI</th>
+                    <th class="border border-black p-1 w-[6%]">AISI</th>
+                    <th class="border border-black p-1 w-[6%]">LOGO</th>
+                    <th class="border border-black p-1 w-[7%]">INIT CUST</th>
+                    <th class="border border-black p-1 w-[7%]">HASIL</th>
+                    <th class="border border-black p-1 w-[7%]">RUSAK</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach($printOrder->lines as $index => $line)
-                    <tr class="h-10 text-xs">
-                        <td class="border border-black px-2 py-1 text-center font-bold">{{ $index + 1 }}</td>
-                        <!-- NO.PO / SPK = Kode Cust snapshot -->
-                        <td class="border border-black px-2 py-1 font-mono text-center">{{ $line->code ?: '-' }}</td>
-                        <!-- NAMA PRODUK = Item Name snapshot -->
-                        <td class="border border-black px-2 py-1 font-bold">{{ $line->item_name }}</td>
-                        <!-- UKURAN = Size snapshot -->
-                        <td class="border border-black px-2 py-1 text-center font-mono">{{ $line->size ?: '-' }}</td>
-                        <!-- QTY PRODUKSI = Qty Perintah Cetak -->
-                        <td class="border border-black px-2 py-1 text-center font-bold text-sm">{{ number_format($line->qty_ordered) }}</td>
-                        <!-- AISI = AISI snapshot -->
-                        <td class="border border-black px-2 py-1 text-center font-mono">{{ $line->aisi ?: '-' }}</td>
-                        <!-- LOGO PROD = Manual Column -->
-                        <td class="border border-black px-2 py-1 text-center"></td>
-                        <!-- INITIAL CUST = Customer snapshot -->
-                        <td class="border border-black px-2 py-1 text-center uppercase font-bold">{{ $line->customer ?: '-' }}</td>
-                        <!-- HASIL = Manual Column -->
-                        <td class="border border-black px-2 py-1 text-center"></td>
-                        <!-- RUSAK = Manual Column -->
-                        <td class="border border-black px-2 py-1 text-center"></td>
+                @foreach($printOrder->lines->take(10) as $index => $line)
+                    <tr class="h-6">
+                        <td class="border border-black p-1 text-center font-bold">{{ $index + 1 }}</td>
+                        <td class="border border-black p-1 font-mono text-center truncate">{{ $line->code ?: '-' }}</td>
+                        <td class="border border-black p-1 font-bold leading-tight break-words text-[10px]">{{ $line->item_name }}</td>
+                        <td class="border border-black p-1 text-center font-mono truncate">{{ $line->size ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center font-bold">{{ number_format($line->qty_ordered) }}</td>
+                        <td class="border border-black p-1 text-center font-mono truncate">{{ $line->isi ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center uppercase font-bold truncate">{{ $line->customer ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
                     </tr>
                 @endforeach
+                @for($i = count($printOrder->lines); $i < 10; $i++)
+                    <tr class="h-6">
+                        <td class="border border-black p-1 text-center font-bold text-slate-300">{{ $i + 1 }}</td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                    </tr>
+                @endfor
             </tbody>
         </table>
 
-        <!-- Signatures & Verification Section -->
-        <div class="grid grid-cols-3 text-center mt-12 text-sm font-bold">
+        <!-- Signatures (Form 1) -->
+        <div class="grid grid-cols-3 text-center text-xs font-bold mt-2">
             <div>
-                <p class="mb-20">Operator Cetak Lilin</p>
-                <div class="border-t border-black w-44 mx-auto"></div>
-                <p class="text-xs font-normal mt-1">( Nama Terang )</p>
+                <p class="mb-6">Operator Cetak Lilin</p>
+                <div class="border-t border-black w-32 mx-auto"></div>
+                <p class="text-[9px] font-normal mt-0.5">( Nama Terang )</p>
             </div>
             <div>
-                <p class="mb-20">Supervisor (SPV)</p>
-                <div class="border-t border-black w-44 mx-auto"></div>
-                <p class="text-xs font-normal mt-1">( Nama Terang )</p>
+                <p class="mb-6">Supervisor (SPV)</p>
+                <div class="border-t border-black w-32 mx-auto"></div>
+                <p class="text-[9px] font-normal mt-0.5">( Nama Terang )</p>
             </div>
             <div>
-                <p class="mb-20">Admin PPIC</p>
-                <div class="border-t border-black w-44 mx-auto"></div>
-                <p class="text-xs font-normal mt-1">{{ optional($printOrder->creator)->name }}</p>
+                <p class="mb-6">Admin PPIC</p>
+                <div class="border-t border-black w-32 mx-auto text-slate-700"></div>
+                <p class="text-[9px] font-bold mt-0.5">{{ optional($printOrder->creator)->name }}</p>
             </div>
         </div>
+
+        <!-- ========================================== -->
+        <!-- DIVIDER                                    -->
+        <!-- ========================================== -->
+        <div class="border-t border-dashed border-black my-3"></div>
+
+        <!-- ========================================== -->
+        <!-- FORM 2: FORM SETTING MESIN CETAK           -->
+        <!-- ========================================== -->
+        <div class="text-center mb-2">
+            <h1 class="text-base font-extrabold uppercase tracking-wider">FORM SETTING MESIN CETAK</h1>
+        </div>
+
+        <!-- Metadata & Handwriting Fields (Form 2) -->
+        <div class="grid grid-cols-5 gap-2 mb-2 text-xs border border-black p-2 font-bold">
+            <div>
+                <p class="text-[9px] text-slate-500 uppercase print:text-black">NO. DOKUMEN</p>
+                <p class="font-mono text-sm leading-none mt-0.5">{{ $printOrder->print_order_number }}</p>
+            </div>
+            <div>
+                <p class="text-[9px] text-slate-500 uppercase print:text-black">TANGGAL PERINTAH</p>
+                <p class="text-sm leading-none mt-0.5">{{ $printOrder->scheduled_date->format('d/m/Y') }}</p>
+            </div>
+            <div class="col-span-3 grid grid-cols-3 gap-1 border-l border-black pl-2">
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">NAMA OPERATOR :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">MESIN :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] text-slate-500 uppercase print:text-black shrink-0">TANGGAL :</span>
+                    <span class="border-b border-black flex-1 h-4"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Form 2 -->
+        <table class="w-full border-collapse border border-black text-xs mb-2 table-fixed">
+            <thead>
+                <tr class="bg-slate-100 text-black border-b border-black font-bold text-[8px] uppercase text-center leading-tight">
+                    <th class="border border-black p-1 w-[4%]">NO</th>
+                    <th class="border border-black p-1 w-[12%]">KODE</th>
+                    <th class="border border-black p-1 text-left w-[28%]">ITEM</th>
+                    <th class="border border-black p-1 w-[8%]">SIZE</th>
+                    <th class="border border-black p-1 w-[7%]">TEMP. LILIN</th>
+                    <th class="border border-black p-1 w-[6%]">PRESS 1</th>
+                    <th class="border border-black p-1 w-[6%]">PRESS 2</th>
+                    <th class="border border-black p-1 w-[6%]">COOLING</th>
+                    <th class="border border-black p-1 w-[5%]">CLAMP</th>
+                    <th class="border border-black p-1 w-[6%]">BONGKAR</th>
+                    <th class="border border-black p-1 w-[7%]">HASIL CETAK</th>
+                    <th class="border border-black p-1 w-[5%]">RUSAK</th>
+                    <th class="border border-black p-1 w-[5%]">JAM AWAL</th>
+                    <th class="border border-black p-1 w-[5%]">JAM AKHIR</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($printOrder->lines->take(10) as $index => $line)
+                    <tr class="h-6">
+                        <td class="border border-black p-1 text-center font-bold">{{ $index + 1 }}</td>
+                        <td class="border border-black p-1 font-mono text-center truncate">{{ $line->code ?: '-' }}</td>
+                        <td class="border border-black p-1 font-bold leading-tight break-words text-[10px]">{{ $line->item_name }}</td>
+                        <td class="border border-black p-1 text-center font-mono truncate">{{ $line->size ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                        <td class="border border-black p-1 text-center"></td>
+                    </tr>
+                @endforeach
+                @for($i = count($printOrder->lines); $i < 10; $i++)
+                    <tr class="h-6">
+                        <td class="border border-black p-1 text-center font-bold text-slate-300">{{ $i + 1 }}</td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                        <td class="border border-black p-1"></td>
+                    </tr>
+                @endfor
+            </tbody>
+        </table>
+
+        <!-- Form 2 Bottom: Kendala & TTD Operator -->
+        <div class="grid grid-cols-3 gap-2 mt-2 text-xs">
+            <!-- Kotak Kendala -->
+            <div class="col-span-2 border border-black p-1.5 h-16 relative">
+                <span class="text-[9px] text-slate-500 uppercase font-bold absolute top-1 left-2">KENDALA :</span>
+            </div>
+            <!-- Kotak TTD -->
+            <div class="border border-black p-1.5 h-16 flex flex-col justify-between text-center font-bold">
+                <span class="text-[9px] text-slate-500 uppercase font-bold block">Tanda Tangan Operator</span>
+                <div class="border-t border-dashed border-black w-24 mx-auto mb-1"></div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Print control bar for screen viewing -->

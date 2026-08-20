@@ -13,15 +13,67 @@ class TreeController extends Controller
 {
     public function __construct(private readonly TreeGenerationService $treeService) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $trees = LostWaxTree::with(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])
-            ->orderByDesc('id')
-            ->paginate(20);
+        $treesQuery = LostWaxTree::with([
+            'workOrder.itemReference',
+            'plan',
+            'printOrderLine.printOrder',
+            'printOrderLine.productionPlan',
+        ]);
 
-        $families = config('lost_wax.families', []);
+        if ($request->filled('barcode')) {
+            $val = $request->barcode;
+            $treesQuery->where(function ($q) use ($val) {
+                $q->where('barcode', 'like', '%'.$val.'%')
+                    ->orWhereHas('printOrderLine', fn ($qp) => $qp->where('code', 'like', '%'.$val.'%'))
+                    ->orWhereHas('workOrder', fn ($qw) => $qw->where('et_code', 'like', '%'.$val.'%'));
+            });
+        }
 
-        return view('lost-wax.trees.index', compact('trees', 'families'));
+        if ($request->filled('code')) {
+            $val = $request->code;
+            $treesQuery->where(function ($q) use ($val) {
+                $q->whereHas('printOrderLine', fn ($qp) => $qp->where('code', 'like', '%'.$val.'%'))
+                    ->orWhereHas('workOrder', fn ($qw) => $qw->where('et_code', 'like', '%'.$val.'%'));
+            });
+        }
+
+        if ($request->filled('customer')) {
+            $val = $request->customer;
+            $treesQuery->where(function ($q) use ($val) {
+                $q->whereHas('printOrderLine', fn ($qp) => $qp->where('customer', 'like', '%'.$val.'%'))
+                    ->orWhereHas('workOrder', fn ($qw) => $qw->where('customer_name', 'like', '%'.$val.'%'));
+            });
+        }
+
+        if ($request->filled('item')) {
+            $val = $request->item;
+            $treesQuery->where(function ($q) use ($val) {
+                $q->whereHas('printOrderLine', fn ($qp) => $qp->where('item_name', 'like', '%'.$val.'%'))
+                    ->orWhereHas('workOrder.itemReference', fn ($qi) => $qi->where('item_name_snapshot', 'like', '%'.$val.'%'));
+            });
+        }
+
+        $trees = $treesQuery->orderByDesc('id')
+            ->paginate(50)
+            ->withQueryString();
+
+        $uniqueCodes = cache()->remember('lost_wax_trees_unique_codes', 60, function () {
+            $newCodes = \DB::table('lost_wax_print_order_lines')->whereNotNull('code')->distinct()->pluck('code')->toArray();
+            $legacyCodes = \DB::table('lost_wax_work_orders')->whereNotNull('et_code')->distinct()->pluck('et_code')->toArray();
+
+            return array_unique(array_filter(array_merge($newCodes, $legacyCodes)));
+        });
+
+        $uniqueCustomers = cache()->remember('lost_wax_trees_unique_customers', 60, function () {
+            $newCusts = \DB::table('lost_wax_print_order_lines')->whereNotNull('customer')->distinct()->pluck('customer')->toArray();
+            $legacyCusts = \DB::table('lost_wax_work_orders')->whereNotNull('customer_name')->distinct()->pluck('customer_name')->toArray();
+
+            return array_unique(array_filter(array_merge($newCusts, $legacyCusts)));
+        });
+
+        return view('lost-wax.trees.index', compact('trees', 'uniqueCodes', 'uniqueCustomers'));
     }
 
     public function generate(LostWaxWorkOrderPlan $plan)

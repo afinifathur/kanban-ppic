@@ -560,7 +560,168 @@ class TreeTest extends TestCase
             ->get(route('lost-wax.trees.index'));
 
         $response->assertOk();
-        $response->assertSee('Tree / Traveler');
+        $response->assertSee('Rangkaian / Traveler');
+    }
+
+    /**
+     * Sprint: Refactor Rangkaian / Traveler index page filtering, legacy compatibility, and bulk printing.
+     */
+    public function test_sprint_traveler_refactoring_behavior(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Create a workflow-new tree (without work_order_id, linked to print order line)
+        $planNew = $this->createProductionPlan([
+            'code' => 'UN48',
+            'customer' => 'CUST-UN48',
+            'item_name' => 'NEW-ITEM-UN48',
+        ]);
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260819-0099',
+            'scheduled_date' => '2026-08-19',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $planNew->id,
+            'qty_ordered' => 50,
+            'item_name' => $planNew->item_name,
+            'code' => $planNew->code,
+            'customer' => $planNew->customer,
+        ]);
+
+        $newTree = \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line->id,
+            'barcode' => '9110819001',
+            'tree_number' => 1,
+            'quantity' => 15,
+            'status' => 'generated',
+            'production_date' => '2026-08-19',
+            'family_code' => '1',
+            'daily_sequence' => 1,
+        ]);
+
+        // 2. Create a legacy tree (with work_order_id)
+        $wo = $this->createWorkOrderWithAssemblyOutput(15, 'ET-LEGACY', 'LEGACY-ITEM');
+        $wo->update([
+            'customer_name' => 'CUST-LEGACY',
+            'et_code' => 'ET-LEGACY',
+        ]);
+        $legacyPlan = $this->createPlan($wo);
+        $legacyTree = \App\Models\LostWaxTree::create([
+            'work_order_id' => $wo->id,
+            'work_order_plan_id' => $legacyPlan->id,
+            'barcode' => '2110819002',
+            'tree_number' => 2,
+            'quantity' => 15,
+            'status' => 'generated',
+            'production_date' => '2026-08-19',
+            'family_code' => '1',
+            'daily_sequence' => 2,
+        ]);
+
+        // 3. Test: Both workflow-new and legacy tree load on the index page
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index'));
+        $response->assertOk();
+        $response->assertSee('9110819001');
+        $response->assertSee('2110819002');
+        $response->assertSee('UN48');
+        $response->assertSee('ET-LEGACY');
+
+        // Helper helper to check string in table body
+        $assertInTbody = function ($res, $mustContain, $mustNotContain) {
+            $html = $res->getContent();
+            preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $html, $matches);
+            $tbody = $matches[1] ?? '';
+            $this->assertStringContainsString($mustContain, $tbody);
+            $this->assertStringNotContainsString($mustNotContain, $tbody);
+        };
+
+        // 4. Test: Filter by barcode (Kode Rangkaian)
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['barcode' => '9110819001']));
+        $response->assertOk();
+        $assertInTbody($response, '9110819001', '2110819002');
+
+        // 5. Test: Filter by Kode Cust (code)
+        // For workflow-new (code = UN48)
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['code' => 'UN48']));
+        $response->assertOk();
+        $assertInTbody($response, '9110819001', '2110819002');
+
+        // For legacy (et_code = ET-LEGACY)
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['code' => 'ET-LEGACY']));
+        $response->assertOk();
+        $assertInTbody($response, '2110819002', '9110819001');
+
+        // 6. Test: Filter by Customer (customer)
+        // For workflow-new
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['customer' => 'CUST-UN48']));
+        $response->assertOk();
+        $assertInTbody($response, '9110819001', '2110819002');
+
+        // For legacy
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['customer' => 'CUST-LEGACY']));
+        $response->assertOk();
+        $assertInTbody($response, '2110819002', '9110819001');
+
+        // 7. Test: Filter by Product / Item (item)
+        // For workflow-new
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['item' => 'NEW-ITEM-UN48']));
+        $response->assertOk();
+        $assertInTbody($response, '9110819001', '2110819002');
+
+        // For legacy
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['item' => 'Hex Nipple']));
+        $response->assertOk();
+        $assertInTbody($response, '2110819002', '9110819001');
+
+        // 8. Test: Combined filters work
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['code' => 'UN48', 'customer' => 'CUST-UN48']));
+        $response->assertOk();
+        $assertInTbody($response, '9110819001', '2110819002');
+
+        // Combined filter with mismatch
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['code' => 'UN48', 'customer' => 'CUST-LEGACY']));
+        $response->assertOk();
+        $htmlMismatch = $response->getContent();
+        preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $htmlMismatch, $matches);
+        $tbodyMismatch = $matches[1] ?? '';
+        $this->assertStringNotContainsString('9110819001', $tbodyMismatch);
+        $this->assertStringNotContainsString('2110819002', $tbodyMismatch);
+
+        // 9. Test: Pagination retains active filters
+        // Create 55 more trees with code = UN48 to trigger pagination (total 56 trees with UN48)
+        for ($i = 0; $i < 55; $i++) {
+            \App\Models\LostWaxTree::create([
+                'lost_wax_print_order_line_id' => $line->id,
+                'barcode' => '9110819'.str_pad((string) ($i + 10), 3, '0', STR_PAD_LEFT),
+                'tree_number' => $i + 10,
+                'quantity' => 15,
+                'status' => 'generated',
+                'production_date' => '2026-08-19',
+                'family_code' => '1',
+                'daily_sequence' => $i + 3,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.index', ['code' => 'UN48']));
+        $response->assertOk();
+        $response->assertSee('page=2');
+        $response->assertSee('code=UN48');
+
+        // 10. Test: Individual print traveler works
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.traveler', $newTree));
+        $response->assertOk();
+        $response->assertSee('9110819001');
+
+        // 11. Test: Bulk print traveler works with query parameters
+        $response = $this->actingAs($user)->get(route('lost-wax.trees.traveler', [
+            'tree' => $newTree->id,
+            'ids' => $newTree->id.','.$legacyTree->id,
+        ]));
+        $response->assertOk();
+        $response->assertSee('9110819001');
+        $response->assertSee('2110819002');
     }
 
     public function test_tree_show_page_loads(): void
@@ -696,5 +857,23 @@ class TreeTest extends TestCase
             'planned_quantity' => 705,
             'status' => 'planned',
         ]);
+    }
+
+    private function createProductionPlan($attributes = []): \App\Models\ProductionPlan
+    {
+        return \App\Models\ProductionPlan::create(array_merge([
+            'code' => 'AB01',
+            'customer' => 'A06',
+            'item_code' => '4.101105K.A0020',
+            'item_name' => 'SS304 JIS 5K 3/4"',
+            'aisi' => '304',
+            'size' => '3/4"',
+            'weight' => 0.75,
+            'po_number' => 'PO-AB-01',
+            'qty_planned' => 200,
+            'qty_remaining' => 200,
+            'line_number' => 1,
+            'status' => 'planning',
+        ], $attributes));
     }
 }

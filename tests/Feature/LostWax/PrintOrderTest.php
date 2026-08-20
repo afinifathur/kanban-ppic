@@ -310,4 +310,231 @@ class PrintOrderTest extends TestCase
         $response->assertSessionHas('error');
         $this->assertSame('CANCELLED', $order->fresh()->status);
     }
+
+    /**
+     * Sprint 1: Verify plan sorting, closed filters, open/close buttons, and database persistence.
+     */
+    public function test_sprint_1_plans_pool_behavior(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Plan dengan Sisa > 0 (tampil di pool Aktif)
+        $planActive = $this->createProductionPlan([
+            'code' => 'CODE-ACT',
+            'customer' => 'CUST-ACT',
+            'qty_planned' => 100,
+            'is_closed' => false,
+        ]);
+
+        // 2. Plan dengan Sisa = 0 (tidak muncul di pool Aktif)
+        $planCompleted = $this->createProductionPlan([
+            'code' => 'CODE-COMP',
+            'customer' => 'CUST-COMP',
+            'qty_planned' => 100,
+            'is_closed' => false,
+        ]);
+        // Schedule it fully
+        $order1 = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260819-0001',
+            'scheduled_date' => '2026-08-19',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $order1->lines()->create([
+            'production_plan_id' => $planCompleted->id,
+            'qty_ordered' => 100,
+            'item_name' => $planCompleted->item_name,
+        ]);
+
+        // 3. Plan dengan Sisa < 0 (tidak muncul di pool Aktif)
+        $planOverScheduled = $this->createProductionPlan([
+            'code' => 'CODE-OVER',
+            'customer' => 'CUST-OVER',
+            'qty_planned' => 100,
+            'is_closed' => false,
+        ]);
+        $order2 = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260819-0002',
+            'scheduled_date' => '2026-08-19',
+            'status' => 'DRAFT',
+            'created_by' => $user->id,
+        ]);
+        $order2->lines()->create([
+            'production_plan_id' => $planOverScheduled->id,
+            'qty_ordered' => 120,
+            'item_name' => $planOverScheduled->item_name,
+        ]);
+
+        // 4. Plan CLOSED tidak muncul di pool Aktif
+        $planClosed = $this->createProductionPlan([
+            'code' => 'CODE-CLOSED',
+            'customer' => 'CUST-CLOSED',
+            'qty_planned' => 100,
+            'is_closed' => true,
+        ]);
+
+        // Request default pool Aktif
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'active']));
+        $response->assertOk();
+        $response->assertSee('CODE-ACT');
+
+        $html = $response->getContent();
+        preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $html, $matches);
+        $tbody = $matches[1] ?? '';
+
+        $this->assertStringContainsString('CODE-ACT', $tbody);
+        $this->assertStringNotContainsString('CODE-COMP', $tbody);
+        $this->assertStringNotContainsString('CODE-OVER', $tbody);
+        $this->assertStringNotContainsString('CODE-CLOSED', $tbody);
+
+        // 5. Plan CLOSED muncul pada filter Closed
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'closed']));
+        $response->assertOk();
+
+        $htmlClosed = $response->getContent();
+        preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $htmlClosed, $matches);
+        $tbodyClosed = $matches[1] ?? '';
+
+        $this->assertStringNotContainsString('CODE-ACT', $tbodyClosed);
+        $this->assertStringContainsString('CODE-CLOSED', $tbodyClosed);
+
+        // 8. Production Plan tidak terhapus ketika ditutup (masih ada di database)
+        $this->assertDatabaseHas('production_plans', ['id' => $planClosed->id]);
+
+        // 6. Plan CLOSED dapat dibuka kembali
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'action' => 'open_plan',
+            'production_plan_id' => $planClosed->id,
+        ]);
+        $response->assertRedirect();
+        $this->assertFalse($planClosed->fresh()->is_closed);
+
+        // 7. Membuka kembali plan dengan Sisa 0 tidak membuatnya muncul di pool Aktif
+        // Let's close the completed plan first:
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'action' => 'close_plan',
+            'production_plan_id' => $planCompleted->id,
+        ]);
+        $response->assertRedirect();
+        $this->assertTrue($planCompleted->fresh()->is_closed);
+
+        // Now open it again:
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'action' => 'open_plan',
+            'production_plan_id' => $planCompleted->id,
+        ]);
+        $response->assertRedirect();
+        $this->assertFalse($planCompleted->fresh()->is_closed);
+
+        // Check default pool Aktif again: completed plan (sisa 0) should still not be there
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'active']));
+        $response->assertOk();
+
+        $htmlActive2 = $response->getContent();
+        preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $htmlActive2, $matches);
+        $tbodyActive2 = $matches[1] ?? '';
+        $this->assertStringNotContainsString('CODE-COMP', $tbodyActive2);
+    }
+
+    /**
+     * Sprint 1: Verify closed plan validation (creation prevention), autocomplete search data,
+     * filter retention, and orders tab rendering.
+     */
+    public function test_sprint_1_security_and_filters_behavior(): void
+    {
+        $user = User::factory()->create();
+
+        // 9. CLOSED plan tidak dapat digunakan membuat Print Order baru (create & store)
+        $planClosed = $this->createProductionPlan([
+            'code' => 'CODE-CLOSED',
+            'customer' => 'CUST-CLOSED',
+            'qty_planned' => 100,
+            'is_closed' => true,
+        ]);
+
+        // Try load create page with CLOSED plan
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.create', ['plan_ids' => [$planClosed->id]]));
+        $response->assertRedirect(route('lost-wax.print-orders.plans'));
+        $response->assertSessionHas('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+
+        // Try store print order with CLOSED plan
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'scheduled_date' => '2026-08-19',
+            'print_order_number' => 'PC-20260819-9999',
+            'items' => [
+                [
+                    'production_plan_id' => $planClosed->id,
+                    'qty_ordered' => 50,
+                ],
+            ],
+        ]);
+        $response->assertRedirect(route('lost-wax.print-orders.plans'));
+        $response->assertSessionHas('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+
+        // 10. Autocomplete Kode Cust bekerja & 11. Autocomplete Customer bekerja
+        $planAutocomplete = $this->createProductionPlan([
+            'code' => 'AUTO-CODE',
+            'customer' => 'AUTO-CUST',
+            'is_closed' => false,
+        ]);
+
+        // Create 15 more plans to trigger pagination
+        for ($i = 0; $i < 15; $i++) {
+            $this->createProductionPlan([
+                'code' => 'AUTO-CODE',
+                'customer' => 'AUTO-CUST',
+                'is_closed' => false,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans'));
+        $response->assertOk();
+        $response->assertSee('AUTO-CODE');
+        $response->assertSee('AUTO-CUST');
+
+        // 12. Kombinasi filter bekerja & 13. Pagination mempertahankan filter
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', [
+            'code' => 'AUTO-CODE',
+            'customer' => 'AUTO-CUST',
+            'status' => 'active',
+        ]));
+        $response->assertOk();
+        $response->assertSee('AUTO-CODE');
+        $response->assertSee('plans_page=2');
+        $response->assertSee('status=active');
+        $response->assertSee('code=AUTO-CODE');
+        $response->assertSee('customer=AUTO-CUST');
+
+        // 14. ?tab=orders membuka tab Dokumen Perintah Cetak
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['tab' => 'orders']));
+        $response->assertOk();
+        $response->assertSee('Dokumen Perintah Cetak (Print Orders)');
+        // Ensure Tab 2 table headers are visible
+        $response->assertSee('Total Qty');
+
+        // 15. Print Order existing tetap menggunakan state machine yang sama (DRAFT, ISSUED, CANCELLED)
+        // 16. Existing Print Order workflow tidak rusak
+        $plan = $this->createProductionPlan();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260819-0010',
+            'scheduled_date' => '2026-08-19',
+            'status' => 'DRAFT',
+            'created_by' => $user->id,
+        ]);
+        $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 50,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $this->assertSame('DRAFT', $order->status);
+
+        // Transition to ISSUED
+        $this->actingAs($user)->post(route('lost-wax.print-orders.update-status', $order), ['status' => 'ISSUED']);
+        $this->assertSame('ISSUED', $order->fresh()->status);
+
+        // Transition to CANCELLED
+        $this->actingAs($user)->post(route('lost-wax.print-orders.update-status', $order), ['status' => 'CANCELLED']);
+        $this->assertSame('CANCELLED', $order->fresh()->status);
+    }
 }

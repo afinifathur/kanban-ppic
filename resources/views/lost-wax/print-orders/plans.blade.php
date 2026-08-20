@@ -27,7 +27,7 @@
             <!-- Tab 1: Rencana Cetak -->
             <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-4">
                 <!-- Filters -->
-                <form method="GET" action="{{ route('lost-wax.print-orders.plans') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <form method="GET" action="{{ route('lost-wax.print-orders.plans') }}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <input type="hidden" name="tab" value="plans">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tanggal Rencana</label>
@@ -35,11 +35,29 @@
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kode Cust</label>
-                        <input type="text" name="code" value="{{ request('code') }}" placeholder="Contoh: AB01" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                        <input type="text" name="code" list="code-list" value="{{ request('code') }}" placeholder="Contoh: AB01" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                        <datalist id="code-list">
+                            @foreach($uniqueCodes as $uCode)
+                                <option value="{{ $uCode }}"></option>
+                            @endforeach
+                        </datalist>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Customer</label>
-                        <input type="text" name="customer" value="{{ request('customer') }}" placeholder="Contoh: A06" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                        <input type="text" name="customer" list="customer-list" value="{{ request('customer') }}" placeholder="Contoh: A06" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                        <datalist id="customer-list">
+                            @foreach($uniqueCustomers as $uCust)
+                                <option value="{{ $uCust }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
+                        <select name="status" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                            <option value="active" {{ request('status', 'active') === 'active' ? 'selected' : '' }}>Aktif</option>
+                            <option value="closed" {{ request('status') === 'closed' ? 'selected' : '' }}>Closed</option>
+                            <option value="all" {{ request('status') === 'all' ? 'selected' : '' }}>Semua</option>
+                        </select>
                     </div>
                     <div class="flex gap-2">
                         <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center gap-1.5">
@@ -68,13 +86,18 @@
                                     <th class="border border-slate-200 p-3 text-center">Sisa</th>
                                     <th class="border border-slate-200 p-3 text-center">Line</th>
                                     <th class="border border-slate-200 p-3 text-center">Tanggal Rencana</th>
+                                    <th class="border border-slate-200 p-3 text-center">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($plans as $plan)
                                     <tr class="hover:bg-slate-50/50 transition-colors">
                                         <td class="border border-slate-200 p-3 text-center">
-                                            <input type="checkbox" name="plan_ids[]" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                            @if(!$plan->is_closed)
+                                                <input type="checkbox" name="plan_ids[]" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                            @else
+                                                <span class="text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded border border-red-200">Closed</span>
+                                            @endif
                                         </td>
                                         <td class="border border-slate-200 p-3 font-mono text-xs font-bold text-slate-700">{{ $plan->code }}</td>
                                         <td class="border border-slate-200 p-3">
@@ -104,6 +127,27 @@
                                         <td class="border border-slate-200 p-3 text-center font-bold text-slate-500 text-base">{{ $plan->line_number }}</td>
                                         <td class="border border-slate-200 p-3 text-center text-xs text-slate-400">
                                             {{ $plan->created_at->format('d/m/Y') }}
+                                        </td>
+                                        <td class="border border-slate-200 p-3 text-center">
+                                            @if(!$plan->is_closed)
+                                                <form action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="inline" onsubmit="return confirm('Tutup rencana ini dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.')">
+                                                    @csrf
+                                                    <input type="hidden" name="action" value="close_plan">
+                                                    <input type="hidden" name="production_plan_id" value="{{ $plan->id }}">
+                                                    <button type="submit" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1 px-2 rounded text-xs border border-red-200 transition-all flex items-center gap-1 mx-auto" title="Tutup Rencana">
+                                                        <i class="fas fa-times-circle"></i> Tutup
+                                                    </button>
+                                                </form>
+                                            @else
+                                                <form action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="inline" onsubmit="return confirm('Buka kembali rencana produksi ini?')">
+                                                    @csrf
+                                                    <input type="hidden" name="action" value="open_plan">
+                                                    <input type="hidden" name="production_plan_id" value="{{ $plan->id }}">
+                                                    <button type="submit" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-1 px-2 rounded text-xs border border-emerald-200 transition-all flex items-center gap-1 mx-auto" title="Buka Rencana">
+                                                        <i class="fas fa-check-circle"></i> Buka
+                                                    </button>
+                                                </form>
+                                            @endif
                                         </td>
                                     </tr>
                                 @empty
@@ -163,6 +207,7 @@
                                 <th class="border border-slate-200 p-3 text-left">No. Perintah Cetak</th>
                                 <th class="border border-slate-200 p-3 text-center">Tanggal Produksi</th>
                                 <th class="border border-slate-200 p-3 text-center">Jumlah Item</th>
+                                <th class="border border-slate-200 p-3 text-center">Total Qty</th>
                                 <th class="border border-slate-200 p-3 text-left">Pembuat</th>
                                 <th class="border border-slate-200 p-3 text-center">Status</th>
                                 <th class="border border-slate-200 p-3 text-center">Aksi</th>
@@ -181,6 +226,9 @@
                                     </td>
                                     <td class="border border-slate-200 p-3 text-center font-bold text-slate-600">
                                         {{ $order->lines->count() }} item
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold text-slate-700">
+                                        {{ number_format($order->lines->sum('qty_ordered')) }}
                                     </td>
                                     <td class="border border-slate-200 p-3 text-slate-600">
                                         {{ optional($order->creator)->name ?? '-' }}

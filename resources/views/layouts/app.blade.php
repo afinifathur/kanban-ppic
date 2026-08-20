@@ -44,9 +44,9 @@
             }
         });
 
-        function toggleInputMenu() {
-            const menu = document.getElementById('inputMenu');
-            const icon = document.getElementById('inputMenuIcon');
+        function toggleCorPasirMenu() {
+            const menu = document.getElementById('corPasirMenu');
+            const icon = document.getElementById('corPasirMenuIcon');
             menu.classList.toggle('hidden');
             icon.classList.toggle('rotate-90');
         }
@@ -178,6 +178,10 @@
 
         <nav class="flex-1 overflow-y-auto py-4">
             <ul class="space-y-1">
+                <!-- 1. DASHBOARD -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">Dashboard</span>
+                </li>
                 <li>
                     <a href="{{ route('dashboard') }}"
                         class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('dashboard') ? 'bg-blue-600 text-white' : 'text-slate-300' }}"
@@ -186,7 +190,6 @@
                         <span class="text-sm sidebar-text ml-2">Dashboard</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="{{ route('dashboard.defects') }}"
                         class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('dashboard.defects') ? 'bg-blue-600 text-white border-l-4 border-red-400' : 'text-slate-300' }}"
@@ -196,19 +199,10 @@
                     </a>
                 </li>
 
+                <!-- 2. PLANNING -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">Kanban</span>
+                    <span class="sidebar-text">Planning</span>
                 </li>
-
-                <li>
-                    <a href="{{ route('kanban.index', 'rencana_cor') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->is('kanban*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}"
-                        title="Kanban Board">
-                        <i class="fas fa-columns w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Kanban Board</span>
-                    </a>
-                </li>
-
                 <li>
                     <a href="{{ route('plan.index') }}"
                         class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('plan.index') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}"
@@ -218,19 +212,36 @@
                     </a>
                 </li>
 
+                <!-- 3. PRODUKSI -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">Produksi</span>
+                </li>
+
+                <!-- 3A. COR PASIR -->
+                @php
+                    $isCorPasirActive = request()->is('kanban*') || (request()->is('input*') && request()->query('source') !== 'lost-wax');
+                @endphp
                 <li>
-                    <button onclick="toggleInputMenu()"
-                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('input*') ? 'bg-slate-800/80 text-blue-400 border-l-4 border-blue-500 font-bold' : '' }}"
-                        title="Input Departments">
-                        <i class="fas fa-sign-in-alt w-6 shrink-0 text-center mr-2 {{ request()->is('input*') ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
-                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ request()->is('input*') ? 'text-blue-400' : 'text-slate-500' }}">Input Departments</span>
-                        <i id="inputMenuIcon"
-                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ request()->is('input*') ? 'rotate-90 text-blue-400' : '' }}"></i>
+                    <button onclick="toggleCorPasirMenu()"
+                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ $isCorPasirActive ? 'bg-slate-800/80 text-blue-400 border-l-4 border-blue-500 font-bold' : '' }}"
+                        title="Cor Pasir">
+                        <i class="fas fa-cubes w-6 shrink-0 text-center mr-2 {{ $isCorPasirActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
+                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ $isCorPasirActive ? 'text-blue-400' : 'text-slate-555' }}">Cor Pasir</span>
+                        <i id="corPasirMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ $isCorPasirActive ? 'rotate-90 text-blue-400' : '' }}"></i>
                     </button>
-                    <ul id="inputMenu"
-                        class="{{ request()->is('input*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                    <ul id="corPasirMenu"
+                        class="{{ $isCorPasirActive ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        <li>
+                            <a href="{{ route('kanban.index', 'rencana_cor') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('kanban/rencana_cor') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                title="Rencana Cor">
+                                <i class="fas fa-columns w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Rencana Cor</span>
+                            </a>
+                        </li>
                         @php
-                            $deptIcons = [
+                            $corPasirDepts = [
                                 'cor' => 'fa-fire',
                                 'netto' => 'fa-cut',
                                 'bubut_od' => 'fa-sync-alt',
@@ -239,52 +250,125 @@
                                 'finish' => 'fa-clipboard-check'
                             ];
                         @endphp
-                        @foreach($deptIcons as $dept => $icon)
+                        @foreach($corPasirDepts as $dept => $icon)
                             <li>
                                 <a href="{{ route('input.index', $dept) }}"
-                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('input/' . $dept) ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
-                                    title="Input {{ ucfirst(str_replace('_', ' ', $dept)) }}">
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ (request()->is('input/' . $dept) && request()->query('source') !== 'lost-wax') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                    title="{{ $dept === 'cor' ? 'Cor Pasir' : ucfirst(str_replace('_', ' ', $dept)) }}">
                                     <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                    <span class="text-sm sidebar-text">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
+                                    <span class="text-sm sidebar-text">{{ $dept === 'cor' ? 'Cor Pasir' : ucfirst(str_replace('_', ' ', $dept)) }}</span>
                                 </a>
                             </li>
                         @endforeach
                     </ul>
                 </li>
 
-                <!-- Input Kerusakan -->
+                <!-- 3B. LOST WAX -->
+                @php
+                    $isLostWaxActive = request()->is('lost-wax*') || (request()->is('input*') && request()->query('source') === 'lost-wax');
+                    $isLostWaxSidebarOpen = $isLostWaxActive && !request()->routeIs('lost-wax.production-status');
+                @endphp
                 <li>
-                    <button onclick="toggleDefectMenu()"
-                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('defects*') ? 'bg-slate-800/80 text-red-400 border-l-4 border-red-500 font-bold' : '' }}"
-                        title="Input Kerusakan">
-                        <i class="fas fa-exclamation-circle w-6 shrink-0 text-center mr-2 {{ request()->is('defects*') ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
-                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ request()->is('defects*') ? 'text-red-400' : 'text-slate-500' }}">Input Kerusakan</span>
-                        <i id="defectMenuIcon"
-                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ request()->is('defects*') ? 'rotate-90 text-red-400' : '' }}"></i>
+                    <button onclick="toggleLostWaxMenu()"
+                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ $isLostWaxSidebarOpen ? 'bg-slate-800/80 text-amber-400 border-l-4 border-amber-400 font-bold' : '' }}"
+                        title="Lost Wax">
+                        <i class="fas fa-layer-group w-6 shrink-0 text-center mr-2 {{ $isLostWaxSidebarOpen ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
+                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ $isLostWaxSidebarOpen ? 'text-amber-400' : 'text-slate-555' }}">Lost Wax</span>
+                        <i id="lostWaxMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ $isLostWaxSidebarOpen ? 'rotate-90 text-amber-400' : '' }}"></i>
                     </button>
-                    <ul id="defectMenu"
-                        class="{{ request()->is('defects*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
-                        @foreach($deptIcons as $dept => $icon)
-                            @if($dept !== 'cor') {{-- Cor usually doesn't have defects entry in this flow --}}
-                                <li>
-                                    <a href="{{ route('defects.index', $dept) }}"
-                                        class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('defects/' . $dept) ? 'text-white font-medium border-l-2 border-red-500' : 'text-slate-300' }}"
-                                        title="Kerusakan {{ ucfirst(str_replace('_', ' ', $dept)) }}">
-                                        <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                        <span class="text-sm sidebar-text">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
-                                    </a>
-                                </li>
-                            @endif
+                    <ul id="lostWaxMenu"
+                        class="{{ $isLostWaxSidebarOpen ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        <li>
+                            <a href="{{ route('lost-wax.print-orders.plans') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.print-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Perintah Cetak">
+                                <i class="fas fa-print w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Perintah Cetak</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.outcomes.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.outcomes.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Hasil Cetak">
+                                <i class="fas fa-edit w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Hasil Cetak</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.assemblies.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.assemblies.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Perintah Rangkai">
+                                <i class="fas fa-link w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Perintah Rangkai</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.trees.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.trees.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Rangkaian / Traveler">
+                                <i class="fas fa-sitemap w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Rangkaian / Traveler</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.scan.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Scan Lapisan">
+                                <i class="fas fa-qrcode w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Scan Lapisan</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.scan-oven.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan-oven.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Scan Oven">
+                                <i class="fas fa-fire-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Scan Oven</span>
+                            </a>
+                        </li>
+                        @php
+                            $lostWaxDepts = [
+                                'cor' => 'fa-fire',
+                                'netto' => 'fa-cut',
+                                'bubut_od' => 'fa-sync-alt',
+                                'bubut_cnc' => 'fa-microchip',
+                                'finish' => 'fa-clipboard-check'
+                            ];
+                        @endphp
+                        @foreach($lostWaxDepts as $dept => $icon)
+                            <li>
+                                <a href="{{ route('input.index', ['dept' => $dept, 'source' => 'lost-wax']) }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ (request()->is('input/' . $dept) && request()->query('source') === 'lost-wax') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                    title="{{ $dept === 'cor' ? 'Cor Lost Wax' : ucfirst(str_replace('_', ' ', $dept)) }}">
+                                    <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                    <span class="text-sm sidebar-text">{{ $dept === 'cor' ? 'Cor Lost Wax' : ucfirst(str_replace('_', ' ', $dept)) }}</span>
+                                </a>
+                            </li>
                         @endforeach
                     </ul>
                 </li>
 
+                <!-- 4. MONITORING -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">WIP (Work In Process)</span>
+                    <span class="sidebar-text">Monitoring</span>
+                </li>
+                <li>
+                    <a href="{{ route('lost-wax.production-status') }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'bg-blue-600 text-white' : 'text-slate-300' }}"
+                        title="Production Status">
+                        <i class="fas fa-table w-6 shrink-0 text-center"></i>
+                        <span class="text-sm sidebar-text ml-2">Production Status</span>
+                    </a>
+                </li>
+
+                <!-- 5. WIP -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">WIP</span>
                 </li>
                 <li>
                     <a href="{{ route('wip.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->is('wip') || request()->is('wip/*') ? 'bg-blue-600 text-white border-l-4 border-emerald-400' : 'text-slate-300' }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ (request()->is('wip') || request()->is('wip/*')) ? 'bg-blue-600 text-white border-l-4 border-emerald-400' : 'text-slate-300' }}"
                         title="Input Harian (WIP)">
                         <i class="fas fa-layer-group w-6 shrink-0 text-center"></i>
                         <span class="text-sm sidebar-text ml-2">Input Harian (WIP)</span>
@@ -298,99 +382,41 @@
                         <span class="text-sm sidebar-text ml-2">Report WIP</span>
                     </a>
                 </li>
-
-                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">Lost Wax</span>
-                </li>
+                <!-- Input Kerusakan -->
                 <li>
-                    <button onclick="toggleLostWaxMenu()"
-                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('lost-wax*') ? 'bg-slate-800/80 text-amber-400 border-l-4 border-amber-400 font-bold' : '' }}"
-                        title="Lost Wax">
-                        <i class="fas fa-cube w-6 shrink-0 text-center mr-2 {{ request()->is('lost-wax*') ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
-                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ request()->is('lost-wax*') ? 'text-amber-400' : 'text-slate-555' }}">Lost Wax</span>
-                        <i id="lostWaxMenuIcon"
-                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ request()->is('lost-wax*') ? 'rotate-90 text-amber-400' : '' }}"></i>
+                    <button onclick="toggleDefectMenu()"
+                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('defects*') ? 'bg-slate-800/80 text-red-400 border-l-4 border-red-500 font-bold' : '' }}"
+                        title="Input Kerusakan">
+                        <i class="fas fa-exclamation-circle w-6 shrink-0 text-center mr-2 {{ request()->is('defects*') ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
+                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ request()->is('defects*') ? 'text-red-400' : 'text-slate-555' }}">Input Kerusakan</span>
+                        <i id="defectMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ request()->is('defects*') ? 'rotate-90 text-red-400' : '' }}"></i>
                     </button>
-                    <ul id="lostWaxMenu"
-                        class="{{ request()->is('lost-wax*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
-                        <li>
-                            <a href="{{ route('lost-wax.production-status') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Production Status">
-                                <i class="fas fa-table w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Production Status</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.dashboard') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.dashboard') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Dashboard">
-                                <i class="fas fa-chart-bar w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Dashboard</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.work-orders.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.work-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Legacy Work Order">
-                                <i class="fas fa-industry w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Legacy Work Order</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.trees.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.trees.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Tree / Traveler">
-                                <i class="fas fa-sitemap w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Tree / Traveler</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.scan.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Scan Lapisan">
-                                <i class="fas fa-qrcode w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Scan Lapisan</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.scan-oven.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan-oven.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Scan Oven">
-                                <i class="fas fa-fire w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Scan Oven</span>
-                            </a>
-                        </li>
-                        <li class="sidebar-header pl-10 pt-2 pb-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            <span class="sidebar-text">Planning / Production</span>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.print-orders.plans') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.print-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Perintah Cetak">
-                                <i class="fas fa-print w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Perintah Cetak</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.outcomes.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.outcomes.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Hasil Cetak">
-                                <i class="fas fa-edit w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Hasil Cetak</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('lost-wax.assemblies.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.assemblies.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Lost Wax - Perintah Rangkai">
-                                <i class="fas fa-link w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Perintah Rangkai</span>
-                            </a>
-                        </li>
+                    <ul id="defectMenu"
+                        class="{{ request()->is('defects*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        @php
+                            $defectPasirDepts = [
+                                'netto' => 'fa-cut',
+                                'bubut_od' => 'fa-sync-alt',
+                                'bubut_cnc' => 'fa-microchip',
+                                'bor' => 'fa-screwdriver',
+                                'finish' => 'fa-clipboard-check'
+                            ];
+                        @endphp
+                        @foreach($defectPasirDepts as $dept => $icon)
+                            <li>
+                                <a href="{{ route('defects.index', $dept) }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('defects/' . $dept) ? 'text-white font-medium border-l-2 border-red-500' : 'text-slate-300' }}"
+                                    title="Kerusakan {{ ucfirst(str_replace('_', ' ', $dept)) }}">
+                                    <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                    <span class="text-sm sidebar-text">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
+                                </a>
+                            </li>
+                        @endforeach
                     </ul>
                 </li>
 
+                <!-- 6. REPORT -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Report</span>
                 </li>
@@ -419,6 +445,10 @@
                     </a>
                 </li>
 
+                <!-- 7. SETTING -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">Setting</span>
+                </li>
                 <li>
                     <button onclick="toggleSettingsMenu()"
                         class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('settings*') ? 'bg-slate-800/80 text-blue-400 border-l-4 border-blue-500 font-bold' : '' }}"
@@ -469,10 +499,10 @@
                         return false;
                     }
 
-                    function toggleInputMenu() {
-                        if (handleCollapsedClick('inputMenu', 'inputMenuIcon')) return;
-                        const menu = document.getElementById('inputMenu');
-                        const icon = document.getElementById('inputMenuIcon');
+                    function toggleCorPasirMenu() {
+                        if (handleCollapsedClick('corPasirMenu', 'corPasirMenuIcon')) return;
+                        const menu = document.getElementById('corPasirMenu');
+                        const icon = document.getElementById('corPasirMenuIcon');
                         menu.classList.toggle('hidden');
                         icon.classList.toggle('rotate-90');
                     }
