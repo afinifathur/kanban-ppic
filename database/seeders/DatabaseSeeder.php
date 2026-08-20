@@ -82,7 +82,13 @@ class DatabaseSeeder extends Seeder
         $u5->assignRole($spvRole);
 
         $this->call([
-            ProductionDummySeeder::class,
+            CustomerSeeder::class,
         ]);
+
+        if (app()->environment('local', 'testing', 'dev')) {
+            $this->call([
+                ProductionDummySeeder::class,
+            ]);
+        }
     }
 }
