@@ -18,14 +18,6 @@ Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// Secure Stateless LAN Print Agent API Route Group
-Route::prefix('api/print-jobs')->middleware(\App\Http\Middleware\VerifyPrintAgentToken::class)->group(function () {
-    Route::post('/recover', [\App\Http\Controllers\Api\PrintJobApiController::class, 'recover']);
-    Route::post('/claim', [\App\Http\Controllers\Api\PrintJobApiController::class, 'claim']);
-    Route::post('/{id}/complete', [\App\Http\Controllers\Api\PrintJobApiController::class, 'complete']);
-    Route::post('/{id}/failed', [\App\Http\Controllers\Api\PrintJobApiController::class, 'failed']);
-});
-
 Route::middleware(['auth'])->group(function () {
     Route::get('/', function () {
         return redirect()->route('dashboard');
