@@ -1,0 +1,7 @@
+{
+  "server_url": "http://127.0.0.1:8000/api",
+  "machine_id": "KANBAN-PC-01",
+  "printer_name": "TSC TE200",
+  "poll_interval": 2,
+  "api_token": "peroniks_print_token_2026"
+}

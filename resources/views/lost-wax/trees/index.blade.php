@@ -63,8 +63,13 @@
                                 class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-all">
                                 <i class="fas fa-print"></i> Cetak Terpilih (<span id="checked-count">0</span> Rangkaian)
                             </button>
+                            <!-- Tombol Bulk Print Thermal Terpilih -->
+                            <button type="button" id="bulk-print-thermal-btn" disabled 
+                                class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-all">
+                                <i class="fas fa-barcode"></i> Cetak Thermal Terpilih
+                            </button>
                             <!-- Tombol Cetak Semua Halaman Ini -->
-                            <a href="{{ route('lost-wax.trees.traveler', ['tree' => $trees->first()->id, 'ids' => $trees->pluck('id')->implode(',')]) }}" target="_blank"
+                            <a href="{{ route('lost-wax.trees.traveler', ['tree' => $trees->first()->id, 'ids' => $trees->pluck('id')->implode(',')]) }}?auto_print=1" target="_blank"
                                 class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-colors">
                                 <i class="fas fa-print"></i> Cetak Halaman Ini ({{ $trees->count() }} Rangkaian)
                             </a>
@@ -137,13 +142,18 @@
                                 </td>
                                 <td class="p-4 text-center">
                                     <div class="flex items-center justify-center gap-1.5">
-                                        <a href="{{ route('lost-wax.trees.traveler', $tree) }}" target="_blank"
-                                            class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2.5 rounded transition-colors inline-flex items-center gap-1"
-                                            title="Cetak Traveler">
+                                        <a href="{{ route('lost-wax.trees.traveler', $tree) }}?auto_print=1" target="_blank"
+                                            class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors inline-flex items-center gap-1"
+                                            title="Cetak Traveler (Epson A4)">
                                             <i class="fas fa-print"></i> Cetak
                                         </a>
+                                        <button onclick="printThermalSingle({{ $tree->id }})"
+                                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors inline-flex items-center gap-1"
+                                            title="Cetak Thermal 90x50">
+                                            <i class="fas fa-barcode"></i> Thermal
+                                        </button>
                                         <a href="{{ route('lost-wax.trees.show', $tree) }}" 
-                                            class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1 px-2.5 rounded transition-colors"
+                                            class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1 px-2 rounded transition-colors"
                                             title="Lihat Detail">
                                             Detail
                                         </a>
@@ -178,6 +188,7 @@
             const selectAllCheckbox = document.getElementById('select-all');
             const treeCheckboxes = document.querySelectorAll('.tree-checkbox');
             const bulkPrintBtn = document.getElementById('bulk-print-btn');
+            const bulkPrintThermalBtn = document.getElementById('bulk-print-thermal-btn');
             const checkedCountSpan = document.getElementById('checked-count');
 
             function updateBulkPrintButton() {
@@ -192,10 +203,22 @@
                     bulkPrintBtn.disabled = false;
                     bulkPrintBtn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
                     bulkPrintBtn.classList.add('bg-amber-600', 'hover:bg-amber-700', 'text-white', 'cursor-pointer');
+
+                    if (bulkPrintThermalBtn) {
+                        bulkPrintThermalBtn.disabled = false;
+                        bulkPrintThermalBtn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                        bulkPrintThermalBtn.classList.add('bg-blue-600', 'hover:bg-blue-700', 'text-white', 'cursor-pointer');
+                    }
                 } else {
                     bulkPrintBtn.disabled = true;
                     bulkPrintBtn.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white', 'cursor-pointer');
                     bulkPrintBtn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+
+                    if (bulkPrintThermalBtn) {
+                        bulkPrintThermalBtn.disabled = true;
+                        bulkPrintThermalBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'text-white', 'cursor-pointer');
+                        bulkPrintThermalBtn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                    }
                 }
             }
 
@@ -226,11 +249,97 @@
                         // existing traveler print route format: /lost-wax/trees/{first_id}/traveler?ids=id1,id2...
                         const firstId = checkedIds[0];
                         const idsQuery = checkedIds.join(',');
-                        const printUrl = `{{ route('lost-wax.trees.traveler', ':firstId') }}`.replace(':firstId', firstId) + '?ids=' + idsQuery;
+                        const printUrl = `{{ route('lost-wax.trees.traveler', ':firstId') }}`.replace(':firstId', firstId) + '?ids=' + idsQuery + '&auto_print=1';
                         window.open(printUrl, '_blank');
                     }
                 });
             }
+
+            if (bulkPrintThermalBtn) {
+                bulkPrintThermalBtn.addEventListener('click', function() {
+                    const checkedIds = Array.from(treeCheckboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+
+                    if (checkedIds.length > 0) {
+                        triggerThermalPrint(checkedIds.join(','));
+                    }
+                });
+            }
         });
+
+        function printThermalSingle(id) {
+            triggerThermalPrint(id);
+        }
+
+        function triggerThermalPrint(idsString) {
+            const count = idsString.split(',').length;
+            Swal.fire({
+                title: 'Konfirmasi Cetak Thermal',
+                text: 'Kirim ' + count + ' rangkaian ke antrean printer thermal?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Ya, Cetak!',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Memproses...',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    axios.post('{{ route("lost-wax.trees.print-thermal") }}', {
+                        ids: idsString,
+                        _token: '{{ csrf_token() }}'
+                    })
+                    .then(function (response) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil',
+                            text: response.data.message,
+                            confirmButtonColor: '#3085d6'
+                        }).then(() => {
+                            // Uncheck checkboxes and reset buttons
+                            const selectAllCheckbox = document.getElementById('select-all');
+                            const treeCheckboxes = document.querySelectorAll('.tree-checkbox');
+                            if (selectAllCheckbox) selectAllCheckbox.checked = false;
+                            treeCheckboxes.forEach(cb => cb.checked = false);
+                            
+                            // Manually dispatch change event or call updater
+                            const bulkPrintBtn = document.getElementById('bulk-print-btn');
+                            const bulkPrintThermalBtn = document.getElementById('bulk-print-thermal-btn');
+                            const checkedCountSpan = document.getElementById('checked-count');
+                            checkedCountSpan.textContent = '0';
+                            
+                            bulkPrintBtn.disabled = true;
+                            bulkPrintBtn.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white', 'cursor-pointer');
+                            bulkPrintBtn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+
+                            if (bulkPrintThermalBtn) {
+                                bulkPrintThermalBtn.disabled = true;
+                                bulkPrintThermalBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'text-white', 'cursor-pointer');
+                                bulkPrintThermalBtn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                            }
+                        });
+                    })
+                    .catch(function (error) {
+                        const errMsg = error.response && error.response.data && error.response.data.message 
+                            ? error.response.data.message 
+                            : 'Gagal mengirim antrean cetak.';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal',
+                            text: errMsg,
+                            confirmButtonColor: '#3085d6'
+                        });
+                    });
+                }
+            });
+        }
     </script>
 @endsection

@@ -210,6 +210,57 @@ class TreeController extends Controller
         return view('lost-wax.trees.traveler', compact('tree'));
     }
 
+    public function printThermal(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|string',
+        ]);
+
+        $ids = array_filter(explode(',', $request->ids));
+        if (empty($ids)) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada Rangkaian terpilih.'], 400);
+        }
+
+        // 10. RBAC HARUS DILAKUKAN SEBELUM CREATE PRINT JOB
+        $trees = [];
+        foreach ($ids as $id) {
+            $tree = \App\Models\LostWaxTree::with([
+                'workOrder.itemReference',
+                'plan',
+                'printOrderLine.printOrder',
+                'printOrderLine.productionPlan',
+            ])->find($id);
+
+            if (! $tree) {
+                return response()->json(['success' => false, 'message' => "Rangkaian dengan ID {$id} tidak ditemukan."], 404);
+            }
+
+            $this->authorizeTree($tree);
+            $trees[] = $tree;
+        }
+
+        $printerName = config('lost_wax.printer_name', 'TSC TE200');
+        $tsplRenderer = new \App\Services\Barcode\Renderers\TsplRenderer;
+        $printJobService = new \App\Services\Barcode\PrintJobService;
+
+        foreach ($trees as $tree) {
+            $payloadTspl = $tsplRenderer->render($tree);
+            $printJobService->createTscJob(
+                $payloadTspl,
+                $printerName,
+                'TRAVELER_LABEL_90X50',
+                1
+            );
+        }
+
+        $count = count($trees);
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$count} Rangkaian masuk antrean printer thermal.",
+        ]);
+    }
+
     public function barcode(LostWaxTree $tree)
     {
         $this->authorizeTree($tree);

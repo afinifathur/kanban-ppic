@@ -153,20 +153,99 @@
         @endforeach
     </div>
 
-    <div class="no-print fixed bottom-4 left-1/2 -translate-x-1/2 flex gap-3">
-        <button onclick="window.print()" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold py-2 px-6 rounded-lg shadow">
-            <i class="fas fa-print"></i> Print
+    <div class="no-print fixed bottom-4 left-1/2 -translate-x-1/2 flex gap-3 z-50">
+        <button onclick="window.print()" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg flex items-center gap-1.5 transition-colors">
+            <i class="fas fa-print"></i> Cetak Epson A4
         </button>
-        <button onclick="window.close()" class="bg-slate-600 hover:bg-slate-700 text-white text-sm font-bold py-2 px-6 rounded-lg shadow">
+        <button onclick="printThermal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg flex items-center gap-1.5 transition-colors">
+            <i class="fas fa-barcode"></i> Cetak Thermal 90×50
+        </button>
+        <button onclick="window.close()" class="bg-slate-600 hover:bg-slate-700 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg transition-colors">
             Tutup
         </button>
     </div>
 
+    <!-- Assets -->
     <link rel="stylesheet" href="{{ asset('css/all.min.css') }}">
+    <script src="{{ asset('js/axios.min.js') }}"></script>
+    <script src="{{ asset('js/sweetalert2.all.min.js') }}"></script>
+
     <script>
+        // Set CSRF token for Axios from cookie or meta tag if available
+        const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        if (tokenMeta && window.axios) {
+            window.axios.defaults.headers.common['X-CSRF-TOKEN'] = tokenMeta.getAttribute('content');
+        }
+
         window.onload = function () {
-            window.print();
+            // Auto print for Epson if requested via query parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('auto_print') === '1') {
+                window.print();
+            }
         };
+
+        function printThermal() {
+            const ids = [ @foreach($treesList as $t) {{ $t->id }}, @endforeach ];
+            
+            if (ids.length === 0) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Tidak ada rangkaian untuk dicetak.',
+                    confirmButtonColor: '#3085d6'
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'Konfirmasi Cetak Thermal',
+                text: 'Kirim ' + ids.length + ' rangkaian ke antrean printer thermal?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Ya, Cetak!',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Memproses...',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Laravel session auth includes CSRF validation. Let's send POST request.
+                    axios.post('{{ route("lost-wax.trees.print-thermal") }}', {
+                        ids: ids.join(','),
+                        _token: '{{ csrf_token() }}'
+                    })
+                    .then(function (response) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil',
+                            text: response.data.message,
+                            confirmButtonColor: '#3085d6'
+                        }).then(() => {
+                            window.close();
+                        });
+                    })
+                    .catch(function (error) {
+                        const errMsg = error.response && error.response.data && error.response.data.message 
+                            ? error.response.data.message 
+                            : 'Gagal mengirim antrean cetak.';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal',
+                            text: errMsg,
+                            confirmButtonColor: '#3085d6'
+                        });
+                    });
+                }
+            });
+        }
     </script>
 </body>
 </html>
