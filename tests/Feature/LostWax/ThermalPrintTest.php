@@ -325,10 +325,18 @@ class ThermalPrintTest extends TestCase
         $tspl = $job->payload_tspl;
         $this->assertStringContainsString('SIZE 50 mm, 90 mm', $tspl);
         $this->assertStringContainsString('GAP 3 mm, 0', $tspl);
-        $this->assertStringContainsString('BARCODE 60,410,"128",160,0,0,2,4,"260821001"', $tspl);
-        $this->assertStringContainsString('CUST: AB01', $tspl);
+        $this->assertStringContainsString('BARCODE 60,250,"128",140,0,0,2,4,"260821001"', $tspl);
+        $this->assertStringContainsString('FORM BARCODE LAPISAN', $tspl);
+        $this->assertStringContainsString('KODE PRODUKSI : ST-001', $tspl);
+        $this->assertStringContainsString('KODE ITEM     : AB01', $tspl);
+        $this->assertStringContainsString('NAMA ITEM     :', $tspl);
+        $this->assertStringContainsString('SS304 Flange 3 Inch', $tspl);
+        $this->assertStringContainsString('KODE CUST     : PT. XYZ INDONESIA', $tspl);
         $this->assertStringContainsString('15 PCS', $tspl);
-        $this->assertStringContainsString('PT. XYZ INDONESIA', $tspl);
+        $this->assertStringContainsString('TANGGAL PRINT : '.now()->format('d-m-Y'), $tspl);
+        $this->assertStringContainsString('JAM PRINT     : '.now()->format('H:i'), $tspl);
+        $this->assertStringContainsString('KODE RAK      : __________', $tspl);
+        $this->assertStringContainsString('KETERANGAN    : __________', $tspl);
     }
 
     /**

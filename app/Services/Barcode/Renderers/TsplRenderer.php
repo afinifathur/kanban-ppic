@@ -12,23 +12,23 @@ class TsplRenderer
 
     public function render(\App\Models\LostWaxTree $tree): string
     {
-        $productionDate = $tree->production_date ? $tree->production_date->format('d-m-Y') : '-';
-        $wave = $tree->plan?->wave_number ? str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-';
-        $custCode = $this->sanitize($tree->getSourceCode() ?? '-');
-        $qty = $tree->quantity;
-        $customer = $tree->getSourceCustomer() ?? '-';
-        $product = $tree->getSourceProduct() ?? '-';
-        $itemCode = $this->sanitize($tree->getSourceItemCode() ?? '-');
-        $aisi = $this->sanitize($tree->getSourceAisi() ?? '-');
-        $size = $this->sanitize($tree->getSourceSize() ?? '-');
-        $stage = $this->sanitize($tree->current_stage_label);
-        $treeNumber = str_pad((string) $tree->tree_number, 3, '0', STR_PAD_LEFT);
-        $barcode = $this->sanitize($tree->barcode);
-        $printOrderNumber = $this->sanitize($tree->getSourcePrintOrderNumber() ?? '-');
+        $productionCode = $tree->lost_wax_print_order_line_id && $tree->printOrderLine?->productionPlan
+            ? ($tree->printOrderLine->productionPlan->code ?? '-')
+            : ($tree->getSourceCode() ?? '-');
+        $productionCode = $this->sanitize($productionCode);
 
-        // Customer & Product name wrapping (limit to 30 characters per line using Font 2)
-        $customerLines = $this->wrapText($customer, 30, 2);
-        $productLines = $this->wrapText($product, 30, 3);
+        $itemCode = $this->sanitize($tree->getSourceItemCode() ?? '-');
+        $itemName = $tree->getSourceProduct() ?? '-';
+        $aisi = $this->sanitize($tree->getSourceAisi() ?? '-');
+        $custCode = $this->sanitize($tree->getSourceCustomer() ?? '-');
+        $barcode = $this->sanitize($tree->barcode);
+        $qty = $tree->quantity;
+
+        $printDate = now()->format('d-m-Y');
+        $printTime = now()->format('H:i');
+
+        // Wrap item name: 30 characters per line using Font 2
+        $productNameLines = $this->wrapText($itemName, 30, 2);
 
         $cmds = [];
         $cmds[] = 'SIZE 50 mm, 90 mm';
@@ -40,54 +40,35 @@ class TsplRenderer
         $cmds[] = 'SET TEAR ON';
 
         // Y=20: Title Header
-        $cmds[] = 'TEXT 200,20,"'.self::FONT_TITLE.'",0,1,1,2,"LOST WAX TRAVELER"';
+        $cmds[] = 'TEXT 200,20,"'.self::FONT_TITLE.'",0,1,1,2,"FORM BARCODE LAPISAN"';
         $cmds[] = 'BAR 10,50,380,3';
 
-        // Y=65: Tgl & Wave
-        $cmds[] = 'TEXT 10,65,"'.self::FONT_NORMAL."\",0,1,1,\"TGL: $productionDate\"";
-        $cmds[] = 'TEXT 390,65,"'.self::FONT_NORMAL."\",0,1,1,3,\"WAVE: $wave\"";
-
-        // Y=100: Cust Code & Qty
-        $cmds[] = 'TEXT 10,100,"'.self::FONT_TITLE."\",0,1,1,\"CUST: $custCode\"";
-        $cmds[] = "TEXT 390,100,\"4\",0,1,1,3,\"$qty PCS\"";
-
-        // Y=140: Customer Name (Wrapped)
-        $cmds[] = 'TEXT 10,140,"'.self::FONT_NORMAL.'",0,1,1,"C: '.$customerLines[0].'"';
-        if ($customerLines[1] !== '') {
-            $cmds[] = 'TEXT 10,165,"'.self::FONT_NORMAL.'",0,1,1,"   '.$customerLines[1].'"';
+        // Y=65: Production Info Block
+        $cmds[] = 'TEXT 10,65,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
+        $cmds[] = 'TEXT 10,90,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
+        $cmds[] = 'TEXT 10,115,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     :"';
+        $cmds[] = 'TEXT 20,135,"'.self::FONT_NORMAL.'",0,1,1,"'.$productNameLines[0].'"';
+        if ($productNameLines[1] !== '') {
+            $cmds[] = 'TEXT 20,155,"'.self::FONT_NORMAL.'",0,1,1,"'.$productNameLines[1].'"';
         }
+        $cmds[] = 'TEXT 10,180,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
+        $cmds[] = 'TEXT 10,205,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
+        $cmds[] = 'BAR 10,230,380,2';
 
-        // Y=200: Product Name (Wrapped)
-        $cmds[] = 'TEXT 10,200,"'.self::FONT_NORMAL.'",0,1,1,"P: '.$productLines[0].'"';
-        if ($productLines[1] !== '') {
-            $cmds[] = 'TEXT 10,225,"'.self::FONT_NORMAL.'",0,1,1,"   '.$productLines[1].'"';
-        }
-        if ($productLines[2] !== '') {
-            $cmds[] = 'TEXT 10,250,"'.self::FONT_NORMAL.'",0,1,1,"   '.$productLines[2].'"';
-        }
+        // Y=250: Barcode & Barcode Text (centered)
+        $cmds[] = 'BARCODE 60,250,"128",140,0,0,2,4,"'.$barcode.'"';
+        $cmds[] = 'TEXT 200,400,"'.self::FONT_TITLE.'",0,1,1,2,"'.$barcode.'"';
 
-        // Y=285: Item Code (Unwrapped)
-        $cmds[] = 'TEXT 10,285,"'.self::FONT_NORMAL."\",0,1,1,\"ITEM: $itemCode\"";
+        // Y=440: Quantity Box (centered)
+        $cmds[] = 'TEXT 200,440,"'.self::FONT_TITLE.'",0,1,1,2,"ISI RANGKAIAN"';
+        $cmds[] = 'TEXT 200,475,"4",0,1,1,2,"'.$qty.' PCS"';
+        $cmds[] = 'BAR 10,525,380,2';
 
-        // Y=320: AISI & Size
-        $cmds[] = 'TEXT 10,320,"'.self::FONT_NORMAL."\",0,1,1,\"AISI: $aisi\"";
-        $cmds[] = 'TEXT 390,320,"'.self::FONT_NORMAL."\",0,1,1,3,\"SIZE: $size\"";
-
-        // Y=355: Stage & Tree Number
-        $cmds[] = 'TEXT 10,355,"'.self::FONT_NORMAL."\",0,1,1,\"STAGE: $stage\"";
-        $cmds[] = 'TEXT 390,355,"'.self::FONT_NORMAL."\",0,1,1,3,\"TREE: $treeNumber\"";
-
-        $cmds[] = 'BAR 10,385,380,3';
-
-        // Y=410: Barcode Code 128 (Narrow bar width = 2, Wide bar width = 4, Height = 160 dots)
-        // With 10 char barcode, width is ~286 dots, centered around X=60
-        $cmds[] = "BARCODE 60,410,\"128\",160,0,0,2,4,\"$barcode\"";
-
-        // Y=590: Barcode Text under barcode
-        $cmds[] = 'TEXT 200,590,"'.self::FONT_TITLE."\",0,1,1,2,\"$barcode\"";
-
-        // Y=630: Work Order/Print Order reference
-        $cmds[] = 'TEXT 200,630,"'.self::FONT_NORMAL."\",0,1,1,2,\"ORD: $printOrderNumber\"";
+        // Y=545: Lower metadata & placeholders
+        $cmds[] = 'TEXT 10,545,"'.self::FONT_NORMAL.'",0,1,1,"TANGGAL PRINT : '.$printDate.'"';
+        $cmds[] = 'TEXT 10,570,"'.self::FONT_NORMAL.'",0,1,1,"JAM PRINT     : '.$printTime.'"';
+        $cmds[] = 'TEXT 10,595,"'.self::FONT_NORMAL.'",0,1,1,"KODE RAK      : __________"';
+        $cmds[] = 'TEXT 10,620,"'.self::FONT_NORMAL.'",0,1,1,"KETERANGAN    : __________"';
 
         $cmds[] = 'PRINT 1,1';
 
