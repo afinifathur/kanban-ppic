@@ -1,0 +1,6 @@
+{
+  "server_url": "http://10.88.8.46:6031/api",
+  "machine_id": "WAREHOUSE-PC-01",
+  "printer_name": "TSC TE244",
+  "poll_interval": 2
+}
