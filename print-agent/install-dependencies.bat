@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo ====================================================
-echo KAIZEN TRACKER PRINT AGENT DEPLOYMENT INSTALLER
+echo KANBAN PPIC PRINT AGENT DEPLOYMENT INSTALLER
 echo ====================================================
 echo.
 

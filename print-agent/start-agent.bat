@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 
 echo ====================================================
-echo KAIZEN TRACKER PRINT AGENT STARTING...
+echo KANBAN PPIC PRINT AGENT STARTING...
 echo ====================================================
 echo.
 

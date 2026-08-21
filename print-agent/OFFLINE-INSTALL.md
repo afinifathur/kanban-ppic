@@ -1,4 +1,4 @@
-# KAIZEN TRACKER — PRINT AGENT OFFLINE INSTALLATION GUIDE
+# KANBAN PPIC — PRINT AGENT OFFLINE INSTALLATION GUIDE
 
 Panduan ini berisi langkah-langkah instalasi dan pengetesan Windows Print Agent pada komputer operator Fitting yang **TIDAK MEMILIKI AKSES INTERNET** (Offline).
 
@@ -34,7 +34,7 @@ Panduan ini berisi langkah-langkah instalasi dan pengetesan Windows Print Agent 
 * Buka berkas `config.json` menggunakan Notepad:
   ```json
   {
-    "server_url": "http://10.88.8.46:6004/api",
+    "server_url": "http://10.88.8.46:6002/api",
     "machine_id": "FITTING-PRINT-01",
     "printer_name": "TSC TE244",
     "poll_interval": 2,
@@ -42,7 +42,7 @@ Panduan ini berisi langkah-langkah instalasi dan pengetesan Windows Print Agent 
   }
   ```
 * Sesuaikan nilai `"printer_name"` dengan nama printer TSC Anda di Windows.
-* Sesuaikan `"api_token"` jika ada perubahan token keamanan di server Kaizen Tracker.
+* Sesuaikan `"api_token"` jika ada perubahan token keamanan di server Kanban PPIC.
 
 ### 4. Uji Coba Printer Lokal (Tanpa Koneksi Server)
 * Jalankan script uji printer:
@@ -52,8 +52,8 @@ Panduan ini berisi langkah-langkah instalasi dan pengetesan Windows Print Agent 
 * **Hasil yang diharapkan**: Printer TSC TE244 akan mencetak satu label bertuliskan `"TEST PRINT OK"`.
 * Jika gagal, periksa nama printer pada `config.json` dan pastikan printer berstatus "Ready/Online" di Control Panel Windows.
 
-### 5. Verifikasi Konektivitas ke Kaizen Tracker
-* Uji koneksi jaringan ke server Kaizen Tracker menggunakan perintah ping di CMD:
+### 5. Verifikasi Konektivitas ke Kanban PPIC
+* Uji koneksi jaringan ke server Kanban PPIC menggunakan perintah ping di CMD:
   ```cmd
   ping 10.88.8.46
   ```
@@ -64,7 +64,7 @@ Panduan ini berisi langkah-langkah instalasi dan pengetesan Windows Print Agent 
 * Konsol akan menampilkan status aktif polling ke server target.
 
 ### 7. Uji Cetak 1 Label (Single Test)
-* Buka aplikasi web Kaizen Tracker (`http://10.88.8.46:6004`) dari browser.
+* Buka aplikasi web Kanban PPIC (`http://10.88.8.46:6002`) dari browser.
 * Buka modul Rangkaian (Lost Wax), pilih salah satu Rangkaian, lalu klik tombol **Thermal** (atau **Cetak Thermal 90x50**).
 * Pastikan printer TSC mencetak label dengan ukuran, tata letak, dan barcode yang presisi.
 * Pindai barcode tersebut menggunakan hand-scanner operator untuk memastikan data terbaca dengan benar.

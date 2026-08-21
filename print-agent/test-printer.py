@@ -15,7 +15,7 @@ if os.path.exists(config_path):
     except Exception as e:
         print(f"Warning: Could not read config.json, using default printer name. Error: {e}")
 
-# Sample TSPL payload for 50x90 mm portrait label (matching Kaizen Tracker size)
+# Sample TSPL payload for 50x90 mm portrait label (matching Kanban PPIC size)
 tspl = """SIZE 50 mm, 90 mm
 GAP 3 mm, 0
 DIRECTION 1,0
