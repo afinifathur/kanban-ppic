@@ -110,8 +110,8 @@ class ThermalPrintTest extends TestCase
         // Create a pending job
         $job = PrintJob::create([
             'printer_name' => 'TSC TE200',
-            'payload_tspl' => 'SIZE 50 mm, 90 mm\r\n',
-            'payload_hash' => hash('sha256', 'SIZE 50 mm, 90 mm\r\n'),
+            'payload_tspl' => 'SIZE 90 mm, 50 mm\r\n',
+            'payload_hash' => hash('sha256', 'SIZE 90 mm, 50 mm\r\n'),
             'copies' => 1,
             'status' => 'pending',
             'template_type' => 'TRAVELER_LABEL_90X50',
@@ -323,20 +323,21 @@ class ThermalPrintTest extends TestCase
 
         // Assert TSPL contents
         $tspl = $job->payload_tspl;
-        $this->assertStringContainsString('SIZE 50 mm, 90 mm', $tspl);
+        $this->assertStringContainsString('SIZE 90 mm, 50 mm', $tspl);
         $this->assertStringContainsString('GAP 3 mm, 0', $tspl);
-        $this->assertStringContainsString('BARCODE 60,250,"128",140,0,0,2,4,"260821001"', $tspl);
+        $this->assertStringContainsString('BOX 20,10,700,390,3', $tspl);
+        $this->assertStringContainsString('BARCODE 80,195,"128",100,0,0,2,4,"260821001"', $tspl);
+        $this->assertStringContainsString('TEXT 240,298,"2",0,1,1,2,"260821001"', $tspl);
         $this->assertStringContainsString('FORM BARCODE LAPISAN', $tspl);
         $this->assertStringContainsString('KODE PRODUKSI : ST-001', $tspl);
         $this->assertStringContainsString('KODE ITEM     : AB01', $tspl);
-        $this->assertStringContainsString('NAMA ITEM     :', $tspl);
-        $this->assertStringContainsString('SS304 Flange 3 Inch', $tspl);
+        $this->assertStringContainsString('NAMA ITEM     : SS304 Flange 3 Inch', $tspl);
         $this->assertStringContainsString('KODE CUST     : PT. XYZ INDONESIA', $tspl);
         $this->assertStringContainsString('15 PCS', $tspl);
         $this->assertStringContainsString('TANGGAL PRINT : '.now()->format('d-m-Y'), $tspl);
         $this->assertStringContainsString('JAM PRINT     : '.now()->format('H:i'), $tspl);
-        $this->assertStringContainsString('KODE RAK      : __________', $tspl);
-        $this->assertStringContainsString('KETERANGAN    : __________', $tspl);
+        $this->assertStringContainsString('KODE RAK : _____________', $tspl);
+        $this->assertStringContainsString('KETERANGAN: _____________', $tspl);
     }
 
     /**

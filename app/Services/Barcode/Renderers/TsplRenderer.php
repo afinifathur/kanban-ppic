@@ -27,11 +27,11 @@ class TsplRenderer
         $printDate = now()->format('d-m-Y');
         $printTime = now()->format('H:i');
 
-        // Wrap item name: 30 characters per line using Font 2
-        $productNameLines = $this->wrapText($itemName, 30, 2);
+        // Wrap item name: 38 characters per line using Font 2
+        $productNameLines = $this->wrapText($itemName, 38, 2);
 
         $cmds = [];
-        $cmds[] = 'SIZE 50 mm, 90 mm';
+        $cmds[] = 'SIZE 90 mm, 50 mm';
         $cmds[] = 'GAP 3 mm, 0';
         $cmds[] = 'DIRECTION 1,0';
         $cmds[] = 'REFERENCE 0,0';
@@ -39,36 +39,45 @@ class TsplRenderer
         $cmds[] = 'CLS';
         $cmds[] = 'SET TEAR ON';
 
-        // Y=20: Title Header
-        $cmds[] = 'TEXT 200,20,"'.self::FONT_TITLE.'",0,1,1,2,"FORM BARCODE LAPISAN"';
-        $cmds[] = 'BAR 10,50,380,3';
+        // Outer Border Box
+        $cmds[] = 'BOX 20,10,700,390,3';
 
-        // Y=65: Production Info Block
-        $cmds[] = 'TEXT 10,65,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
-        $cmds[] = 'TEXT 10,90,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
-        $cmds[] = 'TEXT 10,115,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     :"';
-        $cmds[] = 'TEXT 20,135,"'.self::FONT_NORMAL.'",0,1,1,"'.$productNameLines[0].'"';
+        // Y=18: Title Header (centered at X=360)
+        $cmds[] = 'TEXT 360,18,"'.self::FONT_TITLE.'",0,1,1,2,"FORM BARCODE LAPISAN"';
+
+        // Horizontal Dividers
+        $cmds[] = 'BAR 20,45,680,3';
+        $cmds[] = 'BAR 20,190,680,3';
+        $cmds[] = 'BAR 20,320,680,3';
+
+        // Vertical Dividers
+        $cmds[] = 'BAR 460,190,3,130';
+        $cmds[] = 'BAR 360,320,3,70';
+
+        // Y=55: Production Info Block
+        $cmds[] = 'TEXT 30,55,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
+        $cmds[] = 'TEXT 30,77,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
+        $cmds[] = 'TEXT 30,99,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
         if ($productNameLines[1] !== '') {
-            $cmds[] = 'TEXT 20,155,"'.self::FONT_NORMAL.'",0,1,1,"'.$productNameLines[1].'"';
+            $cmds[] = 'TEXT 30,121,"'.self::FONT_NORMAL.'",0,1,1,"                '.$productNameLines[1].'"';
         }
-        $cmds[] = 'TEXT 10,180,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
-        $cmds[] = 'TEXT 10,205,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
-        $cmds[] = 'BAR 10,230,380,2';
+        $cmds[] = 'TEXT 30,143,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
+        $cmds[] = 'TEXT 30,165,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
 
-        // Y=250: Barcode & Barcode Text (centered)
-        $cmds[] = 'BARCODE 60,250,"128",140,0,0,2,4,"'.$barcode.'"';
-        $cmds[] = 'TEXT 200,400,"'.self::FONT_TITLE.'",0,1,1,2,"'.$barcode.'"';
+        // Barcode & Isi Rangkaian
+        // Left side: Barcode & Human-readable number
+        $cmds[] = 'BARCODE 80,195,"128",100,0,0,2,4,"'.$barcode.'"';
+        $cmds[] = 'TEXT 240,298,"'.self::FONT_NORMAL.'",0,1,1,2,"'.$barcode.'"';
 
-        // Y=440: Quantity Box (centered)
-        $cmds[] = 'TEXT 200,440,"'.self::FONT_TITLE.'",0,1,1,2,"ISI RANGKAIAN"';
-        $cmds[] = 'TEXT 200,475,"4",0,1,1,2,"'.$qty.' PCS"';
-        $cmds[] = 'BAR 10,525,380,2';
+        // Right side: Isi Rangkaian
+        $cmds[] = 'TEXT 580,205,"'.self::FONT_NORMAL.'",0,1,1,2,"ISI RANGKAIAN"';
+        $cmds[] = 'TEXT 580,240,"4",0,1,1,2,"'.$qty.' PCS"';
 
-        // Y=545: Lower metadata & placeholders
-        $cmds[] = 'TEXT 10,545,"'.self::FONT_NORMAL.'",0,1,1,"TANGGAL PRINT : '.$printDate.'"';
-        $cmds[] = 'TEXT 10,570,"'.self::FONT_NORMAL.'",0,1,1,"JAM PRINT     : '.$printTime.'"';
-        $cmds[] = 'TEXT 10,595,"'.self::FONT_NORMAL.'",0,1,1,"KODE RAK      : __________"';
-        $cmds[] = 'TEXT 10,620,"'.self::FONT_NORMAL.'",0,1,1,"KETERANGAN    : __________"';
+        // Bottom Metadata
+        $cmds[] = 'TEXT 30,332,"'.self::FONT_NORMAL.'",0,1,1,"TANGGAL PRINT : '.$printDate.'"';
+        $cmds[] = 'TEXT 30,362,"'.self::FONT_NORMAL.'",0,1,1,"JAM PRINT     : '.$printTime.'"';
+        $cmds[] = 'TEXT 380,332,"'.self::FONT_NORMAL.'",0,1,1,"KODE RAK : _____________"';
+        $cmds[] = 'TEXT 380,362,"'.self::FONT_NORMAL.'",0,1,1,"KETERANGAN: _____________"';
 
         $cmds[] = 'PRINT 1,1';
 
