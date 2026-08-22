@@ -587,7 +587,7 @@ class ThermalPrintTest extends TestCase
             'daily_sequence' => 777,
         ]);
 
-        $tsplRenderer = new \App\Services\Barcode\Renderers\TsplRenderer();
+        $tsplRenderer = new \App\Services\Barcode\Renderers\TsplRenderer;
         $shortTspl = $tsplRenderer->render($treeShort);
         $this->assertStringContainsString('NAMA ITEM     : SS316 FLANGE 3 INCH', $shortTspl);
         $this->assertStringNotContainsString('                ', $shortTspl); // No second line spacing for name

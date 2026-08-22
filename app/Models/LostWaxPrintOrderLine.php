@@ -20,6 +20,10 @@ class LostWaxPrintOrderLine extends Model
         'standard_tree_capacity',
         'actual_recorded_at',
         'actual_recorded_by',
+        'execution_status',
+        'require_layer_7',
+        'qty_executed_good',
+        'qty_executed_defect',
     ];
 
     protected $casts = [
@@ -28,6 +32,9 @@ class LostWaxPrintOrderLine extends Model
         'qty_actual_defect' => 'integer',
         'standard_tree_capacity' => 'integer',
         'actual_recorded_at' => 'datetime',
+        'require_layer_7' => 'boolean',
+        'qty_executed_good' => 'integer',
+        'qty_executed_defect' => 'integer',
     ];
 
     public function printOrder()
@@ -50,18 +57,43 @@ class LostWaxPrintOrderLine extends Model
         return $this->belongsTo(User::class, 'actual_recorded_by');
     }
 
+    public function executions()
+    {
+        return $this->hasMany(LostWaxPrintExecution::class, 'lost_wax_print_order_line_id');
+    }
+
+    public function rangkaiWorkOrder()
+    {
+        return $this->hasOne(LostWaxRangkaiWorkOrder::class, 'lost_wax_print_order_line_id');
+    }
+
+    public function rangkaiWorkOrders()
+    {
+        return $this->hasMany(LostWaxRangkaiWorkOrder::class, 'lost_wax_print_order_line_id');
+    }
+
     public function getQtyAvailableForRangkaiAttribute(): int
     {
-        if ($this->qty_actual_good === null) {
-            return 0;
-        }
+        // Source of truth: finalized print execution good pcs (fallback to legacy qty_actual_good for compatibility)
+        $good = $this->qty_executed_good !== null && $this->qty_executed_good > 0
+            ? (int) $this->qty_executed_good
+            : (int) ($this->qty_actual_good ?? 0);
+
         $allocated = (int) $this->trees()->sum('quantity');
 
-        return max(0, $this->qty_actual_good - $allocated);
+        return max(0, $good - $allocated);
     }
 
     public function getIsOutcomeRecordedAttribute(): bool
     {
-        return $this->qty_actual_good !== null;
+        return $this->qty_actual_good !== null || $this->executions()->exists();
+    }
+
+    public function getQtyOutstandingAttribute(): int
+    {
+        $good = (int) ($this->qty_executed_good ?? 0);
+        $defect = (int) ($this->qty_executed_defect ?? 0);
+
+        return max(0, $this->qty_ordered - $good - $defect);
     }
 }

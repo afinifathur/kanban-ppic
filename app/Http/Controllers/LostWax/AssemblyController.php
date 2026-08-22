@@ -37,6 +37,7 @@ class AssemblyController extends Controller
         }
 
         // Fetch all lines first to filter by dynamic attribute available_qty
+        // Fetch all lines first to filter by dynamic attribute available_qty
         $lines = $query->orderBy('id', 'desc')->get()->filter(function ($line) {
             return $line->qty_available_for_rangkai > 0;
         });
@@ -52,7 +53,116 @@ class AssemblyController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
-        return view('lost-wax.assemblies.index', ['lines' => $paginatedLines]);
+        // Fetch Rangkai Work Orders
+        $woQuery = \App\Models\LostWaxRangkaiWorkOrder::with(['printOrderLine.printOrder', 'executions.trees']);
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $woQuery->whereHas('printOrderLine.productionPlan', function ($q) use ($scope) {
+                $q->where('product_scope', $scope);
+            });
+        }
+        $workOrders = $woQuery->orderBy('id', 'desc')->paginate(15, ['*'], 'wo_page');
+
+        return view('lost-wax.assemblies.index', [
+            'lines' => $paginatedLines,
+            'workOrders' => $workOrders,
+        ]);
+    }
+
+    /**
+     * Store a new Rangkai Work Order.
+     */
+    public function storeWorkOrder(\App\Models\LostWaxPrintOrderLine $line, Request $request)
+    {
+        $this->authorizeLine($line);
+        $request->validate([
+            'qty_trees_planned' => 'required|integer|min:1',
+            'tree_capacity' => 'required|integer|min:1',
+            'require_layer_7' => 'nullable|boolean',
+            'notes' => 'nullable|string',
+        ]);
+
+        try {
+            $service = app(\App\Services\RangkaiExecutionService::class);
+            $service->createWorkOrder($line, [
+                'qty_trees_planned' => $request->qty_trees_planned,
+                'tree_capacity' => $request->tree_capacity,
+                'require_layer_7' => $request->has('require_layer_7'),
+                'notes' => $request->notes,
+            ]);
+
+            return redirect()->route('lost-wax.assemblies.index', ['tab' => 'work-orders'])
+                ->with('success', 'Rangkai Work Order berhasil dibuat.');
+        } catch (\Exception $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Show Rangkai Work Order detail and execution form.
+     */
+    public function showWorkOrder(\App\Models\LostWaxRangkaiWorkOrder $workOrder)
+    {
+        $this->authorizeWorkOrder($workOrder);
+        $workOrder->load([
+            'printOrderLine.printOrder',
+            'executions.recorder',
+            'executions.trees',
+        ]);
+
+        $line = $workOrder->printOrderLine;
+        $proposed = [];
+        $remaining = $workOrder->qty_outstanding;
+        while ($remaining > 0) {
+            $qty = min($workOrder->tree_capacity, $remaining);
+            $proposed[] = $qty;
+            $remaining -= $qty;
+        }
+
+        $families = config('lost_wax.families', []);
+        $familyCode = $this->guessFamilyCode($line->aisi ?? '', $line->item_name);
+
+        return view('lost-wax.assemblies.show_wo', compact(
+            'workOrder',
+            'line',
+            'proposed',
+            'families',
+            'familyCode'
+        ));
+    }
+
+    /**
+     * Store Rangkai Execution and generate physical trees.
+     */
+    public function storeExecution(Request $request, \App\Models\LostWaxRangkaiWorkOrder $workOrder)
+    {
+        $this->authorizeWorkOrder($workOrder);
+        $request->validate([
+            'execution_date' => 'required|date',
+            'trees_created' => 'required|integer|min:1',
+            'quantities' => 'required|array|min:1',
+            'quantities.*' => 'required|integer|min:1',
+            'family_code' => 'required|string|max:10',
+        ]);
+
+        try {
+            $service = app(\App\Services\RangkaiExecutionService::class);
+            $service->recordExecution($workOrder, [
+                'execution_date' => $request->execution_date,
+                'trees_created' => $request->trees_created,
+                'quantities' => $request->quantities,
+                'family_code' => $request->family_code,
+            ]);
+
+            return redirect()->route('lost-wax.assemblies.work-orders.show', $workOrder)
+                ->with('success', 'Hasil eksekusi rangkai berhasil dicatat.');
+        } catch (\Exception $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+    }
+
+    protected function authorizeWorkOrder(\App\Models\LostWaxRangkaiWorkOrder $workOrder)
+    {
+        $this->authorizeLine($workOrder->printOrderLine);
     }
 
     /**

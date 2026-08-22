@@ -180,6 +180,34 @@ class PrintOrderController extends Controller
             return redirect()->back()->with('success', 'Rencana produksi '.$plan->code.' berhasil dibuka kembali (OPEN).');
         }
 
+        if ($request->input('action') === 'bulk_close_plans') {
+            $planIds = $request->input('plan_ids');
+            if (empty($planIds) || ! is_array($planIds)) {
+                return redirect()->back()->with('error', 'Pilih minimal satu item rencana untuk ditutup.');
+            }
+
+            $plans = \App\Models\ProductionPlan::whereIn('id', $planIds)->get();
+            if ($plans->isEmpty()) {
+                return redirect()->back()->with('error', 'Rencana produksi tidak ditemukan.');
+            }
+
+            if ($isPpic && $scope) {
+                foreach ($plans as $plan) {
+                    if ($plan->product_scope !== $scope) {
+                        abort(403, 'Unauthorized.');
+                    }
+                }
+            }
+
+            DB::transaction(function () use ($plans) {
+                foreach ($plans as $plan) {
+                    $plan->update(['is_closed' => true]);
+                }
+            });
+
+            return redirect()->back()->with('success', count($plans).' rencana produksi berhasil ditutup (CLOSED).');
+        }
+
         $request->validate([
             'scheduled_date' => 'required|date',
             'print_order_number' => 'required|string|unique:lost_wax_print_orders,print_order_number',

@@ -189,4 +189,75 @@ class RbacScopeTest extends TestCase
             ]);
         $response->assertStatus(403);
     }
+
+    /**
+     * Test role-based planning close/bulk-close access restriction.
+     */
+    public function test_planning_close_authorization_and_product_scope_safety(): void
+    {
+        // 1. Spv user (who does not have access_planning permission) is blocked from closing plan
+        $plan = ProductionPlan::create([
+            'code' => 'SS-001',
+            'customer' => 'Cust A',
+            'item_code' => 'LY001',
+            'item_name' => 'Stainless Flange',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'aisi' => '304',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'status' => 'planning',
+            'line_number' => 1,
+            'po_number' => 'PO-SS-01',
+        ]);
+
+        $response = $this->actingAs($this->spvUser)
+            ->post(route('lost-wax.print-orders.store'), [
+                'action' => 'close_plan',
+                'production_plan_id' => $plan->id,
+            ]);
+        $response->assertStatus(403);
+        $this->assertFalse($plan->fresh()->is_closed);
+
+        // 2. PPIC Flange cannot close a plan belonging to FLANGE_BESI scope
+        $planBesi = ProductionPlan::create([
+            'code' => 'FE-001',
+            'customer' => 'Cust B',
+            'item_code' => 'LY027',
+            'item_name' => 'Besi Flange',
+            'product_scope' => 'FLANGE_BESI',
+            'aisi' => 'FE',
+            'qty_planned' => 200,
+            'qty_remaining' => 200,
+            'status' => 'planning',
+            'line_number' => 2,
+            'po_number' => 'PO-FE-01',
+        ]);
+
+        $response = $this->actingAs($this->ppicFlange)
+            ->post(route('lost-wax.print-orders.store'), [
+                'action' => 'close_plan',
+                'production_plan_id' => $planBesi->id,
+            ]);
+        $response->assertStatus(403);
+        $this->assertFalse($planBesi->fresh()->is_closed);
+
+        // 3. PPIC Flange cannot bulk close plans containing other scope's plan
+        $response = $this->actingAs($this->ppicFlange)
+            ->post(route('lost-wax.print-orders.store'), [
+                'action' => 'bulk_close_plans',
+                'plan_ids' => [$plan->id, $planBesi->id],
+            ]);
+        $response->assertStatus(403);
+        $this->assertFalse($plan->fresh()->is_closed);
+        $this->assertFalse($planBesi->fresh()->is_closed);
+
+        // 4. PPIC Flange can successfully close plan of their own scope
+        $response = $this->actingAs($this->ppicFlange)
+            ->post(route('lost-wax.print-orders.store'), [
+                'action' => 'close_plan',
+                'production_plan_id' => $plan->id,
+            ]);
+        $response->assertRedirect();
+        $this->assertTrue($plan->fresh()->is_closed);
+    }
 }

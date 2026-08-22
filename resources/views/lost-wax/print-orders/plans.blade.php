@@ -130,23 +130,17 @@
                                         </td>
                                         <td class="border border-slate-200 p-3 text-center">
                                             @if(!$plan->is_closed)
-                                                <form action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="inline" onsubmit="return confirm('Tutup rencana ini dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.')">
-                                                    @csrf
-                                                    <input type="hidden" name="action" value="close_plan">
-                                                    <input type="hidden" name="production_plan_id" value="{{ $plan->id }}">
-                                                    <button type="submit" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1 px-2 rounded text-xs border border-red-200 transition-all flex items-center gap-1 mx-auto" title="Tutup Rencana">
-                                                        <i class="fas fa-times-circle"></i> Tutup
-                                                    </button>
-                                                </form>
+                                                <button type="button" 
+                                                    onclick="submitSingleAction('close_plan', '{{ $plan->id }}', 'Tutup rencana ini dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.')"
+                                                    class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1 px-2 rounded text-xs border border-red-200 transition-all flex items-center gap-1 mx-auto" title="Tutup Rencana">
+                                                    <i class="fas fa-times-circle"></i> Tutup
+                                                </button>
                                             @else
-                                                <form action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="inline" onsubmit="return confirm('Buka kembali rencana produksi ini?')">
-                                                    @csrf
-                                                    <input type="hidden" name="action" value="open_plan">
-                                                    <input type="hidden" name="production_plan_id" value="{{ $plan->id }}">
-                                                    <button type="submit" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-1 px-2 rounded text-xs border border-emerald-200 transition-all flex items-center gap-1 mx-auto" title="Buka Rencana">
-                                                        <i class="fas fa-check-circle"></i> Buka
-                                                    </button>
-                                                </form>
+                                                <button type="button"
+                                                    onclick="submitSingleAction('open_plan', '{{ $plan->id }}', 'Buka kembali rencana produksi ini?')"
+                                                    class="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-1 px-2 rounded text-xs border border-emerald-200 transition-all flex items-center gap-1 mx-auto" title="Buka Rencana">
+                                                    <i class="fas fa-check-circle"></i> Buka
+                                                </button>
                                             @endif
                                         </td>
                                     </tr>
@@ -170,7 +164,11 @@
                         </div>
                     </div>
 
-                    <div class="mt-6 border-t border-slate-100 pt-4 flex justify-end">
+                    <div class="mt-6 border-t border-slate-100 pt-4 flex justify-end gap-3">
+                        <button type="button" id="bulk-close-btn" disabled
+                            class="bg-slate-300 text-slate-500 cursor-not-allowed font-bold py-2.5 px-6 rounded-lg text-sm shadow transition-all flex items-center gap-2">
+                            <i class="fas fa-times-circle"></i> Tutup Terpilih
+                        </button>
                         <button type="submit" id="submit-btn" disabled
                             class="bg-slate-300 text-slate-500 cursor-not-allowed font-bold py-2.5 px-6 rounded-lg text-sm shadow transition-all flex items-center gap-2">
                             <i class="fas fa-file-signature"></i> Buat Perintah Cetak
@@ -288,12 +286,33 @@
         @endif
     </div>
 
+    <!-- Hidden helper forms for single and bulk actions -->
+    <form id="single-action-form" action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="hidden">
+        @csrf
+        <input type="hidden" name="action" id="single-action-val" value="">
+        <input type="hidden" name="production_plan_id" id="single-plan-id" value="">
+    </form>
+
+    <form id="bulk-close-form" action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="hidden">
+        @csrf
+        <input type="hidden" name="action" value="bulk_close_plans">
+    </form>
+
     <!-- JS for Selection Logic -->
     <script>
+        function submitSingleAction(action, planId, confirmMsg) {
+            if (confirm(confirmMsg)) {
+                document.getElementById('single-action-val').value = action;
+                document.getElementById('single-plan-id').value = planId;
+                document.getElementById('single-action-form').submit();
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             const selectAll = document.getElementById('select-all');
             const checkboxes = document.querySelectorAll('.plan-checkbox');
             const submitBtn = document.getElementById('submit-btn');
+            const bulkCloseBtn = document.getElementById('bulk-close-btn');
 
             function toggleSubmitBtn() {
                 const checked = document.querySelectorAll('.plan-checkbox:checked');
@@ -301,10 +320,22 @@
                     submitBtn.disabled = false;
                     submitBtn.classList.remove('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
                     submitBtn.classList.add('bg-amber-600', 'hover:bg-amber-700', 'text-white');
+
+                    if (bulkCloseBtn) {
+                        bulkCloseBtn.disabled = false;
+                        bulkCloseBtn.classList.remove('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
+                        bulkCloseBtn.classList.add('bg-red-600', 'hover:bg-red-700', 'text-white');
+                    }
                 } else {
                     submitBtn.disabled = true;
                     submitBtn.classList.add('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
                     submitBtn.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white');
+
+                    if (bulkCloseBtn) {
+                        bulkCloseBtn.disabled = true;
+                        bulkCloseBtn.classList.add('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
+                        bulkCloseBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'text-white');
+                    }
                 }
             }
 
@@ -326,6 +357,31 @@
                     toggleSubmitBtn();
                 });
             });
+
+            if (bulkCloseBtn) {
+                bulkCloseBtn.addEventListener('click', function () {
+                    const checked = document.querySelectorAll('.plan-checkbox:checked');
+                    if (checked.length === 0) return;
+
+                    if (confirm(`Apakah Anda yakin ingin menutup ${checked.length} rencana produksi terpilih dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.`)) {
+                        const form = document.getElementById('bulk-close-form');
+                        
+                        // Hapus input plan_ids yang lama di form bulk-close jika ada
+                        form.querySelectorAll('input[name="plan_ids[]"]').forEach(el => el.remove());
+
+                        // Tambahkan input plan_ids baru dari checkbox yang dicentang
+                        checked.forEach(cb => {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = 'plan_ids[]';
+                            input.value = cb.value;
+                            form.appendChild(input);
+                        });
+
+                        form.submit();
+                    }
+                });
+            }
         });
     </script>
 @endsection

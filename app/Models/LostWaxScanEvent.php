@@ -33,6 +33,16 @@ class LostWaxScanEvent extends Model
         return $this->belongsTo(User::class, 'operator_id');
     }
 
+    public function void()
+    {
+        return $this->hasOne(LostWaxScanEventVoid::class, 'scan_event_id');
+    }
+
+    public function getIsVoidedAttribute(): bool
+    {
+        return $this->void()->exists();
+    }
+
     public function getIsAnomalyAttribute(): bool
     {
         return $this->result === 'rejected';

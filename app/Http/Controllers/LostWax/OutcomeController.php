@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\DB;
 class OutcomeController extends Controller
 {
     /**
-     * Display list of Print Orders ready for actual outcomes entry (status ISSUED or CANCELLED).
+     * Display list of Print Orders ready for actual outcomes entry (status ISSUED or PARTIALLY_COMPLETED).
      */
     public function index(Request $request)
     {
-        $query = \App\Models\LostWaxPrintOrder::with(['lines.trees', 'creator'])
+        $query = \App\Models\LostWaxPrintOrder::with(['lines.trees', 'lines.executions', 'creator'])
             ->where('status', '!=', 'DRAFT');
 
         $scope = auth()->user()->product_scope;
@@ -38,25 +38,25 @@ class OutcomeController extends Controller
     public function editOutcome(\App\Models\LostWaxPrintOrder $printOrder)
     {
         $this->authorizePrintOrder($printOrder);
-        if ($printOrder->status !== 'ISSUED') {
+        if (! in_array($printOrder->status, ['ISSUED', 'PARTIALLY_COMPLETED'])) {
             return redirect()->route('lost-wax.outcomes.index')
-                ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED.');
+                ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED atau PARTIALLY_COMPLETED.');
         }
 
-        $printOrder->load('lines.trees');
+        $printOrder->load('lines.trees', 'lines.executions.recorder');
 
         return view('lost-wax.outcomes.edit', compact('printOrder'));
     }
 
     /**
-     * Update actual outcomes for the print order lines.
+     * Update actual outcomes for the print order lines by diff calculation to executions.
      */
     public function updateOutcome(Request $request, \App\Models\LostWaxPrintOrder $printOrder)
     {
         $this->authorizePrintOrder($printOrder);
-        if ($printOrder->status !== 'ISSUED') {
+        if (! in_array($printOrder->status, ['ISSUED', 'PARTIALLY_COMPLETED'])) {
             return redirect()->route('lost-wax.outcomes.index')
-                ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED.');
+                ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED atau PARTIALLY_COMPLETED.');
         }
 
         $request->validate([
@@ -67,30 +67,41 @@ class OutcomeController extends Controller
             'items.*.standard_tree_capacity' => 'required|integer|min:1',
         ]);
 
+        $service = app(\App\Services\PrintExecutionService::class);
+
         try {
-            DB::transaction(function () use ($request, $printOrder) {
+            DB::transaction(function () use ($request, $printOrder, $service) {
                 foreach ($request->items as $itemData) {
                     $line = $printOrder->lines()->lockForUpdate()->findOrFail($itemData['id']);
 
-                    // Invariant: qty_actual_good + qty_actual_defect <= qty_ordered
-                    $totalActual = (int) $itemData['qty_actual_good'] + (int) $itemData['qty_actual_defect'];
-                    if ($totalActual > $line->qty_ordered) {
-                        throw new \InvalidArgumentException("Total Hasil ({$itemData['qty_actual_good']} pcs) + Rusak ({$itemData['qty_actual_defect']} pcs) tidak boleh melebihi Qty Perintah ({$line->qty_ordered} pcs) untuk item {$line->item_name}.");
-                    }
+                    $newGood = (int) $itemData['qty_actual_good'];
+                    $newDefect = (int) $itemData['qty_actual_defect'];
 
-                    // Invariant: If Trees are already committed, we cannot reduce qty_actual_good below total allocated quantities
-                    $allocatedTreeQty = (int) $line->trees()->sum('quantity');
-                    if ((int) $itemData['qty_actual_good'] < $allocatedTreeQty) {
-                        throw new \InvalidArgumentException("Hasil tidak boleh kurang dari quantity tree yang sudah dibuat ({$allocatedTreeQty} pcs) untuk item {$line->item_name}.");
-                    }
+                    $oldGood = (int) ($line->qty_executed_good ?? 0);
+                    $oldDefect = (int) ($line->qty_executed_defect ?? 0);
 
-                    $line->update([
-                        'qty_actual_good' => $itemData['qty_actual_good'],
-                        'qty_actual_defect' => $itemData['qty_actual_defect'],
-                        'standard_tree_capacity' => $itemData['standard_tree_capacity'],
-                        'actual_recorded_at' => now(),
-                        'actual_recorded_by' => auth()->id(),
-                    ]);
+                    // Update standard capacity
+                    $line->standard_tree_capacity = $itemData['standard_tree_capacity'];
+                    $line->save();
+
+                    // Calculate diff
+                    $diffGood = $newGood - $oldGood;
+                    $diffDefect = $newDefect - $oldDefect;
+
+                    if ($diffGood < 0 || $diffDefect < 0) {
+                        $this->adjustExecutionsToMatch($line, $newGood, $newDefect);
+                    } elseif ($diffGood > 0 || $diffDefect > 0) {
+                        // Add execution record for the positive diff
+                        $service->record($line, [
+                            'qty_good' => $diffGood,
+                            'qty_defect' => $diffDefect,
+                            'execution_date' => now()->format('Y-m-d'),
+                            'status' => 'FINALIZED',
+                        ]);
+                    } else {
+                        // No changes to quantities, just trigger update to verify aggregates
+                        $service->updateLineAggregates($line);
+                    }
                 }
             });
 
@@ -99,6 +110,143 @@ class OutcomeController extends Controller
         } catch (\InvalidArgumentException $e) {
             return back()->withInput()->with('error', $e->getMessage());
         }
+    }
+
+    /**
+     * Record a new execution for a specific line (micro-interaction).
+     */
+    public function recordExecution(Request $request, \App\Models\LostWaxPrintOrderLine $line)
+    {
+        $this->authorizePrintOrder($line->printOrder);
+
+        $request->validate([
+            'qty_good' => 'required|integer|min:0',
+            'qty_defect' => 'required|integer|min:0',
+            'execution_date' => 'required|date',
+            'status' => 'required|in:DRAFT,FINALIZED',
+            'notes' => 'nullable|string',
+        ]);
+
+        try {
+            $service = app(\App\Services\PrintExecutionService::class);
+            $service->record($line, $request->only(['qty_good', 'qty_defect', 'execution_date', 'status', 'notes']));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Execution berhasil dicatat.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Finalize a draft execution.
+     */
+    public function finalizeExecution(\App\Models\LostWaxPrintExecution $execution)
+    {
+        $this->authorizePrintOrder($execution->printOrderLine->printOrder);
+
+        try {
+            $service = app(\App\Services\PrintExecutionService::class);
+            $service->finalize($execution);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Execution berhasil difinalisasi.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Update a draft execution.
+     */
+    public function updateExecution(Request $request, \App\Models\LostWaxPrintExecution $execution)
+    {
+        $this->authorizePrintOrder($execution->printOrderLine->printOrder);
+
+        $request->validate([
+            'qty_good' => 'required|integer|min:0',
+            'qty_defect' => 'required|integer|min:0',
+            'notes' => 'nullable|string',
+        ]);
+
+        try {
+            $service = app(\App\Services\PrintExecutionService::class);
+            $service->update($execution, $request->only(['qty_good', 'qty_defect', 'notes']));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Execution draft berhasil diperbarui.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    protected function adjustExecutionsToMatch(\App\Models\LostWaxPrintOrderLine $line, int $targetGood, int $targetDefect)
+    {
+        $allocatedTreeQty = (int) $line->trees()->sum('quantity');
+        if ($targetGood < $allocatedTreeQty) {
+            throw new \InvalidArgumentException("Hasil tidak boleh kurang dari quantity tree yang sudah dibuat ({$allocatedTreeQty} pcs) untuk item {$line->item_name}.");
+        }
+
+        $totalGood = $line->executions()->sum('qty_good');
+        $totalDefect = $line->executions()->sum('qty_defect');
+
+        if ($targetGood + $targetDefect > $line->qty_ordered) {
+            throw new \InvalidArgumentException("Total Hasil ({$targetGood} pcs) + Rusak ({$targetDefect} pcs) tidak boleh melebihi Qty Perintah ({$line->qty_ordered} pcs) untuk item {$line->item_name}.");
+        }
+
+        $lastExec = $line->executions()->orderBy('id', 'desc')->first();
+
+        if (! $lastExec) {
+            $lastExec = $line->executions()->create([
+                'execution_date' => now()->format('Y-m-d'),
+                'qty_good' => $targetGood,
+                'qty_defect' => $targetDefect,
+                'status' => 'FINALIZED',
+                'recorded_by' => auth()->id() ?? 1,
+                'recorded_at' => now(),
+                'finalized_by' => auth()->id() ?? 1,
+                'finalized_at' => now(),
+            ]);
+        } else {
+            $diffGood = $targetGood - ($totalGood - $lastExec->qty_good);
+            $diffDefect = $targetDefect - ($totalDefect - $lastExec->qty_defect);
+
+            $newGood = max(0, $diffGood);
+            $newDefect = max(0, $diffDefect);
+
+            \App\Models\LostWaxPrintExecutionCorrection::create([
+                'print_execution_id' => $lastExec->id,
+                'original_qty_good' => $lastExec->qty_good,
+                'original_qty_defect' => $lastExec->qty_defect,
+                'corrected_qty_good' => $newGood,
+                'corrected_qty_defect' => $newDefect,
+                'corrected_by' => auth()->id() ?? 1,
+                'corrected_at' => now(),
+                'reason' => 'Adjustment via outcome form submission',
+            ]);
+
+            $lastExec->update([
+                'qty_good' => $newGood,
+                'qty_defect' => $newDefect,
+            ]);
+        }
+
+        app(\App\Services\PrintExecutionService::class)->updateLineAggregates($line);
     }
 
     protected function authorizePrintOrder(\App\Models\LostWaxPrintOrder $printOrder)

@@ -96,7 +96,7 @@ class ScanController extends Controller
 
         $tree->load(['workOrder.itemReference', 'workOrder.plans', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
 
-        $events = LostWaxScanEvent::with('operator')
+        $events = LostWaxScanEvent::with(['operator', 'void.voidedByUser'])
             ->where('tree_id', $tree->id)
             ->orderBy('scanned_at')
             ->get();
@@ -155,6 +155,29 @@ class ScanController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    /**
+     * Void the given scan event.
+     */
+    public function voidEvent(Request $request, \App\Models\LostWaxScanEvent $event)
+    {
+        if (! auth()->user()->hasRole('ppic') && ! auth()->user()->hasRole('admin')) {
+            abort(403, 'Anda tidak memiliki hak akses untuk membatalkan scan event ini.');
+        }
+
+        $request->validate([
+            'void_reason' => 'required|string',
+        ]);
+
+        try {
+            $service = app(\App\Services\ScanVoidService::class);
+            $service->void($event, $request->void_reason, auth()->id());
+
+            return back()->with('success', 'Scan event berhasil dibatalkan (void).');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     private function treeInfo(LostWaxTree $tree): array

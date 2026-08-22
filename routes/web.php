@@ -107,11 +107,17 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/outcomes', [\App\Http\Controllers\LostWax\OutcomeController::class, 'index'])->name('outcomes.index');
             Route::get('/outcomes/{printOrder}/edit', [\App\Http\Controllers\LostWax\OutcomeController::class, 'editOutcome'])->name('outcomes.edit');
             Route::put('/outcomes/{printOrder}', [\App\Http\Controllers\LostWax\OutcomeController::class, 'updateOutcome'])->name('outcomes.update');
+            Route::post('/outcomes/lines/{line}/execution', [\App\Http\Controllers\LostWax\OutcomeController::class, 'recordExecution'])->name('outcomes.lines.execution.store');
+            Route::post('/outcomes/executions/{execution}/finalize', [\App\Http\Controllers\LostWax\OutcomeController::class, 'finalizeExecution'])->name('outcomes.executions.finalize');
+            Route::put('/outcomes/executions/{execution}', [\App\Http\Controllers\LostWax\OutcomeController::class, 'updateExecution'])->name('outcomes.executions.update');
 
             // Perintah Rangkai (Assembly)
             Route::get('/assemblies', [\App\Http\Controllers\LostWax\AssemblyController::class, 'index'])->name('assemblies.index');
             Route::get('/assemblies/{line}/create', [\App\Http\Controllers\LostWax\AssemblyController::class, 'create'])->name('assemblies.create');
             Route::post('/assemblies/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'store'])->name('assemblies.store');
+            Route::post('/assemblies/work-orders/create-wo/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'storeWorkOrder'])->name('assemblies.work-orders.store');
+            Route::get('/assemblies/work-orders/{workOrder}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'showWorkOrder'])->name('assemblies.work-orders.show');
+            Route::post('/assemblies/work-orders/{workOrder}/execution', [\App\Http\Controllers\LostWax\AssemblyController::class, 'storeExecution'])->name('assemblies.work-orders.execution.store');
 
             // Work Orders
             Route::get('/work-orders', [WorkOrderController::class, 'index'])->name('work-orders.index');
@@ -147,6 +153,9 @@ Route::middleware(['auth'])->group(function () {
             // Scan Oven
             Route::get('/scan-oven', [ScanController::class, 'scanOven'])->name('scan-oven.index');
             Route::post('/scan-oven', [ScanController::class, 'processOven'])->name('scan-oven.process');
+
+            // Void Scan Event
+            Route::post('/scan-events/{event}/void', [ScanController::class, 'voidEvent'])->name('scan-events.void');
 
             // Dashboard
             Route::get('/dashboard', [LostWaxDashboardController::class, 'index'])->name('dashboard');

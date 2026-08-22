@@ -10,6 +10,19 @@ class PrintOrderTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'ppic']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'operator']);
+
+        // Give ppic access_planning permission if permissions exist
+        $permission = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'access_planning']);
+        \Spatie\Permission\Models\Role::findByName('ppic')->givePermissionTo($permission);
+    }
+
     /**
      * Helper to create a production plan item.
      */
@@ -536,5 +549,57 @@ class PrintOrderTest extends TestCase
         // Transition to CANCELLED
         $this->actingAs($user)->post(route('lost-wax.print-orders.update-status', $order), ['status' => 'CANCELLED']);
         $this->assertSame('CANCELLED', $order->fresh()->status);
+    }
+
+    public function test_bulk_close_and_single_close_workflow_safety(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('ppic');
+
+        $plan1 = $this->createProductionPlan(['code' => 'P1', 'is_closed' => false]);
+        $plan2 = $this->createProductionPlan(['code' => 'P2', 'is_closed' => false]);
+        $plan3 = $this->createProductionPlan(['code' => 'P3', 'is_closed' => false]);
+
+        // 1. PPIC can single close a plan item
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'action' => 'close_plan',
+            'production_plan_id' => $plan1->id,
+        ]);
+        $response->assertRedirect();
+        $this->assertTrue($plan1->fresh()->is_closed);
+
+        // 2. PPIC can bulk close plans
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'action' => 'bulk_close_plans',
+            'plan_ids' => [$plan2->id, $plan3->id],
+        ]);
+        $response->assertRedirect();
+        $this->assertTrue($plan2->fresh()->is_closed);
+        $this->assertTrue($plan3->fresh()->is_closed);
+
+        // 3. Closed plans are excluded from active list filter
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'active']));
+        $response->assertOk();
+        $plansInActiveView = $response->original->getData()['plans'];
+        $this->assertFalse($plansInActiveView->contains('id', $plan1->id));
+        $this->assertFalse($plansInActiveView->contains('id', $plan2->id));
+        $this->assertFalse($plansInActiveView->contains('id', $plan3->id));
+
+        // 4. Closed plans are visible under closed filter
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'closed']));
+        $response->assertOk();
+        $plansInClosedView = $response->original->getData()['plans'];
+        $this->assertTrue($plansInClosedView->contains('id', $plan1->id));
+        $this->assertTrue($plansInClosedView->contains('id', $plan2->id));
+        $this->assertTrue($plansInClosedView->contains('id', $plan3->id));
+
+        // 5. Closed plan cannot be chosen to create a new print order
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.create', ['plan_ids' => [$plan1->id]]));
+        $response->assertRedirect(route('lost-wax.print-orders.plans'));
+        $response->assertSessionHas('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+
+        // 6. Action safety: closing does NOT create print orders or modify execution counts
+        $this->assertSame(0, \App\Models\LostWaxPrintOrder::count());
+        $this->assertSame(0, \App\Models\LostWaxPrintOrderLine::count());
     }
 }

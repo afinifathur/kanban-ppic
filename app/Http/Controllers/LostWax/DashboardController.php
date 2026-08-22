@@ -88,7 +88,8 @@ class DashboardController extends Controller
 
             $agingAnomaly = LostWaxScanEvent::where('result', 'success')
                 ->where('aging_status', 'too_long')
-                ->whereRaw('id IN (SELECT MAX(id) FROM lost_wax_scan_events WHERE result = ? GROUP BY tree_id)', ['success'])
+                ->whereDoesntHave('void')
+                ->whereRaw('id IN (SELECT MAX(id) FROM lost_wax_scan_events WHERE result = ? AND id NOT IN (SELECT scan_event_id FROM lost_wax_scan_event_voids) GROUP BY tree_id)', ['success'])
                 ->whereHas('tree.printOrderLine.productionPlan', function ($q) use ($scope) {
                     $q->where('product_scope', $scope);
                 })->count();
@@ -110,7 +111,8 @@ class DashboardController extends Controller
 
             $agingAnomaly = LostWaxScanEvent::where('result', 'success')
                 ->where('aging_status', 'too_long')
-                ->whereRaw('id IN (SELECT MAX(id) FROM lost_wax_scan_events WHERE result = ? GROUP BY tree_id)', ['success'])
+                ->whereDoesntHave('void')
+                ->whereRaw('id IN (SELECT MAX(id) FROM lost_wax_scan_events WHERE result = ? AND id NOT IN (SELECT scan_event_id FROM lost_wax_scan_event_voids) GROUP BY tree_id)', ['success'])
                 ->count();
 
             $rejectedCount = LostWaxScanEvent::where('result', 'rejected')->count();
@@ -172,6 +174,7 @@ class DashboardController extends Controller
     {
         $latestEvents = LostWaxScanEvent::where('result', 'success')
             ->whereNotNull('aging_status')
+            ->whereDoesntHave('void')
             ->selectRaw('tree_id, MAX(id) as event_id')
             ->groupBy('tree_id');
 
@@ -214,11 +217,12 @@ class DashboardController extends Controller
     private function buildHotList(string $filterEt, string $filterStage, string $filterAging, bool $isPpic, ?string $scope): array
     {
         $latestEventIds = LostWaxScanEvent::where('result', 'success')
+            ->whereDoesntHave('void')
             ->selectRaw('tree_id, MAX(id) as event_id')
             ->groupBy('tree_id');
 
         $query = LostWaxTree::with(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan', 'scanEvents' => function ($q) {
-            $q->where('result', 'success')->latest()->limit(2);
+            $q->where('result', 'success')->whereDoesntHave('void')->latest()->limit(2);
         }])
             ->leftJoinSub($latestEventIds, 'latest_event', function ($join) {
                 $join->on('lost_wax_trees.id', '=', 'latest_event.tree_id');
@@ -410,6 +414,7 @@ class DashboardController extends Controller
                     $q->where('work_order_id', $wo->id);
                 })->where('aging_status', 'too_long')
                     ->where('result', 'success')
+                    ->whereDoesntHave('void')
                     ->exists();
 
                 $result[] = [
@@ -477,6 +482,7 @@ class DashboardController extends Controller
                 $q->where('lost_wax_print_order_line_id', $line->id);
             })->where('aging_status', 'too_long')
                 ->where('result', 'success')
+                ->whereDoesntHave('void')
                 ->exists();
 
             $result[] = [

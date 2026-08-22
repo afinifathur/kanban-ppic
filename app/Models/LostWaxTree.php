@@ -10,6 +10,7 @@ class LostWaxTree extends Model
         'work_order_id',
         'work_order_plan_id',
         'lost_wax_print_order_line_id',
+        'rangkai_execution_id',
         'barcode',
         'tree_number',
         'quantity',
@@ -19,6 +20,7 @@ class LostWaxTree extends Model
         'production_date',
         'family_code',
         'daily_sequence',
+        'require_layer_7',
     ];
 
     protected $casts = [
@@ -27,6 +29,8 @@ class LostWaxTree extends Model
         'daily_sequence' => 'integer',
         'production_date' => 'date',
         'last_scan_at' => 'datetime',
+        'rangkai_execution_id' => 'integer',
+        'require_layer_7' => 'boolean',
     ];
 
     public function workOrder()
@@ -42,6 +46,11 @@ class LostWaxTree extends Model
     public function printOrderLine()
     {
         return $this->belongsTo(LostWaxPrintOrderLine::class, 'lost_wax_print_order_line_id');
+    }
+
+    public function rangkaiExecution()
+    {
+        return $this->belongsTo(LostWaxRangkaiExecution::class, 'rangkai_execution_id');
     }
 
     public function getHumanBarcodeAttribute(): string
@@ -169,7 +178,15 @@ class LostWaxTree extends Model
 
     public function getRequireLayer7Attribute(): bool
     {
-        return (bool) ($this->workOrder?->require_layer_7 ?? false);
+        if (array_key_exists('require_layer_7', $this->attributes) && (bool) $this->attributes['require_layer_7'] === true) {
+            return true;
+        }
+
+        if ($this->work_order_id !== null) {
+            return (bool) ($this->workOrder?->require_layer_7 ?? false);
+        }
+
+        return false;
     }
 
     public function hasMoreStages(): bool

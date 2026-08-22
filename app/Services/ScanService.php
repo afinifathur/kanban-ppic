@@ -172,6 +172,7 @@ class ScanService
             $existingOven = LostWaxScanEvent::where('tree_id', $tree->id)
                 ->where('stage', 'oven')
                 ->where('result', 'success')
+                ->whereDoesntHave('void')
                 ->exists();
 
             if ($existingOven) {

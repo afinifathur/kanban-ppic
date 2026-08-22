@@ -80,6 +80,7 @@ class ProductionStatusController extends Controller
         if ($treeIds !== []) {
             $latestEventIds = LostWaxScanEvent::whereIn('tree_id', $treeIds)
                 ->where('result', 'success')
+                ->whereDoesntHave('void')
                 ->selectRaw('tree_id, MAX(id) as event_id')
                 ->groupBy('tree_id');
 
