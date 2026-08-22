@@ -80,11 +80,11 @@ class LostWaxTree extends Model
 
     public function getSourceCode(): ?string
     {
-        if ($this->work_order_id) {
-            return $this->workOrder?->et_code;
-        }
         if ($this->lost_wax_print_order_line_id) {
             return $this->printOrderLine?->code;
+        }
+        if ($this->work_order_id) {
+            return $this->workOrder?->et_code;
         }
 
         return null;
@@ -101,11 +101,11 @@ class LostWaxTree extends Model
 
     public function getSourceCustomer(): ?string
     {
-        if ($this->work_order_id) {
-            return $this->workOrder?->customer_name;
-        }
         if ($this->lost_wax_print_order_line_id) {
             return $this->printOrderLine?->customer;
+        }
+        if ($this->work_order_id) {
+            return $this->workOrder?->customer_name;
         }
 
         return null;
@@ -113,11 +113,11 @@ class LostWaxTree extends Model
 
     public function getSourceProduct(): ?string
     {
-        if ($this->work_order_id) {
-            return $this->workOrder?->itemReference?->item_name_snapshot;
-        }
         if ($this->lost_wax_print_order_line_id) {
             return $this->printOrderLine?->item_name;
+        }
+        if ($this->work_order_id) {
+            return $this->workOrder?->itemReference?->item_name_snapshot;
         }
 
         return null;
@@ -125,11 +125,11 @@ class LostWaxTree extends Model
 
     public function getSourceItemCode(): ?string
     {
-        if ($this->work_order_id) {
-            return $this->workOrder?->itemReference?->item_code_snapshot;
-        }
         if ($this->lost_wax_print_order_line_id) {
             return $this->printOrderLine?->code; // code is the snapshot item/cust code (e.g. AB61)
+        }
+        if ($this->work_order_id) {
+            return $this->workOrder?->itemReference?->item_code_snapshot;
         }
 
         return null;
@@ -137,11 +137,11 @@ class LostWaxTree extends Model
 
     public function getSourceAisi(): ?string
     {
-        if ($this->work_order_id) {
-            return $this->workOrder?->itemReference?->aisi_snapshot;
-        }
         if ($this->lost_wax_print_order_line_id) {
             return $this->printOrderLine?->aisi;
+        }
+        if ($this->work_order_id) {
+            return $this->workOrder?->itemReference?->aisi_snapshot;
         }
 
         return null;
@@ -169,7 +169,7 @@ class LostWaxTree extends Model
 
     public function getRequireLayer7Attribute(): bool
     {
-        return (bool) ($this->workOrder->require_layer_7 ?? false);
+        return (bool) ($this->workOrder?->require_layer_7 ?? false);
     }
 
     public function hasMoreStages(): bool

@@ -18,17 +18,19 @@ class TsplRenderer
         $productionCode = $this->sanitize($productionCode);
 
         $itemCode = $this->sanitize($tree->getSourceItemCode() ?? '-');
-        $itemName = $tree->getSourceProduct() ?? '-';
+        $itemName = $this->sanitize($tree->getSourceProduct() ?? '-');
         $aisi = $this->sanitize($tree->getSourceAisi() ?? '-');
         $custCode = $this->sanitize($tree->getSourceCustomer() ?? '-');
         $barcode = $this->sanitize($tree->barcode);
-        $qty = $tree->quantity;
+        $qty = $this->sanitize((string) $tree->quantity);
 
-        $printDate = now()->format('d-m-Y');
-        $printTime = now()->format('H:i');
+        $printDate = $this->sanitize(now()->format('d-m-Y'));
+        $printTime = $this->sanitize(now()->format('H:i'));
+        $rackPlaceholder = $this->sanitize('_____________');
+        $descPlaceholder = $this->sanitize('_____________');
 
-        // Wrap item name: 38 characters per line using Font 2
-        $productNameLines = $this->wrapText($itemName, 38, 2);
+        // Wrap item name: 23 characters per line using Font 2 (word-wrapped to show maximum 2 lines)
+        $productNameLines = $this->wrapText($itemName, 23, 2);
 
         $cmds = [];
         $cmds[] = 'SIZE 90 mm, 50 mm';
@@ -74,10 +76,10 @@ class TsplRenderer
         $cmds[] = 'TEXT 580,240,"4",0,1,1,2,"'.$qty.' PCS"';
 
         // Bottom Metadata
-        $cmds[] = 'TEXT 30,332,"'.self::FONT_NORMAL.'",0,1,1,"TANGGAL PRINT : '.$printDate.'"';
+        $cmds[] = 'TEXT 30,332,"'.self::FONT_NORMAL.'",0,1,1,"TGL PRINT     : '.$printDate.'"';
         $cmds[] = 'TEXT 30,362,"'.self::FONT_NORMAL.'",0,1,1,"JAM PRINT     : '.$printTime.'"';
-        $cmds[] = 'TEXT 380,332,"'.self::FONT_NORMAL.'",0,1,1,"KODE RAK : _____________"';
-        $cmds[] = 'TEXT 380,362,"'.self::FONT_NORMAL.'",0,1,1,"KETERANGAN: _____________"';
+        $cmds[] = 'TEXT 380,332,"'.self::FONT_NORMAL.'",0,1,1,"KODE RAK : '.$rackPlaceholder.'"';
+        $cmds[] = 'TEXT 380,362,"'.self::FONT_NORMAL.'",0,1,1,"KETERANGAN: '.$descPlaceholder.'"';
 
         $cmds[] = 'PRINT 1,1';
 
@@ -137,8 +139,13 @@ class TsplRenderer
 
     private function sanitize(string $value): string
     {
-        $value = str_replace(['"', "\r", "\n"], '', $value);
+        // Replace double quotes (representing inches or otherwise) with ' IN'
+        $value = str_replace('"', ' IN', $value);
 
+        // Remove CR/LF/newline characters
+        $value = str_replace(["\r", "\n"], '', $value);
+
+        // Remove non-printable control characters (keep only printable ASCII 32 to 126)
         return preg_replace('/[^\x20-\x7E]/', '', $value);
     }
 }

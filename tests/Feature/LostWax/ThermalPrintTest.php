@@ -299,7 +299,7 @@ class ThermalPrintTest extends TestCase
             'qty_ordered' => 10,
             'code' => 'AB01',
             'customer' => 'PT. XYZ INDONESIA',
-            'item_name' => 'SS304 Flange 3 Inch',
+            'item_name' => 'SS304 Flange 3"',
         ]);
 
         $tree = LostWaxTree::create([
@@ -331,10 +331,10 @@ class ThermalPrintTest extends TestCase
         $this->assertStringContainsString('FORM BARCODE LAPISAN', $tspl);
         $this->assertStringContainsString('KODE PRODUKSI : ST-001', $tspl);
         $this->assertStringContainsString('KODE ITEM     : AB01', $tspl);
-        $this->assertStringContainsString('NAMA ITEM     : SS304 Flange 3 Inch', $tspl);
+        $this->assertStringContainsString('NAMA ITEM     : SS304 Flange 3 IN', $tspl);
         $this->assertStringContainsString('KODE CUST     : PT. XYZ INDONESIA', $tspl);
         $this->assertStringContainsString('15 PCS', $tspl);
-        $this->assertStringContainsString('TANGGAL PRINT : '.now()->format('d-m-Y'), $tspl);
+        $this->assertStringContainsString('TGL PRINT     : '.now()->format('d-m-Y'), $tspl);
         $this->assertStringContainsString('JAM PRINT     : '.now()->format('H:i'), $tspl);
         $this->assertStringContainsString('KODE RAK : _____________', $tspl);
         $this->assertStringContainsString('KETERANGAN: _____________', $tspl);
@@ -459,5 +459,223 @@ class ThermalPrintTest extends TestCase
         $response->assertSee('LOST WAX TRAVELER');
         $response->assertSee('Cetak Epson A4');
         $response->assertSee('Cetak Thermal 90×50');
+    }
+
+    /**
+     * Test barcode tree helper priority and robust sanitization in TSPL payload.
+     */
+    public function test_tree_helpers_and_sanitization_edge_cases(): void
+    {
+        // A. Verify New Print Order Line Tree helpers
+        $plan = ProductionPlan::create([
+            'code' => 'ST-002',
+            'customer' => 'PT. NEW CUST',
+            'item_code' => 'LY999',
+            'item_name' => 'SS316 Valve 2"',
+            'product_scope' => 'FITTING_STAINLESS',
+            'aisi' => '316',
+            'qty_planned' => 50,
+            'qty_remaining' => 50,
+            'status' => 'planning',
+            'line_number' => 3,
+            'po_number' => 'PO-ST-02',
+        ]);
+        $printOrder = LostWaxPrintOrder::create([
+            'print_order_number' => 'PO-002',
+            'scheduled_date' => now(),
+            'status' => 'ISSUED',
+            'created_by' => $this->adminUser->id,
+        ]);
+        $line = LostWaxPrintOrderLine::create([
+            'lost_wax_print_order_id' => $printOrder->id,
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 5,
+            'code' => 'AB61',
+            'customer' => 'PT. NEW CUST',
+            'item_name' => 'SS316 Valve 2"',
+            'aisi' => '316',
+        ]);
+        $treeNew = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line->id,
+            'barcode' => '260821999',
+            'tree_number' => 1,
+            'quantity' => 10,
+            'status' => 'generated',
+            'production_date' => now(),
+            'family_code' => '1',
+            'daily_sequence' => 999,
+        ]);
+
+        $this->assertEquals('SS316 Valve 2"', $treeNew->getSourceProduct());
+        $this->assertEquals('AB61', $treeNew->getSourceItemCode());
+        $this->assertEquals('AB61', $treeNew->getSourceCode());
+        $this->assertEquals('PT. NEW CUST', $treeNew->getSourceCustomer());
+        $this->assertEquals('316', $treeNew->getSourceAisi());
+        $this->assertFalse($treeNew->require_layer_7); // Verified null-safe require_layer_7 attribute
+
+        // B. Verify Legacy Tree helpers
+        $ref = \App\Models\LostWaxItemReference::create([
+            'master_source' => 'masterdata_kpi',
+            'master_item_key' => 'SKU-LEGACY',
+            'item_code_snapshot' => 'SKU-LEGACY',
+            'item_name_snapshot' => 'Legacy SS304 Flange',
+            'aisi_snapshot' => '304',
+        ]);
+        $workOrder = \App\Models\LostWaxWorkOrder::create([
+            'item_reference_id' => $ref->id,
+            'et_code' => 'WO-LEGACY',
+            'po_number' => 'PO-LEGACY',
+            'po_quantity' => 100,
+            'stock_quantity' => 0,
+            'net_requirement_quantity' => 100,
+            'customer_name' => 'LEGACY CUST',
+            'assembly_output_quantity' => 20,
+            'status' => 'active',
+            'family_code' => '3',
+            'require_layer_7' => true,
+        ]);
+        $treeLegacy = LostWaxTree::create([
+            'work_order_id' => $workOrder->id,
+            'barcode' => '110821888',
+            'tree_number' => 2,
+            'quantity' => 8,
+            'status' => 'generated',
+            'production_date' => now(),
+            'family_code' => '3',
+            'daily_sequence' => 888,
+        ]);
+
+        $this->assertEquals('Legacy SS304 Flange', $treeLegacy->getSourceProduct());
+        $this->assertEquals('SKU-LEGACY', $treeLegacy->getSourceItemCode());
+        $this->assertEquals('WO-LEGACY', $treeLegacy->getSourceCode());
+        $this->assertEquals('LEGACY CUST', $treeLegacy->getSourceCustomer());
+        $this->assertEquals('304', $treeLegacy->getSourceAisi());
+        $this->assertTrue($treeLegacy->require_layer_7);
+
+        // C. Verify TSPL Renderer sanitization and wrapping behavior
+        // C1. Short item name: "SS316 FLANGE 3 INCH" -> 1 line
+        $shortPlan = ProductionPlan::create([
+            'code' => 'ST-SHORT',
+            'customer' => 'PT. SHORT',
+            'item_code' => 'LY-SHORT',
+            'item_name' => 'SS316 FLANGE 3 INCH',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'aisi' => '304',
+            'qty_planned' => 10,
+            'qty_remaining' => 10,
+            'status' => 'planning',
+            'line_number' => 4,
+            'po_number' => 'PO-SHORT',
+        ]);
+        $shortLine = LostWaxPrintOrderLine::create([
+            'lost_wax_print_order_id' => $printOrder->id,
+            'production_plan_id' => $shortPlan->id,
+            'qty_ordered' => 5,
+            'code' => 'AB-SHORT',
+            'customer' => 'PT. SHORT',
+            'item_name' => 'SS316 FLANGE 3 INCH',
+            'aisi' => '304',
+        ]);
+        $treeShort = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $shortLine->id,
+            'barcode' => '260821777',
+            'tree_number' => 1,
+            'quantity' => 10,
+            'status' => 'generated',
+            'production_date' => now(),
+            'family_code' => '1',
+            'daily_sequence' => 777,
+        ]);
+
+        $tsplRenderer = new \App\Services\Barcode\Renderers\TsplRenderer();
+        $shortTspl = $tsplRenderer->render($treeShort);
+        $this->assertStringContainsString('NAMA ITEM     : SS316 FLANGE 3 INCH', $shortTspl);
+        $this->assertStringNotContainsString('                ', $shortTspl); // No second line spacing for name
+
+        // C2. Long item name with quotes: "SS316 SORF ANSI 150LBS 1\"" -> sanitized to "SS316 SORF ANSI 150LBS 1 IN" -> wraps to 2 lines
+        $longPlan = ProductionPlan::create([
+            'code' => 'ST-LONG',
+            'customer' => 'PT. LONG',
+            'item_code' => 'LY-LONG',
+            'item_name' => 'SS316 SORF ANSI 150LBS 1"',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'aisi' => '316',
+            'qty_planned' => 10,
+            'qty_remaining' => 10,
+            'status' => 'planning',
+            'line_number' => 5,
+            'po_number' => 'PO-LONG',
+        ]);
+        $longLine = LostWaxPrintOrderLine::create([
+            'lost_wax_print_order_id' => $printOrder->id,
+            'production_plan_id' => $longPlan->id,
+            'qty_ordered' => 5,
+            'code' => 'AB-LONG',
+            'customer' => 'PT. LONG',
+            'item_name' => 'SS316 SORF ANSI 150LBS 1"',
+            'aisi' => '316',
+        ]);
+        $treeLong = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $longLine->id,
+            'barcode' => '260821666',
+            'tree_number' => 1,
+            'quantity' => 10,
+            'status' => 'generated',
+            'production_date' => now(),
+            'family_code' => '1',
+            'daily_sequence' => 666,
+        ]);
+
+        $longTspl = $tsplRenderer->render($treeLong);
+        // Verify sanitization and two-line wrapping
+        $this->assertStringContainsString('NAMA ITEM     : SS316 SORF ANSI 150LBS', $longTspl);
+        $this->assertStringContainsString('                1 IN', $longTspl);
+
+        // C3. Verify TSPL Renderer sanitization of double quotes, CR, LF
+        $dirtyPlan = ProductionPlan::create([
+            'code' => 'ST-DIRTY',
+            'customer' => "PT. DIRTY\r\nCUST\"",
+            'item_code' => 'LY-DIRTY',
+            'item_name' => "SS316 Elbow 1-1/2\"\r\nwith dirt",
+            'product_scope' => 'FITTING_STAINLESS',
+            'aisi' => "316\n",
+            'qty_planned' => 10,
+            'qty_remaining' => 10,
+            'status' => 'planning',
+            'line_number' => 6,
+            'po_number' => 'PO-DIRTY',
+        ]);
+        $dirtyLine = LostWaxPrintOrderLine::create([
+            'lost_wax_print_order_id' => $printOrder->id,
+            'production_plan_id' => $dirtyPlan->id,
+            'qty_ordered' => 5,
+            'code' => "AB-DIRTY\"\n",
+            'customer' => "PT. DIRTY\r\nCUST\"",
+            'item_name' => "SS316 Elbow 1-1/2\"\r\nwith dirt",
+            'aisi' => "316\n",
+        ]);
+        $treeDirty = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $dirtyLine->id,
+            'barcode' => '260821888',
+            'tree_number' => 1,
+            'quantity' => 10,
+            'status' => 'generated',
+            'production_date' => now(),
+            'family_code' => '1',
+            'daily_sequence' => 888,
+        ]);
+
+        $dirtyTspl = $tsplRenderer->render($treeDirty);
+
+        // Verify the double quotes and newlines are sanitized and wrapped properly in the output
+        $this->assertStringContainsString('NAMA ITEM     : SS316 Elbow 1-1/2', $dirtyTspl);
+        $this->assertStringContainsString('                INwith dirt', $dirtyTspl);
+        $this->assertStringContainsString('KODE ITEM     : AB-DIRTY IN', $dirtyTspl);
+        $this->assertStringContainsString('KODE CUST     : PT. DIRTYCUST IN', $dirtyTspl);
+        $this->assertStringContainsString('AISI          : 316', $dirtyTspl);
+
+        // D. Verify footer uses TGL PRINT and NOT TANGGAL PRINT
+        $this->assertStringContainsString('TGL PRINT     :', $dirtyTspl);
+        $this->assertStringNotContainsString('TANGGAL PRINT', $dirtyTspl);
     }
 }
