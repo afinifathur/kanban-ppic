@@ -122,7 +122,7 @@ class OutcomeController extends Controller
         $request->validate([
             'qty_good' => 'required|integer|min:0',
             'qty_defect' => 'required|integer|min:0',
-            'execution_date' => 'required|date',
+            'execution_date' => 'required|date|before_or_equal:today',
             'status' => 'required|in:DRAFT,FINALIZED',
             'notes' => 'nullable|string',
         ]);
@@ -176,12 +176,13 @@ class OutcomeController extends Controller
         $request->validate([
             'qty_good' => 'required|integer|min:0',
             'qty_defect' => 'required|integer|min:0',
+            'execution_date' => 'required|date|before_or_equal:today',
             'notes' => 'nullable|string',
         ]);
 
         try {
             $service = app(\App\Services\PrintExecutionService::class);
-            $service->update($execution, $request->only(['qty_good', 'qty_defect', 'notes']));
+            $service->update($execution, $request->only(['qty_good', 'qty_defect', 'execution_date', 'notes']));
 
             return response()->json([
                 'success' => true,

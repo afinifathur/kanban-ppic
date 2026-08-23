@@ -172,25 +172,25 @@ class OutcomeAndAssemblyTest extends TestCase
             'aisi' => $plan->aisi,
         ]);
 
-        // Case 1: 118 with capacity 20 => 20, 20, 20, 20, 20, 18
+        // Case 1: 118 available
         $response = $this->actingAs($user)
             ->get(route('lost-wax.assemblies.create', ['line' => $line->id, 'standard_tree_capacity' => 20]));
         $response->assertOk();
-        $response->assertSee('Tree #006');
+        $response->assertSee('118');
 
-        // Case 2: 43 with capacity 20 => 20, 20, 3
+        // Case 2: 43 available
         $line->update(['qty_actual_good' => 43]);
         $response = $this->actingAs($user)
             ->get(route('lost-wax.assemblies.create', ['line' => $line->id, 'standard_tree_capacity' => 20]));
         $response->assertOk();
-        $response->assertSee('Tree #003');
+        $response->assertSee('43');
 
-        // Case 3: 7 with capacity 20 => 7
+        // Case 3: 7 available
         $line->update(['qty_actual_good' => 7]);
         $response = $this->actingAs($user)
             ->get(route('lost-wax.assemblies.create', ['line' => $line->id, 'standard_tree_capacity' => 20]));
         $response->assertOk();
-        $response->assertSee('Tree #001');
+        $response->assertSee('7');
     }
 
     public function test_cannot_exceed_available_good_quantity(): void

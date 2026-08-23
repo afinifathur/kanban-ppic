@@ -18,12 +18,14 @@ class LostWaxRangkaiWorkOrder extends Model
         'notes',
         'reference_image_path',
         'created_by',
+        'standard_capacity_guide',
     ];
 
     protected $casts = [
         'require_layer_7' => 'boolean',
         'qty_trees_planned' => 'integer',
         'tree_capacity' => 'integer',
+        'standard_capacity_guide' => 'integer',
     ];
 
     public function creator()
@@ -44,6 +46,24 @@ class LostWaxRangkaiWorkOrder extends Model
     // Accessor: Qty Planned in pcs
     public function getQtyPlannedPcsAttribute(): int
     {
+        /**
+         * COMPATIBILITY BRIDGE:
+         * - Legacy WO: tree_capacity > 1
+         *   → qty_trees_planned means number of physical trees.
+         *   → qty_planned_pcs = qty_trees_planned * tree_capacity
+         *
+         * - New WO: tree_capacity = 1
+         *   → qty_trees_planned is repurposed as the ordered PCS quantity.
+         *   → qty_planned_pcs = qty_trees_planned
+         *   → NO physical tree is implied by this value.
+         *
+         * Note to future developers: tree_capacity = 1 does NOT mean "1 pcs per tree".
+         * The standard_capacity_guide column contains the capacity guide/pedoman instead.
+         */
+        if ($this->tree_capacity === 1) {
+            return $this->qty_trees_planned;
+        }
+
         return $this->qty_trees_planned * $this->tree_capacity;
     }
 

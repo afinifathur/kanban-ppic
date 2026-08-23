@@ -46,6 +46,7 @@ class RangkaiExecutionService
                 'lost_wax_print_order_line_id' => $line->id,
                 'qty_trees_planned' => $qtyTreesPlanned,
                 'tree_capacity' => $treeCapacity,
+                'standard_capacity_guide' => $data['standard_capacity_guide'] ?? null,
                 'require_layer_7' => (bool) ($data['require_layer_7'] ?? false),
                 'status' => 'OPEN',
                 'notes' => $data['notes'] ?? null,

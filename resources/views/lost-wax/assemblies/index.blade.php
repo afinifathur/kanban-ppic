@@ -29,29 +29,53 @@
             </nav>
         </div>
 
+            <!-- Search bar & Filters -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                <form method="GET" action="{{ route('lost-wax.assemblies.index') }}" class="flex flex-wrap items-end gap-3.5">
+                    <input type="hidden" name="tab" value="{{ $activeTab }}">
+                    
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Cari Item / No Perintah</label>
+                        <input type="text" name="search" value="{{ request('search') }}" placeholder="Produk, PC-..." class="rounded-lg border-slate-300 text-sm w-48 py-1.5 px-3">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Kode Produksi</label>
+                        <input type="text" name="code" value="{{ request('code') }}" placeholder="26AB001" class="rounded-lg border-slate-300 text-sm w-36 py-1.5 px-3">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Kode Customer</label>
+                        <input type="text" name="customer" value="{{ request('customer') }}" placeholder="A06" class="rounded-lg border-slate-300 text-sm w-36 py-1.5 px-3">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Size</label>
+                        <input type="text" name="size" value="{{ request('size') }}" placeholder='1/2"' class="rounded-lg border-slate-300 text-sm w-28 py-1.5 px-3">
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded-lg transition-all shadow-sm">
+                            Filter
+                        </button>
+                        @if(request('search') || request('code') || request('customer') || request('size'))
+                            <a href="{{ route('lost-wax.assemblies.index', ['tab' => $activeTab]) }}" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 px-4 rounded-lg transition-all border border-slate-200 text-center">
+                                Reset
+                            </a>
+                        @endif
+                    </div>
+                </form>
+            </div>
+
         @if($activeTab === 'available')
             <!-- Tab 1: Available lines for Rangkai -->
-            <!-- Search bar -->
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-end gap-3">
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Cari Item / No Perintah</label>
-                    <form method="GET" class="flex items-end gap-2">
-                        <input type="hidden" name="tab" value="available">
-                        <input type="text" name="search" value="{{ request('search') }}" placeholder="Kode, Produk, PC-..." class="rounded-lg border-slate-300 text-sm w-64">
-                        <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-1.5 px-3 rounded">Filter</button>
-                        @if(request('search'))
-                            <a href="{{ route('lost-wax.assemblies.index', ['tab' => 'available']) }}" class="text-xs text-slate-500 hover:text-slate-700 py-1.5">Clear</a>
-                        @endif
-                    </form>
-                </div>
-            </div>
 
             <!-- Table of assembly items -->
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 uppercase">
-                            <th class="p-4">Kode Cust</th>
+                            <th class="p-4">Kode Produksi</th>
                             <th class="p-4">Produk</th>
                             <th class="p-4">No Perintah Cetak</th>
                             <th class="p-4">Qty Rencana</th>
@@ -104,7 +128,7 @@
                     </tbody>
                 </table>
             </div>
-            <div>{{ $lines->appends(['tab' => 'available'])->links() }}</div>
+            <div>{{ $lines->appends(request()->query())->links() }}</div>
         @else
             <!-- Tab 2: Rangkai Work Orders -->
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -148,9 +172,14 @@
                                     </span>
                                 </td>
                                 <td class="p-4 text-right">
-                                    <a href="{{ route('lost-wax.assemblies.work-orders.show', $wo) }}" class="inline-flex items-center gap-1 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-all shadow-sm">
-                                        <i class="fas fa-eye"></i> Detail &amp; Eksekusi
-                                    </a>
+                                    <div class="flex items-center justify-end gap-2">
+                                        <a href="{{ route('lost-wax.assemblies.work-orders.print', $wo) }}" target="_blank" class="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-all shadow-sm">
+                                            <i class="fas fa-print"></i> Print A5
+                                        </a>
+                                        <a href="{{ route('lost-wax.assemblies.work-orders.show', $wo) }}" class="inline-flex items-center gap-1 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition-all shadow-sm">
+                                            <i class="fas fa-eye"></i> Detail &amp; Eksekusi
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
@@ -164,7 +193,7 @@
                     </tbody>
                 </table>
             </div>
-            <div>{{ $workOrders->appends(['tab' => 'work-orders'])->links() }}</div>
+            <div>{{ $workOrders->appends(request()->query())->links() }}</div>
         @endif
     </div>
 @endsection

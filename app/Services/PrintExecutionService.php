@@ -77,6 +77,7 @@ class PrintExecutionService
 
             $qtyGood = (int) ($data['qty_good'] ?? $execution->qty_good);
             $qtyDefect = (int) ($data['qty_defect'] ?? $execution->qty_defect);
+            $executionDate = $data['execution_date'] ?? $execution->execution_date;
             $status = $data['status'] ?? $execution->status;
             $notes = $data['notes'] ?? $execution->notes;
             $userId = auth()->id();
@@ -101,6 +102,7 @@ class PrintExecutionService
             $execution->update([
                 'qty_good' => $qtyGood,
                 'qty_defect' => $qtyDefect,
+                'execution_date' => $executionDate,
                 'status' => $status,
                 'notes' => $notes,
             ]);

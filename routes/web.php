@@ -117,6 +117,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/assemblies/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'store'])->name('assemblies.store');
             Route::post('/assemblies/work-orders/create-wo/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'storeWorkOrder'])->name('assemblies.work-orders.store');
             Route::get('/assemblies/work-orders/{workOrder}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'showWorkOrder'])->name('assemblies.work-orders.show');
+            Route::get('/assemblies/work-orders/{workOrder}/print', [\App\Http\Controllers\LostWax\AssemblyController::class, 'printWorkOrder'])->name('assemblies.work-orders.print');
             Route::post('/assemblies/work-orders/{workOrder}/execution', [\App\Http\Controllers\LostWax\AssemblyController::class, 'storeExecution'])->name('assemblies.work-orders.execution.store');
 
             // Work Orders

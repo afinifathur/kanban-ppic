@@ -321,9 +321,440 @@ class PrintExecutionTest extends TestCase
         $responseEdit->assertSee('DRAFT');
         $responseEdit->assertSee('FINALIZED');
         $responseEdit->assertSee('SS316 TEE BAR');
-        $responseEdit->assertSee('Total Good Terkumpul');
+        $responseEdit->assertSee('Sudah Good');
         $responseEdit->assertSee('40 pcs');
         $responseEdit->assertSee('3 pcs');
         $responseEdit->assertSee('57 pcs'); // Outstanding = 100 - 40 - 3 = 57
+    }
+
+    public function test_backdated_execution_allowed(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:15:32');
+
+        $response = $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 70,
+            'qty_defect' => 5,
+            'execution_date' => '2026-08-27',
+            'status' => 'FINALIZED',
+            'notes' => 'Backdated entry',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        $execution = $line->executions()->first();
+        $this->assertNotNull($execution);
+        $this->assertEquals('2026-08-27', $execution->execution_date->format('Y-m-d'));
+        $this->assertEquals('2026-08-28 08:15:32', $execution->recorded_at->format('Y-m-d H:i:s'));
+
+        $line->refresh();
+        $this->assertEquals(25, $line->qty_outstanding);
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_future_execution_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:15:32');
+
+        $response = $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 20,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-29', // Future date
+            'status' => 'FINALIZED',
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertEquals(0, $line->executions()->count());
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_same_date_multiple_executions(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:15:32');
+
+        $response1 = $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 40,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-27',
+            'status' => 'FINALIZED',
+        ]);
+        $response1->assertStatus(200);
+
+        $response2 = $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 30,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-27',
+            'status' => 'FINALIZED',
+        ]);
+        $response2->assertStatus(200);
+
+        $this->assertEquals(2, $line->executions()->count());
+        $line->refresh();
+        $this->assertEquals(70, $line->qty_executed_good);
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_backdated_draft(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:15:32');
+
+        $response = $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 70,
+            'qty_defect' => 5,
+            'execution_date' => '2026-08-27',
+            'status' => 'DRAFT',
+        ]);
+        $response->assertStatus(200);
+
+        $execution = $line->executions()->first();
+        $this->assertNotNull($execution);
+        $this->assertEquals('2026-08-27', $execution->execution_date->format('Y-m-d'));
+        $this->assertEquals('2026-08-28 08:15:32', $execution->created_at->format('Y-m-d H:i:s'));
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_backdated_finalized_execution(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        // Create draft yesterday
+        \Illuminate\Support\Carbon::setTestNow('2026-08-27 10:00:00');
+        $service = app(\App\Services\PrintExecutionService::class);
+        $execution = $service->record($line, [
+            'qty_good' => 50,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-27',
+            'status' => 'DRAFT',
+            'recorded_by' => $user->id,
+        ]);
+
+        $this->assertEquals('2026-08-27', $execution->execution_date->format('Y-m-d'));
+        $this->assertEquals('2026-08-27 10:00:00', $execution->created_at->format('Y-m-d H:i:s'));
+        $this->assertNull($execution->finalized_at);
+
+        // Finalize today
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:15:32');
+        $response = $this->actingAs($user)->postJson(route('lost-wax.outcomes.executions.finalize', $execution));
+        $response->assertStatus(200);
+
+        $execution->refresh();
+        $this->assertEquals('FINALIZED', $execution->status);
+        $this->assertEquals('2026-08-27', $execution->execution_date->format('Y-m-d'));
+        $this->assertEquals('2026-08-28 08:15:32', $execution->finalized_at->format('Y-m-d H:i:s'));
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_scenario_a_finalize_70_out_of_120(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 120,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:00:00');
+
+        $response = $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 70,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-28',
+            'status' => 'FINALIZED',
+        ]);
+
+        $response->assertStatus(200);
+        $line->refresh();
+        $this->assertEquals(50, $line->qty_outstanding);
+        $this->assertEquals('IN_PROGRESS', $line->execution_status);
+
+        $exec = $line->executions()->first();
+        $this->assertEquals('FINALIZED', $exec->status);
+        $this->assertEquals(70, $exec->qty_good);
+        $this->assertEquals(0, $exec->qty_defect);
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_scenario_b_second_execution_50(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 120,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 08:00:00');
+
+        // First execution 70
+        $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 70,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-28',
+            'status' => 'FINALIZED',
+        ])->assertStatus(200);
+
+        // Second execution 50
+        $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 50,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-28',
+            'status' => 'FINALIZED',
+        ])->assertStatus(200);
+
+        $line->refresh();
+        $this->assertEquals(0, $line->qty_outstanding);
+        $this->assertEquals('COMPLETED', $line->execution_status);
+        $this->assertEquals(120, $line->qty_executed_good);
+
+        $this->assertEquals(2, $line->executions()->count());
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_scenario_c_backdated_execution(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 120,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 10:00:00');
+
+        $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 70,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-27', // yesterday
+            'status' => 'FINALIZED',
+        ])->assertStatus(200);
+
+        $exec = $line->executions()->first();
+        $this->assertEquals('2026-08-27', $exec->execution_date->format('Y-m-d'));
+        $this->assertEquals('2026-08-28 10:00:00', $exec->finalized_at->format('Y-m-d H:i:s'));
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_scenario_d_future_date_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 120,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        \Illuminate\Support\Carbon::setTestNow('2026-08-28 10:00:00');
+
+        $this->actingAs($user)->postJson(route('lost-wax.outcomes.lines.execution.store', $line), [
+            'qty_good' => 70,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-29', // tomorrow
+            'status' => 'FINALIZED',
+        ])->assertStatus(422);
+
+        $this->assertEquals(0, $line->executions()->count());
+
+        \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    public function test_scenario_e_finalized_immutable(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 120,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+        $exec = $service->record($line, [
+            'qty_good' => 70,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-28',
+            'status' => 'FINALIZED',
+            'recorded_by' => $user->id,
+        ]);
+
+        // Attempting to update via PUT endpoint
+        $this->actingAs($user)->putJson(route('lost-wax.outcomes.executions.update', $exec), [
+            'qty_good' => 80,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-28',
+        ])->assertStatus(422);
+
+        // Attempting to finalize via POST endpoint again
+        $this->actingAs($user)->postJson(route('lost-wax.outcomes.executions.finalize', $exec))
+            ->assertStatus(422);
+    }
+
+    public function test_scenario_f_route_reachability(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan();
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260828-0001',
+            'scheduled_date' => '2026-08-28',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 120,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+        $exec = $service->record($line, [
+            'qty_good' => 70,
+            'qty_defect' => 0,
+            'execution_date' => '2026-08-28',
+            'status' => 'DRAFT',
+            'recorded_by' => $user->id,
+        ]);
+
+        // 1. Store URL check
+        $storeUrl = route('lost-wax.outcomes.lines.execution.store', $line);
+        $this->assertStringContainsString('lost-wax/outcomes/lines/'.$line->id.'/execution', $storeUrl);
+
+        // 2. Update URL check
+        $updateUrl = route('lost-wax.outcomes.executions.update', $exec);
+        $this->assertStringContainsString('lost-wax/outcomes/executions/'.$exec->id, $updateUrl);
+
+        // 3. Finalize URL check
+        $finalizeUrl = route('lost-wax.outcomes.executions.finalize', $exec);
+        $this->assertStringContainsString('lost-wax/outcomes/executions/'.$exec->id.'/finalize', $finalizeUrl);
     }
 }

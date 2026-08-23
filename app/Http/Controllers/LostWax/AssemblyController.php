@@ -36,6 +36,18 @@ class AssemblyController extends Controller
             });
         }
 
+        if ($request->filled('code')) {
+            $query->where('code', $request->code);
+        }
+
+        if ($request->filled('customer')) {
+            $query->where('customer', $request->customer);
+        }
+
+        if ($request->filled('size')) {
+            $query->where('size', $request->size);
+        }
+
         // Fetch all lines first to filter by dynamic attribute available_qty
         // Fetch all lines first to filter by dynamic attribute available_qty
         $lines = $query->orderBy('id', 'desc')->get()->filter(function ($line) {
@@ -60,6 +72,38 @@ class AssemblyController extends Controller
                 $q->where('product_scope', $scope);
             });
         }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $woQuery->whereHas('printOrderLine', function ($q) use ($search) {
+                $q->where(function ($q2) use ($search) {
+                    $q2->where('item_name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('customer', 'like', "%{$search}%")
+                        ->orWhereHas('printOrder', function ($q3) use ($search) {
+                            $q3->where('print_order_number', 'like', "%{$search}%");
+                        });
+                });
+            });
+        }
+
+        if ($request->filled('code')) {
+            $woQuery->whereHas('printOrderLine', function ($q) use ($request) {
+                $q->where('code', $request->code);
+            });
+        }
+
+        if ($request->filled('customer')) {
+            $woQuery->whereHas('printOrderLine', function ($q) use ($request) {
+                $q->where('customer', $request->customer);
+            });
+        }
+
+        if ($request->filled('size')) {
+            $woQuery->whereHas('printOrderLine', function ($q) use ($request) {
+                $q->where('size', $request->size);
+            });
+        }
+
         $workOrders = $woQuery->orderBy('id', 'desc')->paginate(15, ['*'], 'wo_page');
 
         return view('lost-wax.assemblies.index', [
@@ -75,17 +119,23 @@ class AssemblyController extends Controller
     {
         $this->authorizeLine($line);
         $request->validate([
-            'qty_trees_planned' => 'required|integer|min:1',
-            'tree_capacity' => 'required|integer|min:1',
+            'qty_ordered' => 'required|integer|min:1',
+            'standard_capacity_guide' => 'required|integer|min:1',
             'require_layer_7' => 'nullable|boolean',
             'notes' => 'nullable|string',
         ]);
 
+        $available = $line->qty_available_for_rangkai;
+        if ($request->qty_ordered > $available) {
+            return back()->withInput()->with('error', "Total rencana rangkai ({$request->qty_ordered} pcs) tidak boleh melebihi hasil cetak tersedia ({$available} pcs).");
+        }
+
         try {
             $service = app(\App\Services\RangkaiExecutionService::class);
             $service->createWorkOrder($line, [
-                'qty_trees_planned' => $request->qty_trees_planned,
-                'tree_capacity' => $request->tree_capacity,
+                'qty_trees_planned' => $request->qty_ordered,
+                'tree_capacity' => 1, // Store 1 as compatibility bridge
+                'standard_capacity_guide' => $request->standard_capacity_guide,
                 'require_layer_7' => $request->has('require_layer_7'),
                 'notes' => $request->notes,
             ]);
@@ -112,8 +162,13 @@ class AssemblyController extends Controller
         $line = $workOrder->printOrderLine;
         $proposed = [];
         $remaining = $workOrder->qty_outstanding;
+
+        $capacity = $workOrder->tree_capacity === 1
+            ? ($workOrder->standard_capacity_guide ?: 20)
+            : $workOrder->tree_capacity;
+
         while ($remaining > 0) {
-            $qty = min($workOrder->tree_capacity, $remaining);
+            $qty = min($capacity, $remaining);
             $proposed[] = $qty;
             $remaining -= $qty;
         }
@@ -126,8 +181,25 @@ class AssemblyController extends Controller
             'line',
             'proposed',
             'families',
-            'familyCode'
+            'familyCode',
+            'capacity'
         ));
+    }
+
+    /**
+     * Print Rangkai Work Order in A5 landscape.
+     */
+    public function printWorkOrder(\App\Models\LostWaxRangkaiWorkOrder $workOrder)
+    {
+        $this->authorizeWorkOrder($workOrder);
+        $workOrder->load([
+            'printOrderLine.printOrder',
+            'printOrderLine.productionPlan',
+        ]);
+        $line = $workOrder->printOrderLine;
+        $availableQty = $line->qty_available_for_rangkai;
+
+        return view('lost-wax.assemblies.print_wo', compact('workOrder', 'line', 'availableQty'));
     }
 
     /**
