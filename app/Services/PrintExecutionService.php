@@ -25,13 +25,9 @@ class PrintExecutionService
             $notes = $data['notes'] ?? null;
             $userId = $data['recorded_by'] ?? auth()->id();
 
-            // 1. Calculate current outstanding (excluding any DRAFT execution being updated if we're editing)
-            // But this function is for RECORDing (creating a new one).
-            $currentOutstanding = $line->qty_outstanding;
-
-            $newTotal = $qtyGood + $qtyDefect;
-            if ($newTotal > $currentOutstanding) {
-                throw new \InvalidArgumentException("Total Hasil ({$qtyGood} pcs) + Rusak ({$qtyDefect} pcs) tidak boleh melebihi sisa outstanding ({$currentOutstanding} pcs) untuk item {$line->item_name}.");
+            // 1. Validate negative quantities
+            if ($qtyGood < 0 || $qtyDefect < 0) {
+                throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
             }
 
             // 2. Validate tree allocation
@@ -85,11 +81,9 @@ class PrintExecutionService
             // Calculate outstanding without this current execution
             $otherGood = $line->executions()->where('id', '!=', $execution->id)->sum('qty_good');
             $otherDefect = $line->executions()->where('id', '!=', $execution->id)->sum('qty_defect');
-            $currentOutstanding = max(0, $line->qty_ordered - $otherGood - $otherDefect);
 
-            $newTotal = $qtyGood + $qtyDefect;
-            if ($newTotal > $currentOutstanding) {
-                throw new \InvalidArgumentException("Total Hasil ({$qtyGood} pcs) + Rusak ({$qtyDefect} pcs) tidak boleh melebihi sisa outstanding ({$currentOutstanding} pcs) untuk item {$line->item_name}.");
+            if ($qtyGood < 0 || $qtyDefect < 0) {
+                throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
             }
 
             // Validate trees vs new good total
@@ -145,11 +139,11 @@ class PrintExecutionService
         $line->actual_recorded_at = now();
         $line->actual_recorded_by = auth()->id() ?? 1;
 
-        // Determine execution_status
-        $outstanding = max(0, $line->qty_ordered - $goodSum - $defectSum);
+        // Determine execution_status (without clamping outstanding mathematically to allow overprint to mark it as COMPLETED)
+        $outstanding = $line->qty_ordered - $goodSum - $defectSum;
         if ($goodSum === 0 && $defectSum === 0) {
             $line->execution_status = 'PENDING';
-        } elseif ($outstanding === 0) {
+        } elseif ($outstanding <= 0) {
             $line->execution_status = 'COMPLETED';
         } else {
             $line->execution_status = 'IN_PROGRESS';

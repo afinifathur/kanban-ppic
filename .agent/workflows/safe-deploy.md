@@ -55,6 +55,9 @@ cd /srv/docker/apps/kanban-ppic
 # Pull kode terbaru
 git pull origin main
 
+sudo docker compose build --no-cache
+sudo docker compose up -d
+
 # Clear semua cache
 docker compose exec app php artisan config:clear
 docker compose exec app php artisan view:clear

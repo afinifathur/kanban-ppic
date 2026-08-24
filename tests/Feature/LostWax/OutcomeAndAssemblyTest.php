@@ -73,7 +73,7 @@ class OutcomeAndAssemblyTest extends TestCase
         $this->assertEquals(20, $line->standard_tree_capacity);
     }
 
-    public function test_outcome_validation_invariant_not_exceed_ordered(): void
+    public function test_outcome_validation_allows_exceed_ordered(): void
     {
         $user = User::factory()->create();
         $plan = $this->createProductionPlan();
@@ -95,7 +95,7 @@ class OutcomeAndAssemblyTest extends TestCase
             'aisi' => $plan->aisi,
         ]);
 
-        // Attempt total 120 (115 good + 5 defect) on qty_ordered 100 (invalid)
+        // Attempt total 120 (115 good + 5 defect) on qty_ordered 100 (valid overprint now)
         $response = $this->actingAs($user)
             ->put(route('lost-wax.outcomes.update', $order), [
                 'items' => [
@@ -108,9 +108,11 @@ class OutcomeAndAssemblyTest extends TestCase
                 ],
             ]);
 
-        $response->assertSessionHas('error');
+        $response->assertRedirect(route('lost-wax.outcomes.index'));
+        $response->assertSessionHas('success');
         $line->refresh();
-        $this->assertNull($line->qty_actual_good);
+        $this->assertEquals(115, $line->qty_actual_good);
+        $this->assertEquals(5, $line->qty_actual_defect);
     }
 
     public function test_cannot_cancel_print_order_if_outcomes_are_recorded(): void
@@ -324,5 +326,151 @@ class OutcomeAndAssemblyTest extends TestCase
 
         $tree->refresh();
         $this->assertEquals('layer_1', $tree->current_stage);
+    }
+
+    public function test_cancelled_print_orders_are_filtered_from_outcomes_list(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Create ISSUED print order (should be visible)
+        $orderIssued = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-ISSUED-01',
+            'scheduled_date' => '2026-08-18',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+
+        // 2. Create CANCELLED print order (should NOT be visible)
+        $orderCancelled = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-CANCELLED-02',
+            'scheduled_date' => '2026-08-18',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.outcomes.index'));
+        $response->assertOk();
+
+        // Assert we see the issued one and do NOT see the cancelled one
+        $printOrders = $response->original->getData()['printOrders'];
+        $this->assertTrue($printOrders->contains('id', $orderIssued->id));
+        $this->assertFalse($printOrders->contains('id', $orderCancelled->id));
+    }
+
+    public function test_searching_for_cancelled_document_returns_empty_result(): void
+    {
+        $user = User::factory()->create();
+
+        // Create CANCELLED print order
+        $orderCancelled = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-CANCELLED-99',
+            'scheduled_date' => '2026-08-18',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.outcomes.index', [
+            'print_order_number' => 'PC-CANCELLED-99',
+        ]));
+        $response->assertOk();
+
+        // Assert it does not return the cancelled document
+        $printOrders = $response->original->getData()['printOrders'];
+        $this->assertFalse($printOrders->contains('id', $orderCancelled->id));
+        $this->assertCount(0, $printOrders);
+    }
+
+    public function test_assembly_work_order_print_view_renders_correct_data_and_layout(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->createProductionPlan([
+            'code' => 'KODE-PROD-999',
+            'item_name' => 'CS VALVES ASME B16.34 2"',
+            'customer' => 'CUST-VALVE-A',
+            'aisi' => 'Q235',
+            'size' => '2"',
+        ]);
+
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-PRINT-TEST-12',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 600,
+            'qty_actual_good' => 600,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+        ]);
+
+        $workOrder = \App\Models\LostWaxRangkaiWorkOrder::create([
+            'rangkai_order_number' => 'RWO-PRINT-TEST-99',
+            'lost_wax_print_order_line_id' => $line->id,
+            'qty_trees_planned' => 100,
+            'tree_capacity' => 1,
+            'standard_capacity_guide' => 20,
+            'require_layer_7' => true,
+            'status' => 'OPEN',
+            'notes' => 'Harap dirangkai secara hati-hati.',
+            'created_by' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.print', $workOrder));
+        $response->assertOk();
+
+        // Assert crucial traceability fields are fully present
+        $response->assertSee('RWO-PRINT-TEST-99');
+        $response->assertSee('KODE-PROD-999');
+        $response->assertSee('100 PCS');
+        $response->assertSee('CS VALVES ASME B16.34 2"');
+        $response->assertSee('CUST-VALVE-A');
+        $response->assertSee('Q235');
+        $response->assertSee('2"');
+        $response->assertSee('PC-PRINT-TEST-12');
+        $response->assertSee('Harap dirangkai secara hati-hati.');
+
+        // Assert shop-floor ticket layout elements and operator feedback areas
+        $response->assertSee('LOST WAX ASSEMBLY - TRACEABILITY PICKING TICKET');
+        $response->assertSee('HASIL AKTUAL RANGKAI');
+        $response->assertSee('Qty Diambil:');
+        $response->assertSee('Qty Good:');
+        $response->assertSee('Qty Defect:');
+        $response->assertSee('Tanggal:');
+        $response->assertSee('Jam:');
+        $response->assertSee('Mulai:');
+        $response->assertSee('Selesai:');
+        $response->assertSee('OPERATOR RANGKAI:');
+        $response->assertSee('SUPERVISOR RANGKAI:');
+        $response->assertSee('PPIC / ADMIN:');
+
+        // Assert CSS layout: A4 portrait media with A5 landscape form (210mm x 148mm)
+        $html = $response->getContent();
+        $this->assertStringContainsString('size: A4 portrait;', $html);
+        $this->assertStringNotContainsString('size: A5 landscape;', $html);
+        $this->assertStringContainsString('width: 210mm;', $html);
+        $this->assertStringContainsString('height: 148mm;', $html);
+        $this->assertStringContainsString('cut-guide', $html);
+        $this->assertStringNotContainsString('CUT / POTONG', $html);
+
+        // Assert that CONTEXT BATCH PRINT is removed
+        $this->assertStringNotContainsString('CONTEXT BATCH PRINT', $html);
+        $this->assertStringNotContainsString('Total Hasil Cetak Good', $html);
+        $this->assertStringNotContainsString('Sisa Tersedia Rangkai', $html);
+
+        // Assert that REFERENSI GAMBAR is present and enlarged
+        $this->assertStringContainsString('REFERENSI GAMBAR', $html);
+        $this->assertStringContainsString('TAMPAK DEPAN', $html);
+        $this->assertStringContainsString('TAMPAK SAMPING', $html);
+        $this->assertStringContainsString('min-h-[80px]', $html);
+
+        // Assert web controls are hidden on print
+        $this->assertStringContainsString('no-print', $html);
+        $this->assertStringNotContainsString('truncate', $html);
     }
 }

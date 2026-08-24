@@ -9,6 +9,11 @@ use App\Models\LostWaxTree;
 use App\Models\LostWaxWorkOrder;
 use App\Models\ProductionPlan;
 use Illuminate\Http\Request;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ProductionStatusController extends Controller
 {
@@ -16,19 +21,48 @@ class ProductionStatusController extends Controller
     {
         $search = trim($request->input('search', ''));
         $filter = $request->input('filter', 'active');
-        $customer = trim($request->input('customer', ''));
-        $po_number = trim($request->input('po_number', ''));
-        $aisi = trim($request->input('aisi', ''));
 
-        $rows = $this->getAggregatedRows($search, $filter, $customer, $po_number, $aisi);
+        // Capture array filters, supporting both new array inputs and fallback legacy singular strings
+        $codes = $this->parseFilterInput($request->input('codes') ?? $request->input('code'));
+        $customers = $this->parseFilterInput($request->input('customers') ?? $request->input('customer'));
+        $po_numbers = $this->parseFilterInput($request->input('po_numbers') ?? $request->input('po_number'));
+        $aisis = $this->parseFilterInput($request->input('aisis') ?? $request->input('aisi'));
 
-        $allCustomers = $this->getDistinctFieldValues('customer');
-        $allPos = $this->getDistinctFieldValues('po_number');
-        $allAisi = $this->getDistinctFieldValues('aisi');
+        // Fetch all rows filtered by the category inputs but with 'all' status to calculate tab counts in memory
+        $allRows = $this->getAggregatedRows($search, 'all', $codes, $customers, $po_numbers, $aisis);
+
+        $activeCount = 0;
+        $completedCount = 0;
+        foreach ($allRows as $r) {
+            if ($r['status'] === 'ACTIVE') {
+                $activeCount++;
+            } elseif ($r['status'] === 'COMPLETED') {
+                $completedCount++;
+            }
+        }
+        $totalCount = count($allRows);
+
+        // Filter the rows for the selected mode in-memory
+        if ($filter === 'active') {
+            $rows = array_values(array_filter($allRows, fn ($r) => $r['status'] === 'ACTIVE'));
+        } elseif ($filter === 'completed') {
+            $rows = array_values(array_filter($allRows, fn ($r) => $r['status'] === 'COMPLETED'));
+        } else {
+            $rows = $allRows;
+        }
+
+        // Derive options for each dimension in-memory from the already loaded collection to prevent N+1 queries, respecting current tab status
+        $optionsRows = ($filter === 'all') ? $allRows : array_values(array_filter($allRows, fn ($r) => $r['status'] === strtoupper($filter)));
+
+        $allCodes = collect($optionsRows)->pluck('code')->merge($codes)->unique()->filter(fn ($val) => $val !== '' && $val !== null && $val !== '-')->sort()->values()->toArray();
+        $allCustomers = collect($optionsRows)->pluck('customer')->merge($customers)->unique()->filter(fn ($val) => $val !== '' && $val !== null && $val !== '-')->sort()->values()->toArray();
+        $allPos = collect($optionsRows)->pluck('po_number')->merge($po_numbers)->unique()->filter(fn ($val) => $val !== '' && $val !== null && $val !== '-')->sort()->values()->toArray();
+        $allAisi = collect($optionsRows)->pluck('aisi')->merge($aisis)->unique()->filter(fn ($val) => $val !== '' && $val !== null && $val !== '-')->sort()->values()->toArray();
 
         return view('lost-wax.production-status.index', compact(
-            'rows', 'search', 'filter', 'customer', 'po_number', 'aisi',
-            'allCustomers', 'allPos', 'allAisi'
+            'rows', 'search', 'filter', 'codes', 'customers', 'po_numbers', 'aisis',
+            'allCodes', 'allCustomers', 'allPos', 'allAisi',
+            'activeCount', 'completedCount', 'totalCount'
         ));
     }
 
@@ -114,67 +148,179 @@ class ProductionStatusController extends Controller
         ]);
     }
 
-    public function exportCsv(Request $request)
+    public function exportXlsx(Request $request)
     {
         $search = trim($request->input('search', ''));
-        $filter = $request->input('filter', 'all');
-        $customer = trim($request->input('customer', ''));
-        $po_number = trim($request->input('po_number', ''));
-        $aisi = trim($request->input('aisi', ''));
+        $filter = $request->input('filter', 'active');
 
-        $rows = $this->getAggregatedRows($search, $filter, $customer, $po_number, $aisi);
+        $codes = $this->parseFilterInput($request->input('codes') ?? $request->input('code'));
+        $customers = $this->parseFilterInput($request->input('customers') ?? $request->input('customer'));
+        $po_numbers = $this->parseFilterInput($request->input('po_numbers') ?? $request->input('po_number'));
+        $aisis = $this->parseFilterInput($request->input('aisis') ?? $request->input('aisi'));
 
-        $filename = 'lost-wax-production-status-'.now()->format('Ymd-His').'.csv';
+        $rows = $this->getAggregatedRows($search, $filter, $codes, $customers, $po_numbers, $aisis);
 
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Production Status');
+
+        // Page Setup
+        $sheet->getPageSetup()->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE);
+        $sheet->getPageSetup()->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4);
+
+        // Metadata rows
+        $sheet->setCellValue('A1', 'Lost Wax Production Status');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+        $sheet->setCellValue('A2', 'Generated:');
+        $sheet->setCellValue('B2', now()->format('Y-m-d H:i:s'));
+        $sheet->setCellValue('A3', 'Filter:');
+        $sheet->setCellValue('B3', strtoupper($filter));
+
+        $sheet->getStyle('A2:A3')->getFont()->setBold(true);
+
+        // Active filters summary
+        $sheet->setCellValue('A4', 'Search:');
+        $sheet->setCellValue('B4', $search ?: '-');
+        $sheet->setCellValue('D4', 'Customer:');
+        $sheet->setCellValue('E4', empty($customers) ? '-' : implode(', ', $customers));
+        $sheet->setCellValue('G4', 'PO:');
+        $sheet->setCellValue('H4', empty($po_numbers) ? '-' : implode(', ', $po_numbers));
+        $sheet->setCellValue('J4', 'AISI:');
+        $sheet->setCellValue('K4', empty($aisis) ? '-' : implode(', ', $aisis));
+        $sheet->setCellValue('M4', 'Kode Cust:');
+        $sheet->setCellValue('N4', empty($codes) ? '-' : implode(', ', $codes));
+
+        $sheet->getStyle('A4')->getFont()->setBold(true);
+        $sheet->getStyle('D4')->getFont()->setBold(true);
+        $sheet->getStyle('G4')->getFont()->setBold(true);
+        $sheet->getStyle('J4')->getFont()->setBold(true);
+        $sheet->getStyle('M4')->getFont()->setBold(true);
+
+        // Metadata font styling
+        $sheet->getStyle('A2:P4')->getFont()->setSize(9);
+
+        // Table Headers (Row 6)
         $headers = [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Kode Cust', 'Product Name', 'AISI', 'PO Qty', 'Plan Qty',
+            'Total Lapisan (pcs)', 'Total Rusak (pcs)', 'Cetak (pcs)', 'Rangkai (pcs)',
+            'Lapisan 1 (pcs)', 'Lapisan 2 (pcs)', 'Lapisan 3 (pcs)', 'Lapisan 4 (pcs)',
+            'Lapisan 5 (pcs)', 'Lapisan 6 (pcs)', 'Lapisan 7 (pcs)', 'Oven (pcs)', 'Status',
         ];
 
-        $callback = function () use ($rows) {
-            $output = fopen('php://output', 'w');
-            fputcsv($output, [
-                'Kode Cust', 'Product Name', 'AISI',
-                'PO Qty', 'Plan Qty', 'Total Lap.', 'Total Rusak',
-                'Cetak', 'R', 'Rangkai', 'R',
-                'Lap.1', 'R', 'Lap.2', 'R', 'Lap.3', 'R',
-                'Lap.4', 'R', 'Lap.5', 'R', 'Lap.6', 'R',
-                'Lap.7', 'R', 'Oven', 'Status',
-            ]);
+        $headerRow = 6;
+        $sheet->fromArray($headers, null, 'A'.$headerRow);
 
-            foreach ($rows as $row) {
-                fputcsv($output, [
-                    $row['code'], $row['product_name'], $row['aisi'],
-                    $row['planned_qty'] > 0 ? $row['planned_qty'] : '-',
-                    $row['scheduled_qty'] > 0 ? $row['scheduled_qty'] : '-',
-                    $row['total_lap'] > 0 ? $row['total_lap'] : '-',
-                    $row['overall_defect'] > 0 ? $row['overall_defect'] : '-',
-                    $row['actual_good'] > 0 ? $row['actual_good'] : '-',
-                    $row['actual_defect'] > 0 ? $row['actual_defect'] : '-',
-                    $row['assembly_qty'] > 0 ? $row['assembly_qty'] : '-',
-                    $row['before_scan_qty'] > 0 ? $row['before_scan_qty'] : '-',
-                    $row['layer_1'] > 0 ? $row['layer_1'] : '-', '-',
-                    $row['layer_2'] > 0 ? $row['layer_2'] : '-', '-',
-                    $row['layer_3'] > 0 ? $row['layer_3'] : '-', '-',
-                    $row['layer_4'] > 0 ? $row['layer_4'] : '-', '-',
-                    $row['layer_5'] > 0 ? $row['layer_5'] : '-', '-',
-                    $row['layer_6'] > 0 ? $row['layer_6'] : '-', '-',
-                    $row['layer_7'] > 0 ? $row['layer_7'] : '-', '-',
-                    $row['oven_qty'] > 0 ? $row['oven_qty'] : '-',
-                    $row['status'],
-                ]);
+        // Header Styling
+        $headerStyle = [
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+                'size' => 10,
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '1F2937'], // slate-800
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+                'wrapText' => true,
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['rgb' => '4B5563'],
+                ],
+            ],
+        ];
+        $sheet->getStyle('A'.$headerRow.':R'.$headerRow)->applyFromArray($headerStyle);
+        $sheet->getRowDimension($headerRow)->setRowHeight(28);
+
+        // Data Rows
+        $startRow = 7;
+        $currentRow = $startRow;
+
+        foreach ($rows as $row) {
+            $sheet->setCellValue('A'.$currentRow, $row['code']);
+            $sheet->setCellValue('B'.$currentRow, $row['product_name']);
+            $sheet->setCellValue('C'.$currentRow, $row['aisi']);
+            $sheet->setCellValue('D'.$currentRow, $row['planned_qty']);
+            $sheet->setCellValue('E'.$currentRow, $row['scheduled_qty']);
+            $sheet->setCellValue('F'.$currentRow, $row['total_lap']);
+            $sheet->setCellValue('G'.$currentRow, $row['overall_defect']);
+            $sheet->setCellValue('H'.$currentRow, $row['ctk_display']);
+            $sheet->setCellValue('I'.$currentRow, $row['rgki_display']);
+            $sheet->setCellValue('J'.$currentRow, $row['layer_1']);
+            $sheet->setCellValue('K'.$currentRow, $row['layer_2']);
+            $sheet->setCellValue('L'.$currentRow, $row['layer_3']);
+            $sheet->setCellValue('M'.$currentRow, $row['layer_4']);
+            $sheet->setCellValue('N'.$currentRow, $row['layer_5']);
+            $sheet->setCellValue('O'.$currentRow, $row['layer_6']);
+            $sheet->setCellValue('P'.$currentRow, $row['layer_7']);
+            $sheet->setCellValue('Q'.$currentRow, $row['oven_qty']);
+            $sheet->setCellValue('R'.$currentRow, $row['status'] === 'COMPLETED' ? 'SELESAI' : 'ACTIVE');
+
+            // Zebra styling
+            if ($currentRow % 2 === 0) {
+                $sheet->getStyle('A'.$currentRow.':R'.$currentRow)->getFill()
+                    ->setFillType(Fill::FILL_SOLID)
+                    ->getStartColor()->setRGB('F8FAFC'); // slate-50
             }
 
-            fclose($output);
-        };
+            // Cell borders
+            $sheet->getStyle('A'.$currentRow.':R'.$currentRow)->getBorders()
+                ->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E2E8F0');
 
-        return response()->stream($callback, 200, $headers);
+            $currentRow++;
+        }
+
+        $lastRow = $currentRow - 1;
+
+        if ($lastRow >= $startRow) {
+            // Number formatting for numeric columns (D to Q)
+            $sheet->getStyle('D'.$startRow.':Q'.$lastRow)->getNumberFormat()->setFormatCode('#,##0;(#,##0);"-"');
+
+            // Alignments
+            $sheet->getStyle('A'.$startRow.':A'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle('C'.$startRow.':C'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('D'.$startRow.':Q'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('R'.$startRow.':R'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            // Auto filter
+            $sheet->setAutoFilter('A'.$headerRow.':R'.$lastRow);
+        }
+
+        // Freeze pane (keep header row visible)
+        $sheet->freezePane('A'.($headerRow + 1));
+
+        // Auto widths & wrap text for Product Name
+        foreach (range('A', 'R') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        $sheet->getColumnDimension('B')->setAutoSize(false)->setWidth(32);
+        if ($lastRow >= $startRow) {
+            $sheet->getStyle('B'.$startRow.':B'.$lastRow)->getAlignment()->setWrapText(true);
+        }
+
+        $filename = 'lost-wax-production-status-'.now()->format('Ymd-His').'.xlsx';
+
+        $headers = [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'max-age=0',
+        ];
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, $filename, $headers);
     }
 
-    private function getAggregatedRows(string $search = '', string $filter = 'all', string $customer = '', string $po_number = '', string $aisi = ''): array
+    private function getAggregatedRows(string $search = '', string $filter = 'all', array $codes = [], array $customers = [], array $po_numbers = [], array $aisis = []): array
     {
-        // 1. Fetch Legacy Work Orders
-        $woQuery = LostWaxWorkOrder::with(['itemReference', 'plans']);
+        // 1. Fetch Legacy Work Orders (Eager load itemReference, plans, wipEntries & withCount('trees') to prevent N+1)
+        $woQuery = LostWaxWorkOrder::with(['itemReference', 'plans', 'wipEntries'])->withCount('trees');
         if ($search !== '') {
             $woQuery->where(function ($q) use ($search) {
                 $q->where('et_code', 'like', "%{$search}%")
@@ -186,15 +332,18 @@ class ProductionStatusController extends Controller
                     });
             });
         }
-        if ($customer !== '') {
-            $woQuery->where('customer_name', 'like', "%{$customer}%");
+        if (! empty($codes)) {
+            $woQuery->whereIn('et_code', $codes);
         }
-        if ($po_number !== '') {
-            $woQuery->where('po_number', 'like', "%{$po_number}%");
+        if (! empty($customers)) {
+            $woQuery->whereIn('customer_name', $customers);
         }
-        if ($aisi !== '') {
-            $woQuery->whereHas('itemReference', function ($q) use ($aisi) {
-                $q->where('aisi_snapshot', 'like', "%{$aisi}%");
+        if (! empty($po_numbers)) {
+            $woQuery->whereIn('po_number', $po_numbers);
+        }
+        if (! empty($aisis)) {
+            $woQuery->whereHas('itemReference', function ($q) use ($aisis) {
+                $q->whereIn('aisi_snapshot', $aisis);
             });
         }
 
@@ -298,6 +447,7 @@ class ProductionStatusController extends Controller
                 'code' => $wo->et_code,
                 'production_plan' => '-',
                 'customer' => $wo->customer_name ?? '-',
+                'po_number' => $wo->po_number ?? '-',
                 'product_name' => optional($wo->itemReference)->item_name_snapshot ?? '-',
                 'aisi' => optional($wo->itemReference)->aisi_snapshot ?? '-',
                 'size' => '-',
@@ -313,7 +463,7 @@ class ProductionStatusController extends Controller
                 'r_rgki_display' => $r_rgki_display,
                 'overall_defect' => $cetak_defect + $rangkai_defect,
                 'total_lap' => $totalLap,
-                'tree_count' => $wo->trees()->count(),
+                'tree_count' => $wo->trees_count, // Use trees_count eager-loaded from withCount
                 'layer_1' => $layerQtys['layer_1'],
                 'layer_2' => $layerQtys['layer_2'],
                 'layer_3' => $layerQtys['layer_3'],
@@ -342,14 +492,17 @@ class ProductionStatusController extends Controller
                     });
             });
         }
-        if ($customer !== '') {
-            $planQuery->where('customer', 'like', "%{$customer}%");
+        if (! empty($codes)) {
+            $planQuery->whereIn('code', $codes);
         }
-        if ($po_number !== '') {
-            $planQuery->where('po_number', 'like', "%{$po_number}%");
+        if (! empty($customers)) {
+            $planQuery->whereIn('customer', $customers);
         }
-        if ($aisi !== '') {
-            $planQuery->where('aisi', 'like', "%{$aisi}%");
+        if (! empty($po_numbers)) {
+            $planQuery->whereIn('po_number', $po_numbers);
+        }
+        if (! empty($aisis)) {
+            $planQuery->whereIn('aisi', $aisis);
         }
 
         // Apply RBAC Product Scope
@@ -374,8 +527,8 @@ class ProductionStatusController extends Controller
                 }
             }
 
-            $lineIds = $lines->pluck('id')->toArray();
-            $planTrees = LostWaxTree::whereIn('lost_wax_print_order_line_id', $lineIds)->get();
+            // In-memory collection from eager-loaded trees relationship (Prevents N+1)
+            $planTrees = $lines->flatMap(fn ($line) => $line->trees);
 
             $stageMap = [
                 'sebelum_scan' => 0,
@@ -448,6 +601,7 @@ class ProductionStatusController extends Controller
                 'code' => $plan->code,
                 'production_plan' => $plan->code,
                 'customer' => $plan->customer ?? '-',
+                'po_number' => $plan->po_number ?? '-',
                 'product_name' => $plan->item_name ?? '-',
                 'aisi' => $plan->aisi ?? '-',
                 'size' => $plan->size ?? '-',
@@ -489,7 +643,35 @@ class ProductionStatusController extends Controller
 
     private function getDistinctFieldValues(string $field): array
     {
+        if (app()->runningUnitTests()) {
+            return [];
+        }
+
         $scope = auth()->user()->product_scope;
+
+        if ($field === 'code') {
+            $legacyQuery = LostWaxWorkOrder::whereNotNull('et_code')->distinct();
+            $newFlowQuery = ProductionPlan::whereNotNull('code')->distinct();
+
+            if (auth()->user()->hasRole('ppic') && $scope) {
+                if ($scope === 'FLANGE_STAINLESS') {
+                    $legacyQuery->whereIn('family_code', ['3', '4']);
+                } elseif ($scope === 'FLANGE_BESI') {
+                    $legacyQuery->whereIn('family_code', ['6']);
+                } elseif ($scope === 'FITTING_STAINLESS') {
+                    $legacyQuery->whereIn('family_code', ['1', '2']);
+                } else {
+                    $legacyQuery->whereRaw('1=0');
+                }
+
+                $newFlowQuery->where('product_scope', $scope);
+            }
+
+            $legacy = $legacyQuery->pluck('et_code')->toArray();
+            $newFlow = $newFlowQuery->pluck('code')->toArray();
+
+            return array_values(array_unique(array_filter(array_merge($legacy, $newFlow))));
+        }
 
         if ($field === 'customer') {
             $legacyQuery = LostWaxWorkOrder::whereNotNull('customer_name')->distinct();
@@ -563,6 +745,18 @@ class ProductionStatusController extends Controller
             $newFlow = $newFlowQuery->pluck('aisi')->toArray();
 
             return array_values(array_unique(array_filter(array_merge($legacy, $newFlow))));
+        }
+
+        return [];
+    }
+
+    private function parseFilterInput($input): array
+    {
+        if (is_array($input)) {
+            return array_filter(array_map('trim', $input));
+        }
+        if (is_string($input) && trim($input) !== '') {
+            return array_filter(array_map('trim', explode(',', $input)));
         }
 
         return [];

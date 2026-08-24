@@ -358,10 +358,6 @@
 
                     let warningMsg = '';
 
-                    // Check outstanding limit boundary
-                    if (totalInput > outstanding) {
-                        warningMsg = `⚠️ Total hasil (Good + Defect) cetak baru (${totalInput} pcs) tidak boleh melebihi sisa outstanding saat ini (${outstanding} pcs).`;
-                    }
 
                     // Check allocated trees boundary
                     const projectedTotalGood = totalGoodExisting + good;

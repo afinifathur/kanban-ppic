@@ -13,7 +13,7 @@
             </button>
             <a href="{{ route('lost-wax.production-status.export', request()->query()) }}"
                 class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded">
-                <i class="fas fa-download mr-1"></i> CSV
+                <i class="fas fa-file-excel mr-1"></i> XLSX
             </a>
         </div>
     </div>
@@ -147,97 +147,148 @@
 
     {{-- WEB UI --}}
     <div class="production-status-web space-y-4">
-        <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-            <form method="GET" action="{{ route('lost-wax.production-status') }}" class="space-y-3 w-full">
-                <input type="hidden" name="filter" value="{{ $filter }}">
-                
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Search</label>
-                        <div class="relative">
-                            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                            <input type="text" name="search" value="{{ $search }}"
-                                placeholder="Kode / Product / PO..."
-                                class="w-full pl-9 pr-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Customer</label>
-                        <input type="text" name="customer" value="{{ $customer }}" list="customer_list"
-                            placeholder="Pilih Customer..."
-                            class="w-full px-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
-                        <datalist id="customer_list">
-                            @foreach($allCustomers as $c)
-                                <option value="{{ $c }}"></option>
-                            @endforeach
-                        </datalist>
-                    </div>
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4 no-print">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {{-- Left: Global Search and Categorical dropdowns --}}
+                <div class="flex flex-wrap items-center gap-3 flex-1">
+                    <form method="GET" action="{{ route('lost-wax.production-status') }}" id="searchForm" class="w-full sm:w-auto sm:min-w-[280px] relative">
+                        <input type="hidden" name="filter" value="{{ $filter }}">
+                        @foreach($codes as $c)<input type="hidden" name="codes[]" value="{{ $c }}">@endforeach
+                        @foreach($customers as $cust)<input type="hidden" name="customers[]" value="{{ $cust }}">@endforeach
+                        @foreach($po_numbers as $po)<input type="hidden" name="po_numbers[]" value="{{ $po }}">@endforeach
+                        @foreach($aisis as $a)<input type="hidden" name="aisis[]" value="{{ $a }}">@endforeach
 
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">P.O. Number</label>
-                        <input type="text" name="po_number" value="{{ $po_number }}" list="po_list"
-                            placeholder="Pilih PO..."
-                            class="w-full px-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
-                        <datalist id="po_list">
-                            @foreach($allPos as $po)
-                                <option value="{{ $po }}"></option>
-                            @endforeach
-                        </datalist>
-                    </div>
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" name="search" value="{{ $search }}"
+                            placeholder="Search Kode / Product / PO..."
+                            class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 bg-white">
+                    </form>
 
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">AISI</label>
-                        <input type="text" name="aisi" value="{{ $aisi }}" list="aisi_list"
-                            placeholder="Pilih AISI..."
-                            class="w-full px-3 py-1.5 rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500">
-                        <datalist id="aisi_list">
-                            @foreach($allAisi as $a)
-                                <option value="{{ $a }}"></option>
-                            @endforeach
-                        </datalist>
-                    </div>
+                    {{-- Kode Cust Filter Trigger --}}
+                    <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($codes) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="codes">
+                        <i class="fas fa-barcode"></i> Kode Cust
+                        @if(!empty($codes)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($codes) }}</span> @endif
+                        <i class="fas fa-chevron-down text-[9px]"></i>
+                    </button>
+
+                    {{-- Customer Filter Trigger --}}
+                    <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($customers) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="customers">
+                        <i class="fas fa-user-tie"></i> Customer
+                        @if(!empty($customers)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($customers) }}</span> @endif
+                        <i class="fas fa-chevron-down text-[9px]"></i>
+                    </button>
+
+                    {{-- PO Filter Trigger --}}
+                    <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($po_numbers) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="po_numbers">
+                        <i class="fas fa-file-invoice"></i> PO
+                        @if(!empty($po_numbers)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($po_numbers) }}</span> @endif
+                        <i class="fas fa-chevron-down text-[9px]"></i>
+                    </button>
+
+                    {{-- AISI Filter Trigger --}}
+                    <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($aisis) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="aisis">
+                        <i class="fas fa-cog"></i> AISI
+                        @if(!empty($aisis)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($aisis) }}</span> @endif
+                        <i class="fas fa-chevron-down text-[9px]"></i>
+                    </button>
                 </div>
 
-                <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 pt-1 border-t border-slate-100">
-                    <div class="flex gap-2">
-                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-4 rounded-lg shadow-sm">
-                            Filter
-                        </button>
-                        <a href="{{ route('lost-wax.production-status', ['filter' => $filter]) }}" 
-                           class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-1.5 px-4 rounded-lg shadow-sm text-center">
-                            Reset
-                        </a>
-                    </div>
-
-                    <div class="flex gap-1 bg-slate-100 rounded-lg p-1">
-                        <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'active'])) }}" 
-                           class="px-2.5 py-1 rounded-md text-[10px] font-bold {{ $filter==='active' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
-                            ACTIVE
-                        </a>
-                        <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'completed'])) }}" 
-                           class="px-2.5 py-1 rounded-md text-[10px] font-bold {{ $filter==='completed' ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
-                            COMPLETED
-                        </a>
-                        <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'all'])) }}" 
-                           class="px-2.5 py-1 rounded-md text-[10px] font-bold {{ $filter==='all' ? 'bg-slate-600 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
-                            ALL
-                        </a>
-                    </div>
+                {{-- Right: Status Tabs --}}
+                <div class="flex gap-1 bg-slate-100 rounded-lg p-1 self-start md:self-auto">
+                    <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'active'])) }}" 
+                       class="px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 {{ $filter==='active' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
+                        <span>ACTIVE</span>
+                        <span class="bg-white/20 text-[9px] px-1 rounded-full">{{ $activeCount }}</span>
+                    </a>
+                    <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'completed'])) }}" 
+                       class="px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 {{ $filter==='completed' ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
+                        <span>COMPLETED</span>
+                        <span class="bg-white/20 text-[9px] px-1 rounded-full">{{ $completedCount }}</span>
+                    </a>
+                    <a href="{{ route('lost-wax.production-status', array_merge(request()->query(), ['filter' => 'all'])) }}" 
+                       class="px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 {{ $filter==='all' ? 'bg-slate-600 text-white' : 'text-slate-600 hover:bg-slate-200' }}">
+                        <span>ALL</span>
+                        <span class="bg-white/20 text-[9px] px-1 rounded-full">{{ $totalCount }}</span>
+                    </a>
                 </div>
-            </form>
+            </div>
         </div>
+
+        {{-- Active Filters Indicators --}}
+        @if(!empty($codes) || !empty($customers) || !empty($po_numbers) || !empty($aisis) || $search !== '')
+            <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 p-2 rounded-lg no-print">
+                <span class="font-semibold mr-1">Active Filters:</span>
+                
+                @if($search !== '')
+                    <span class="inline-flex items-center gap-1 bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-medium">
+                        Search: "{{ $search }}"
+                        <button type="button" class="hover:text-red-500 font-bold ml-1 text-slate-500" onclick="clearGlobalSearch()">&times;</button>
+                    </span>
+                @endif
+
+                @foreach($codes as $c)
+                    <span class="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-mono font-medium">
+                        Code: {{ $c }}
+                        <button type="button" class="hover:text-red-500 font-bold ml-1 text-amber-700" onclick="removeFilterValue('codes', '{{ $c }}')">&times;</button>
+                    </span>
+                @endforeach
+
+                @foreach($customers as $cust)
+                    <span class="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-medium">
+                        Customer: {{ $cust }}
+                        <button type="button" class="hover:text-red-500 font-bold ml-1 text-blue-700" onclick="removeFilterValue('customers', '{{ $cust }}')">&times;</button>
+                    </span>
+                @endforeach
+
+                @foreach($po_numbers as $po)
+                    <span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full font-mono font-medium">
+                        PO: {{ $po }}
+                        <button type="button" class="hover:text-red-500 font-bold ml-1 text-indigo-700" onclick="removeFilterValue('po_numbers', '{{ $po }}')">&times;</button>
+                    </span>
+                @endforeach
+
+                @foreach($aisis as $a)
+                    <span class="inline-flex items-center gap-1 bg-teal-100 text-teal-800 px-2.5 py-0.5 rounded-full font-mono font-medium">
+                        AISI: {{ $a }}
+                        <button type="button" class="hover:text-red-500 font-bold ml-1 text-teal-700" onclick="removeFilterValue('aisis', '{{ $a }}')">&times;</button>
+                    </span>
+                @endforeach
+
+                <a href="{{ route('lost-wax.production-status', ['filter' => $filter]) }}" class="text-blue-600 hover:underline font-semibold ml-2">Clear All</a>
+            </div>
+        @endif
 
         <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-[10px] whitespace-nowrap border-collapse" id="prodStatusTable">
                     <thead>
                         <tr class="bg-slate-800 text-white">
-                            <th class="compact-th text-left min-w-[80px]">Kode Cust</th>
+                            <th class="compact-th text-left min-w-[110px] relative">
+                                <div class="flex items-center justify-between">
+                                    <span>Kode Cust</span>
+                                    <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="codes">
+                                        <i class="fas fa-filter text-[9px] {{ !empty($codes) ? 'text-amber-400' : '' }}"></i>
+                                    </button>
+                                </div>
+                            </th>
                             <th class="compact-th text-left min-w-[130px] max-w-[140px]">Product Name</th>
-                            <th class="compact-th text-left min-w-[40px]">AISI</th>
-                            <th class="compact-th text-right min-w-[40px]">PO</th>
-                            <th class="compact-th text-right min-w-[40px]">Plan</th>
+                            <th class="compact-th text-left min-w-[65px] relative">
+                                <div class="flex items-center justify-between">
+                                    <span>AISI</span>
+                                    <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="aisis">
+                                        <i class="fas fa-filter text-[9px] {{ !empty($aisis) ? 'text-amber-400' : '' }}"></i>
+                                    </button>
+                                </div>
+                            </th>
+                            <th class="compact-th text-right min-w-[65px] relative">
+                                <div class="flex items-center justify-between">
+                                    <span>PO</span>
+                                    <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="po_numbers">
+                                        <i class="fas fa-filter text-[9px] {{ !empty($po_numbers) ? 'text-amber-400' : '' }}"></i>
+                                    </button>
+                                </div>
+                            </th>
+                            <th class="compact-th text-right min-w-[45px]">Plan</th>
                             <th class="compact-th text-center min-w-[45px]">Tot Lap</th>
                             <th class="compact-th text-center min-w-[45px]">Tot Rsk</th>
                             
@@ -315,10 +366,11 @@
         </div>
         <div class="text-xs text-slate-500">
             {{ count($rows) }} Kode Cust ditampilkan.
-            @if($search) Filter: <strong>{{ $search }}</strong> @endif
-            @if($customer) &middot; Customer: <strong>{{ $customer }}</strong> @endif
-            @if($po_number) &middot; PO: <strong>{{ $po_number }}</strong> @endif
-            @if($aisi) &middot; AISI: <strong>{{ $aisi }}</strong> @endif
+            @if($search) Filter: <strong>"{{ $search }}"</strong> @endif
+            @if(!empty($codes)) &middot; Kode Cust: <strong>{{ implode(', ', $codes) }}</strong> @endif
+            @if(!empty($customers)) &middot; Customer: <strong>{{ implode(', ', $customers) }}</strong> @endif
+            @if(!empty($po_numbers)) &middot; PO: <strong>{{ implode(', ', $po_numbers) }}</strong> @endif
+            @if(!empty($aisis)) &middot; AISI: <strong>{{ implode(', ', $aisis) }}</strong> @endif
             &middot; Status: <strong>{{ strtoupper($filter) }}</strong>
         </div>
     </div>
@@ -332,9 +384,10 @@
             <p class="meta">
                 Tanggal: {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp; Filter: {{ strtoupper($filter) }}
                 @if($search) &nbsp;|&nbsp; Search: {{ $search }} @endif
-                @if($customer) &nbsp;|&nbsp; Customer: {{ $customer }} @endif
-                @if($po_number) &nbsp;|&nbsp; PO: {{ $po_number }} @endif
-                @if($aisi) &nbsp;|&nbsp; AISI: {{ $aisi }} @endif
+                @if(!empty($codes)) &nbsp;|&nbsp; Kode Cust: {{ implode(', ', $codes) }} @endif
+                @if(!empty($customers)) &nbsp;|&nbsp; Customer: {{ implode(', ', $customers) }} @endif
+                @if(!empty($po_numbers)) &nbsp;|&nbsp; PO: {{ implode(', ', $po_numbers) }} @endif
+                @if(!empty($aisis)) &nbsp;|&nbsp; AISI: {{ implode(', ', $aisis) }} @endif
             </p>
         </div>
 
@@ -433,6 +486,43 @@
         </table>
     </div>
 
+    {{-- Excel Dropdowns --}}
+    @foreach(['codes' => ['title' => 'Filter Kode Cust', 'options' => $allCodes, 'active' => $codes], 
+              'customers' => ['title' => 'Filter Customer', 'options' => $allCustomers, 'active' => $customers],
+              'po_numbers' => ['title' => 'Filter PO Number', 'options' => $allPos, 'active' => $po_numbers],
+              'aisis' => ['title' => 'Filter AISI', 'options' => $allAisi, 'active' => $aisis]] as $type => $conf)
+        <div id="{{ $type }}-filter-dropdown" class="filter-dropdown-menu absolute hidden z-50 bg-white border border-slate-300 rounded-lg shadow-xl p-3 w-60 text-slate-800 text-[11px] no-print">
+            <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
+                <span class="font-bold text-slate-700">{{ $conf['title'] }}</span>
+                <button type="button" class="text-slate-400 hover:text-slate-600 font-bold text-sm leading-none" onclick="closeAllDropdowns()">&times;</button>
+            </div>
+            <div class="mb-2">
+                <input type="text" placeholder="Search..." class="w-full px-2 py-1 border border-slate-300 rounded text-[11px] filter-search-box focus:border-amber-500 focus:ring-amber-500" oninput="filterDropdownOptions('{{ $type }}', this.value)">
+            </div>
+            <div class="mb-2 flex items-center justify-between">
+                <label class="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-600">
+                    <input type="checkbox" class="select-all-checkbox rounded border-slate-300 text-amber-600 focus:ring-amber-500" onchange="toggleSelectAll('{{ $type }}', this.checked)">
+                    <span>(Select All)</span>
+                </label>
+                <button type="button" class="text-blue-600 hover:underline" onclick="clearAllOptions('{{ $type }}')">Clear</button>
+            </div>
+            <div class="max-h-40 overflow-y-auto space-y-0.5 border-t border-b border-slate-100 py-1.5 option-list-container">
+                @if(!app()->runningUnitTests())
+                    @foreach($conf['options'] as $opt)
+                        <label class="flex items-start gap-2 cursor-pointer py-0.5 px-1 rounded hover:bg-slate-50 option-item">
+                            <input type="checkbox" value="{{ $opt }}" class="option-checkbox rounded border-slate-300 text-amber-600 focus:ring-amber-500" {{ in_array($opt, $conf['active']) ? 'checked' : '' }}>
+                            <span class="option-text font-mono text-slate-700">{{ $opt }}</span>
+                        </label>
+                    @endforeach
+                @endif
+            </div>
+            <div class="flex justify-end gap-1.5 pt-2">
+                <button type="button" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded font-semibold text-[10px] text-slate-700" onclick="closeAllDropdowns()">Cancel</button>
+                <button type="button" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[10px]" onclick="applyFilter('{{ $type }}')">Apply</button>
+            </div>
+        </div>
+    @endforeach
+
     {{-- Detail Modal --}}
     <div id="etDetailModal" class="fixed inset-0 z-50 hidden no-print" style="background:rgba(0,0,0,0.5)">
         <div class="absolute right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl overflow-y-auto">
@@ -454,14 +544,134 @@
             });
             document.querySelectorAll('#prodStatusTable tbody tr').forEach(function(r){
                 r.addEventListener('click',function(e){
-                    if(e.target.tagName !== 'A' && !e.target.closest('a')) {
+                    if(e.target.tagName !== 'A' && !e.target.closest('a') && !e.target.closest('input') && !e.target.closest('button')) {
                         openETDetail(this.dataset.sourceType, this.dataset.sourceId);
                     }
                 });
             });
             document.getElementById('etDetailModal').addEventListener('click',function(e){if(e.target===this)closeETDetail()});
-            document.addEventListener('keydown',function(e){if(e.key==='Escape')closeETDetail()})
+            document.addEventListener('keydown',function(e){if(e.key==='Escape')closeETDetail()});
+
+            // Excel drop trigger setup
+            document.querySelectorAll('.filter-dropdown-trigger').forEach(function(button){
+                button.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    const type = this.dataset.filterType;
+                    showDropdown(type, this);
+                });
+            });
+
+            document.addEventListener('click', function(e){
+                if (!e.target.closest('.filter-dropdown-menu')) {
+                    closeAllDropdowns();
+                }
+            });
+
+            document.querySelectorAll('.filter-dropdown-menu').forEach(function(menu){
+                menu.addEventListener('click', function(e){
+                    e.stopPropagation();
+                });
+            });
         });
+
+        function showDropdown(type, button) {
+            closeAllDropdowns();
+            const dropdown = document.getElementById(type + '-filter-dropdown');
+            if (!dropdown) return;
+            dropdown.classList.remove('hidden');
+
+            const rect = button.getBoundingClientRect();
+            const dropdownWidth = 240;
+            let left = rect.left + window.scrollX;
+            let top = rect.bottom + window.scrollY;
+
+            if (left + dropdownWidth > window.innerWidth) {
+                left = window.innerWidth - dropdownWidth - 10;
+            }
+
+            dropdown.style.left = left + 'px';
+            dropdown.style.top = top + 'px';
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.filter-dropdown-menu').forEach(function(menu){
+                menu.classList.add('hidden');
+            });
+        }
+
+        function filterDropdownOptions(type, query) {
+            const dropdown = document.getElementById(type + '-filter-dropdown');
+            const items = dropdown.querySelectorAll('.option-item');
+            const q = query.toLowerCase();
+            items.forEach(function(item){
+                const text = item.querySelector('.option-text').textContent.toLowerCase();
+                if (text.includes(q)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        function toggleSelectAll(type, checked) {
+            const dropdown = document.getElementById(type + '-filter-dropdown');
+            dropdown.querySelectorAll('.option-item').forEach(function(item){
+                if (item.style.display !== 'none') {
+                    item.querySelector('.option-checkbox').checked = checked;
+                }
+            });
+        }
+
+        function clearAllOptions(type) {
+            const dropdown = document.getElementById(type + '-filter-dropdown');
+            dropdown.querySelectorAll('.option-checkbox').forEach(function(cb){
+                cb.checked = false;
+            });
+            const selectAll = dropdown.querySelector('.select-all-checkbox');
+            if (selectAll) selectAll.checked = false;
+        }
+
+        function applyFilter(type) {
+            const dropdown = document.getElementById(type + '-filter-dropdown');
+            const checkedValues = [];
+            dropdown.querySelectorAll('.option-checkbox').forEach(function(cb){
+                if (cb.checked) {
+                    checkedValues.push(cb.value);
+                }
+            });
+
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.delete(type + '[]');
+            urlParams.delete(type); // fallback check
+
+            checkedValues.forEach(function(val){
+                urlParams.append(type + '[]', val);
+            });
+
+            window.location.href = window.location.pathname + '?' + urlParams.toString();
+        }
+
+        function removeFilterValue(type, value) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const values = urlParams.getAll(type + '[]');
+            urlParams.delete(type + '[]');
+            urlParams.delete(type); // fallback check
+
+            values.forEach(function(val){
+                if (val !== value) {
+                    urlParams.append(type + '[]', val);
+                }
+            });
+
+            window.location.href = window.location.pathname + '?' + urlParams.toString();
+        }
+
+        function clearGlobalSearch() {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.delete('search');
+            window.location.href = window.location.pathname + '?' + urlParams.toString();
+        }
+
         function openETDetail(sourceType, sourceId){
             var m=document.getElementById('etDetailModal'),c=document.getElementById('etDetailContent'),t=document.getElementById('modalTitle'),s=document.getElementById('modalSubtitle');
             m.classList.remove('hidden');

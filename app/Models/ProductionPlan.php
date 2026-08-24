@@ -84,4 +84,18 @@ class ProductionPlan extends Model
     {
         return $this->qty_planned - $this->qty_scheduled;
     }
+
+    public function getQtyProducedAttribute(): int
+    {
+        return (int) $this->printOrderLines()
+            ->whereHas('printOrder', function ($query) {
+                $query->where('status', '!=', 'CANCELLED');
+            })
+            ->sum('qty_executed_good');
+    }
+
+    public function getQtyRemainingToProduceAttribute(): int
+    {
+        return max(0, $this->qty_planned - $this->qty_produced);
+    }
 }

@@ -166,7 +166,7 @@ Route::middleware(['auth'])->group(function () {
             // Production Status
             Route::get('/production-status', [ProductionStatusController::class, 'index'])->name('production-status');
             Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
-            Route::get('/production-status/export', [ProductionStatusController::class, 'exportCsv'])->name('production-status.export');
+            Route::get('/production-status/export', [ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
 
             // Rack Monitoring
             Route::get('/rack-monitor', [\App\Http\Controllers\LostWax\RackMonitorController::class, 'index'])->name('rack-monitor.index');

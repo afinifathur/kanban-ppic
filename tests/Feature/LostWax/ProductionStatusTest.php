@@ -422,7 +422,7 @@ class ProductionStatusTest extends TestCase
         $this->assertStringContainsString('Kode Cust', $content);
     }
 
-    public function test_csv_headers_contain_total_lap_and_total_rusak(): void
+    public function test_xlsx_headers_contain_total_lap_and_total_rusak(): void
     {
         $user = User::factory()->create();
         $ref = $this->createReference();
@@ -438,20 +438,36 @@ class ProductionStatusTest extends TestCase
             ->get(route('lost-wax.production-status.export', ['filter' => 'all']));
 
         $response->assertOk();
-        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+        $response->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $disposition = $response->headers->get('Content-Disposition');
+        $this->assertStringContainsString('attachment; filename=lost-wax-production-status-', $disposition);
+        $this->assertStringEndsWith('.xlsx', $disposition);
+
         $content = $response->streamedContent();
 
-        if ($content) {
-            $this->assertStringContainsString('Kode Cust', $content);
-            $this->assertStringContainsString('Total Lap.', $content);
-            $this->assertStringContainsString('Total Rusak', $content);
-            $this->assertStringNotContainsString('Cust / ET', $content);
-            $this->assertStringContainsString('ET232', $content);
-            $this->assertStringContainsString('Lap.1', $content);
-        }
+        // Write streamed content to a temporary file
+        $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($tempFile, $content);
+
+        // Load with PhpSpreadsheet Reader
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Xlsx');
+        $spreadsheet = $reader->load($tempFile);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $this->assertEquals('Lost Wax Production Status', $sheet->getCell('A1')->getValue());
+        $this->assertEquals('Kode Cust', $sheet->getCell('A6')->getValue());
+        $this->assertEquals('Total Lapisan (pcs)', $sheet->getCell('F6')->getValue());
+        $this->assertEquals('Total Rusak (pcs)', $sheet->getCell('G6')->getValue());
+        $this->assertEquals('Status', $sheet->getCell('R6')->getValue());
+
+        // Data row assertions
+        $this->assertEquals('ET232', $sheet->getCell('A7')->getValue());
+
+        unlink($tempFile);
     }
 
-    public function test_csv_does_not_contain_item_column(): void
+    public function test_xlsx_does_not_contain_item_column(): void
     {
         $user = User::factory()->create();
         $ref = $this->createReference(['item_code_snapshot' => '4.1061ENPN16.D0050']);
@@ -466,12 +482,21 @@ class ProductionStatusTest extends TestCase
         $response->assertOk();
         $content = $response->streamedContent();
 
-        if ($content) {
-            // CSV header should NOT contain the old "Item" column
-            $headerLine = strtok($content, "\n");
-            // Header should contain "Product Name" not standalone "Item"
-            $this->assertStringContainsString('Product Name', $headerLine);
+        $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($tempFile, $content);
+
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Xlsx');
+        $spreadsheet = $reader->load($tempFile);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $headers = [];
+        foreach (range('A', 'R') as $col) {
+            $headers[] = $sheet->getCell($col.'6')->getValue();
         }
+        $this->assertContains('Product Name', $headers);
+        $this->assertNotContains('Item', $headers);
+
+        unlink($tempFile);
     }
 
     public function test_search_by_et_works(): void
@@ -846,5 +871,291 @@ class ProductionStatusTest extends TestCase
         $row5 = collect($rows)->firstWhere('code', 'WO-SCEN5');
         $this->assertEquals(25, $row5['layer_1']); // L1 25
         $this->assertEquals(15, $row5['layer_2']); // L2 15
+    }
+
+    public function test_n_plus_one_prevention(): void
+    {
+        $user = User::factory()->create();
+
+        // Create 5 legacy work orders
+        for ($i = 1; $i <= 5; $i++) {
+            $ref = $this->createReference([
+                'master_item_key' => "ITEM-L-$i",
+                'item_code_snapshot' => "ITEM-L-$i",
+            ]);
+            $wo = $this->createWorkOrder($ref, ['et_code' => "ET-LEGACY-$i"]);
+            $this->createPlan($wo);
+            $wo->wipEntries()->create(['stage' => 'moulding', 'quantity' => 10]);
+            $wo->wipEntries()->create(['stage' => 'assembly', 'quantity' => 10]);
+            $this->createTree($wo, 10, '111082600'.$i, $i);
+        }
+
+        // Create 5 new plans
+        for ($i = 1; $i <= 5; $i++) {
+            $plan = \App\Models\ProductionPlan::create([
+                'code' => "PLAN-NEW-$i",
+                'customer' => 'Customer New',
+                'po_number' => "PO-NEW-$i",
+                'item_code' => "ITEM-$i",
+                'item_name' => 'Product New',
+                'aisi' => 'SUS304',
+                'size' => '2"',
+                'weight' => 1.5,
+                'qty_planned' => 100,
+                'qty_remaining' => 100,
+                'line_number' => 1,
+                'status' => 'planning',
+            ]);
+            $order = \App\Models\LostWaxPrintOrder::create([
+                'print_order_number' => "PO-ORDER-$i",
+                'scheduled_date' => '2026-08-11',
+                'status' => 'ISSUED',
+                'created_by' => $user->id,
+            ]);
+            $line = $order->lines()->create([
+                'production_plan_id' => $plan->id,
+                'qty_ordered' => 100,
+                'qty_actual_good' => 80,
+                'qty_actual_defect' => 2,
+                'code' => $plan->code,
+                'customer' => $plan->customer,
+                'item_name' => $plan->item_name,
+                'aisi' => $plan->aisi,
+            ]);
+            \App\Models\LostWaxTree::create([
+                'lost_wax_print_order_line_id' => $line->id,
+                'barcode' => '3082600'.str_pad($i, 3, '0', STR_PAD_LEFT),
+                'tree_number' => $i,
+                'quantity' => 20,
+                'status' => 'generated',
+                'production_date' => '2026-08-11',
+                'family_code' => '3',
+                'daily_sequence' => $i,
+            ]);
+        }
+
+        \DB::enableQueryLog();
+        $response = $this->actingAs($user)
+            ->get(route('lost-wax.production-status'));
+        $queries = \DB::getQueryLog();
+        \DB::disableQueryLog();
+
+        $response->assertOk();
+
+        // With optimized queries, total database queries should remain very low (approx. 19 queries total
+        // including Spatie permissions and filter dropdown population) and shouldn't scale per row count.
+        $this->assertLessThan(22, count($queries), 'N+1 queries detected on production status page.');
+    }
+
+    public function test_multi_select_filters_work(): void
+    {
+        $user = User::factory()->create();
+        $ref = $this->createReference(['aisi_snapshot' => 'SUS304']);
+
+        $wo1 = $this->createWorkOrder($ref, ['et_code' => 'ET-MULTI-1', 'customer_name' => 'Cust A', 'po_number' => 'PO-101']);
+        $this->createPlan($wo1);
+
+        $wo2 = $this->createWorkOrder($ref, ['et_code' => 'ET-MULTI-2', 'customer_name' => 'Cust B', 'po_number' => 'PO-102']);
+        $this->createPlan($wo2);
+
+        $wo3 = $this->createWorkOrder($ref, ['et_code' => 'ET-MULTI-3', 'customer_name' => 'Cust C', 'po_number' => 'PO-103']);
+        $this->createPlan($wo3);
+
+        // Test filtering by multiple customer names (Cust A or Cust B)
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'customers' => ['Cust A', 'Cust B'],
+            'filter' => 'all',
+        ]));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $rowCodes = collect($rows)->pluck('code')->toArray();
+        $this->assertContains('ET-MULTI-1', $rowCodes);
+        $this->assertContains('ET-MULTI-2', $rowCodes);
+        $this->assertNotContains('ET-MULTI-3', $rowCodes);
+
+        // Test filtering by multiple PO numbers
+        $response2 = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'po_numbers' => ['PO-101', 'PO-103'],
+            'filter' => 'all',
+        ]));
+        $response2->assertOk();
+        $rows2 = $response2->viewData('rows');
+        $rowCodes2 = collect($rows2)->pluck('code')->toArray();
+        $this->assertContains('ET-MULTI-1', $rowCodes2);
+        $this->assertNotContains('ET-MULTI-2', $rowCodes2);
+        $this->assertContains('ET-MULTI-3', $rowCodes2);
+    }
+
+    public function test_kode_cust_filtering_combinations(): void
+    {
+        $user = User::factory()->create();
+        $ref1 = $this->createReference(['aisi_snapshot' => 'SUS304']);
+        $ref2 = $this->createReference([
+            'master_item_key' => 'ITEM-B',
+            'item_code_snapshot' => 'ITEM-B',
+            'aisi_snapshot' => 'SUS316',
+        ]);
+
+        // Create test work orders
+        $wo1 = $this->createWorkOrder($ref1, ['et_code' => 'BA43', 'customer_name' => 'Cust A', 'po_number' => 'PO-101']);
+        $this->createPlan($wo1);
+
+        $wo2 = $this->createWorkOrder($ref1, ['et_code' => 'BA44', 'customer_name' => 'Cust A', 'po_number' => 'PO-102']);
+        $this->createPlan($wo2);
+
+        $wo3 = $this->createWorkOrder($ref2, ['et_code' => 'BA53', 'customer_name' => 'Cust B', 'po_number' => 'PO-101']);
+        $this->createPlan($wo3);
+
+        // 1. Single Kode Cust works: codes[]=BA43
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['codes' => ['BA43'], 'filter' => 'all']));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $this->assertCount(1, $rows);
+        $this->assertEquals('BA43', $rows[0]['code']);
+
+        // 2. Multiple Kode Cust works: codes[]=BA43&codes[]=BA44
+        // 3. Multiple values use OR semantics within Kode Cust
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['codes' => ['BA43', 'BA44'], 'filter' => 'all']));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $this->assertCount(2, $rows);
+        $rowCodes = collect($rows)->pluck('code')->toArray();
+        $this->assertContains('BA43', $rowCodes);
+        $this->assertContains('BA44', $rowCodes);
+
+        // 4. Kode Cust + Customer uses AND semantics
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'codes' => ['BA43', 'BA53'],
+            'customers' => ['Cust A'],
+            'filter' => 'all',
+        ]));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $this->assertCount(1, $rows);
+        $this->assertEquals('BA43', $rows[0]['code']);
+
+        // 5. Kode Cust + AISI works
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'codes' => ['BA43', 'BA53'],
+            'aisis' => ['SUS316'],
+            'filter' => 'all',
+        ]));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $this->assertCount(1, $rows);
+        $this->assertEquals('BA53', $rows[0]['code']);
+
+        // 6. Kode Cust + PO works
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'codes' => ['BA43', 'BA44'],
+            'po_numbers' => ['PO-102'],
+            'filter' => 'all',
+        ]));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $this->assertCount(1, $rows);
+        $this->assertEquals('BA44', $rows[0]['code']);
+
+        // 7. XLSX export respects Kode Cust selection
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status.export', [
+            'codes' => ['BA43', 'BA44'],
+            'filter' => 'all',
+        ]));
+        $response->assertOk();
+        $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('Content-Type'));
+
+        // Save content to parse
+        $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($tempFile, $response->streamedContent());
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tempFile);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Assert the cells under "Kode Cust" column contain only BA43 and BA44
+        $this->assertEquals('BA43', $sheet->getCell('A7')->getValue());
+        $this->assertEquals('BA44', $sheet->getCell('A8')->getValue());
+        $this->assertEmpty($sheet->getCell('A9')->getValue());
+
+        // 8. XLSX metadata contains selected Kode Cust values (metadata row indicates filters)
+        $this->assertStringContainsString('BA43, BA44', $sheet->getCell('N4')->getValue());
+
+        unlink($tempFile);
+    }
+
+    public function test_dropdown_options_context_awareness(): void
+    {
+        $user = User::factory()->create();
+        $ref1 = $this->createReference(['aisi_snapshot' => 'SUS304']);
+        $ref2 = $this->createReference([
+            'master_item_key' => 'ITEM-B',
+            'item_code_snapshot' => 'ITEM-B',
+            'aisi_snapshot' => 'SUS316',
+        ]);
+
+        // Create ACTIVE work order
+        $woActive = $this->createWorkOrder($ref1, ['et_code' => 'ET-ACTIVE-1', 'customer_name' => 'Cust Active', 'po_number' => 'PO-ACT']);
+        $this->createPlan($woActive);
+
+        // Create COMPLETED work order
+        $woCompleted = $this->createWorkOrder($ref2, ['et_code' => 'ET-COMP-9', 'customer_name' => 'Cust Comp', 'po_number' => 'PO-COMP']);
+        $this->createPlan($woCompleted);
+        $tree = $this->createTree($woCompleted, 10, '1110826099', 9);
+        $tree->update(['current_stage' => 'oven']);
+
+        // 1. ACTIVE tab dropdown options check
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'active']));
+        $response->assertOk();
+
+        $allCodesActive = $response->viewData('allCodes');
+        $allCustActive = $response->viewData('allCustomers');
+        $allPosActive = $response->viewData('allPos');
+        $allAisiActive = $response->viewData('allAisi');
+
+        $this->assertContains('ET-ACTIVE-1', $allCodesActive);
+        $this->assertNotContains('ET-COMP-9', $allCodesActive);
+        $this->assertContains('Cust Active', $allCustActive);
+        $this->assertNotContains('Cust Comp', $allCustActive);
+        $this->assertContains('PO-ACT', $allPosActive);
+        $this->assertNotContains('PO-COMP', $allPosActive);
+        $this->assertContains('SUS304', $allAisiActive);
+        $this->assertNotContains('SUS316', $allAisiActive);
+
+        // 2. COMPLETED tab dropdown options check
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'completed']));
+        $response->assertOk();
+
+        $allCodesComp = $response->viewData('allCodes');
+        $allCustComp = $response->viewData('allCustomers');
+        $allPosComp = $response->viewData('allPos');
+        $allAisiComp = $response->viewData('allAisi');
+
+        $this->assertNotContains('ET-ACTIVE-1', $allCodesComp);
+        $this->assertContains('ET-COMP-9', $allCodesComp);
+        $this->assertNotContains('Cust Active', $allCustComp);
+        $this->assertContains('Cust Comp', $allCustComp);
+        $this->assertNotContains('PO-ACT', $allPosComp);
+        $this->assertContains('PO-COMP', $allPosComp);
+        $this->assertNotContains('SUS304', $allAisiComp);
+        $this->assertContains('SUS316', $allAisiComp);
+
+        // 3. ALL tab dropdown options check
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response->assertOk();
+
+        $allCodesAll = $response->viewData('allCodes');
+        $this->assertContains('ET-ACTIVE-1', $allCodesAll);
+        $this->assertContains('ET-COMP-9', $allCodesAll);
+
+        // 4. Cross-filtering test: ACTIVE + Customer filter Cust Active
+        $woActive2 = $this->createWorkOrder($ref1, ['et_code' => 'ET-ACTIVE-2', 'customer_name' => 'Other Cust', 'po_number' => 'PO-OTHER']);
+        $this->createPlan($woActive2);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', [
+            'filter' => 'active',
+            'customers' => ['Cust Active'],
+        ]));
+        $response->assertOk();
+        $allCodesCross = $response->viewData('allCodes');
+        $this->assertContains('ET-ACTIVE-1', $allCodesCross);
+        $this->assertNotContains('ET-ACTIVE-2', $allCodesCross);
     }
 }

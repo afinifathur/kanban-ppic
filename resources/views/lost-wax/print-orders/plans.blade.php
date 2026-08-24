@@ -108,7 +108,10 @@
                                             <div class="font-bold text-slate-800">{{ $plan->item_name }}</div>
                                             <div class="text-[10px] text-slate-500 font-mono">{{ $plan->item_code }} | AISI {{ $plan->aisi ?: '-' }} | Size {{ $plan->size ?: '-' }}</div>
                                         </td>
-                                        <td class="border border-slate-200 p-3 text-center font-bold text-slate-700">{{ number_format($plan->qty_planned) }}</td>
+                                        <td class="border border-slate-200 p-3 text-center">
+                                            <div class="font-bold text-slate-700">{{ number_format($plan->qty_planned) }}</div>
+                                            <div class="text-[10px] text-slate-400 mt-0.5" title="Sisa untuk Produksi Aktual">Sisa Prod: {{ number_format($plan->qty_remaining_to_produce) }}</div>
+                                        </td>
                                         <td class="border border-slate-200 p-3 text-center font-bold text-blue-600">{{ number_format($plan->qty_scheduled) }}</td>
                                         <td class="border border-slate-200 p-3 text-center font-bold">
                                             @php

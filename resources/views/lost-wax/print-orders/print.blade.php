@@ -73,12 +73,12 @@
                 <tr class="bg-slate-100 text-black border-b border-black font-bold text-[9px] uppercase text-center">
                     <th class="border border-black p-1 w-[4%]">NO</th>
                     <th class="border border-black p-1 w-[15%]">NO.PO / SPK</th>
-                    <th class="border border-black p-1 text-left w-[36%]">NAMA PRODUK</th>
+                    <th class="border border-black p-1 text-left w-[34%]">NAMA PRODUK</th>
                     <th class="border border-black p-1 w-[10%]">UKURAN</th>
                     <th class="border border-black p-1 w-[10%]">QTY PRODUKSI</th>
                     <th class="border border-black p-1 w-[6%]">AISI</th>
                     <th class="border border-black p-1 w-[6%]">LOGO</th>
-                    <th class="border border-black p-1 w-[7%]">INIT CUST</th>
+                    <th class="border border-black p-1 w-[9%]">INIT CUST</th>
                     <th class="border border-black p-1 w-[7%]">HASIL</th>
                     <th class="border border-black p-1 w-[7%]">RUSAK</th>
                 </tr>
@@ -87,13 +87,13 @@
                 @foreach($printOrder->lines->take(10) as $index => $line)
                     <tr class="h-6">
                         <td class="border border-black p-1 text-center font-bold">{{ $index + 1 }}</td>
-                        <td class="border border-black p-1 font-mono text-center truncate">{{ $line->code ?: '-' }}</td>
+                        <td class="border border-black p-1 font-mono text-center break-all text-[10px] leading-tight">{{ $line->code ?: '-' }}</td>
                         <td class="border border-black p-1 font-bold leading-tight break-words text-[10px]">{{ $line->item_name }}</td>
-                        <td class="border border-black p-1 text-center font-mono truncate">{{ $line->size ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center font-mono break-words text-[10px] leading-tight">{{ $line->size ?: '-' }}</td>
                         <td class="border border-black p-1 text-center font-bold">{{ number_format($line->qty_ordered) }}</td>
-                        <td class="border border-black p-1 text-center font-mono truncate">{{ $line->isi ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center font-mono break-words text-[10px] leading-tight">{{ $line->aisi ?: '-' }}</td>
                         <td class="border border-black p-1 text-center"></td>
-                        <td class="border border-black p-1 text-center uppercase font-bold truncate">{{ $line->customer ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center uppercase font-bold break-words text-[10px] leading-tight">{{ $line->customer ?: '-' }}</td>
                         <td class="border border-black p-1 text-center"></td>
                         <td class="border border-black p-1 text-center"></td>
                     </tr>
@@ -196,9 +196,9 @@
                 @foreach($printOrder->lines->take(10) as $index => $line)
                     <tr class="h-6">
                         <td class="border border-black p-1 text-center font-bold">{{ $index + 1 }}</td>
-                        <td class="border border-black p-1 font-mono text-center truncate">{{ $line->code ?: '-' }}</td>
+                        <td class="border border-black p-1 font-mono text-center break-all text-[9px] leading-tight">{{ $line->code ?: '-' }}</td>
                         <td class="border border-black p-1 font-bold leading-tight break-words text-[10px]">{{ $line->item_name }}</td>
-                        <td class="border border-black p-1 text-center font-mono truncate">{{ $line->size ?: '-' }}</td>
+                        <td class="border border-black p-1 text-center font-mono break-words text-[9px] leading-tight">{{ $line->size ?: '-' }}</td>
                         <td class="border border-black p-1 text-center"></td>
                         <td class="border border-black p-1 text-center"></td>
                         <td class="border border-black p-1 text-center"></td>

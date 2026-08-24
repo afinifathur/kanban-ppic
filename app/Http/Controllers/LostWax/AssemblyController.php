@@ -187,7 +187,7 @@ class AssemblyController extends Controller
     }
 
     /**
-     * Print Rangkai Work Order in A5 landscape.
+     * Print Rangkai Work Order (A5 landscape form) on A4 portrait media.
      */
     public function printWorkOrder(\App\Models\LostWaxRangkaiWorkOrder $workOrder)
     {

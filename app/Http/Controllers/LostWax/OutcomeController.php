@@ -14,7 +14,7 @@ class OutcomeController extends Controller
     public function index(Request $request)
     {
         $query = \App\Models\LostWaxPrintOrder::with(['lines.trees', 'lines.executions', 'creator'])
-            ->where('status', '!=', 'DRAFT');
+            ->whereNotIn('status', ['DRAFT', 'CANCELLED']);
 
         $scope = auth()->user()->product_scope;
         if (auth()->user()->hasRole('ppic') && $scope) {
@@ -205,10 +205,6 @@ class OutcomeController extends Controller
 
         $totalGood = $line->executions()->sum('qty_good');
         $totalDefect = $line->executions()->sum('qty_defect');
-
-        if ($targetGood + $targetDefect > $line->qty_ordered) {
-            throw new \InvalidArgumentException("Total Hasil ({$targetGood} pcs) + Rusak ({$targetDefect} pcs) tidak boleh melebihi Qty Perintah ({$line->qty_ordered} pcs) untuk item {$line->item_name}.");
-        }
 
         $lastExec = $line->executions()->orderBy('id', 'desc')->first();
 

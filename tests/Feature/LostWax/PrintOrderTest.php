@@ -602,4 +602,206 @@ class PrintOrderTest extends TestCase
         $this->assertSame(0, \App\Models\LostWaxPrintOrder::count());
         $this->assertSame(0, \App\Models\LostWaxPrintOrderLine::count());
     }
+
+    public function test_actual_can_exceed_command_qty(): void
+    {
+        $plan = $this->createProductionPlan(['qty_planned' => 330]);
+        $user = User::factory()->create();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260824-0001',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+
+        // Command = 200, Actual = 201
+        $service->record($line, [
+            'qty_good' => 201,
+            'qty_defect' => 0,
+            'status' => 'FINALIZED',
+            'execution_date' => '2026-08-24',
+            'recorded_by' => $user->id,
+        ]);
+
+        $line = $line->fresh();
+        $this->assertSame(201, $line->qty_executed_good);
+        $this->assertSame(0, $line->qty_executed_defect);
+        $this->assertSame('COMPLETED', $line->execution_status);
+        $this->assertSame(0, $line->qty_outstanding); // Clamped via accessor to 0
+    }
+
+    public function test_large_overprint_is_allowed(): void
+    {
+        $plan = $this->createProductionPlan(['qty_planned' => 330]);
+        $user = User::factory()->create();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260824-0002',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+
+        // Command = 200, Actual = 250
+        $service->record($line, [
+            'qty_good' => 250,
+            'qty_defect' => 0,
+            'status' => 'FINALIZED',
+            'execution_date' => '2026-08-24',
+            'recorded_by' => $user->id,
+        ]);
+
+        $line = $line->fresh();
+        $this->assertSame(200, $line->qty_ordered);
+        $this->assertSame(250, $line->qty_executed_good);
+        $this->assertSame('COMPLETED', $line->execution_status);
+    }
+
+    public function test_overprint_does_not_change_planned_qty(): void
+    {
+        $plan = $this->createProductionPlan(['qty_planned' => 330]);
+        $user = User::factory()->create();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260824-0003',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+
+        // Command = 200, Actual = 250
+        $service->record($line, [
+            'qty_good' => 250,
+            'qty_defect' => 0,
+            'status' => 'FINALIZED',
+            'execution_date' => '2026-08-24',
+            'recorded_by' => $user->id,
+        ]);
+
+        $plan = $plan->fresh();
+        $this->assertSame(330, $plan->qty_planned);
+        $this->assertSame(0, $plan->qty_scheduled); // transitioned to COMPLETED
+        $this->assertSame(330, $plan->qty_remaining_scheduled);
+        $this->assertSame(250, $plan->qty_produced);
+        $this->assertSame(80, $plan->qty_remaining_to_produce); // 330 - 250
+    }
+
+    public function test_qty_outstanding_clamped_to_zero_externally(): void
+    {
+        $plan = $this->createProductionPlan(['qty_planned' => 330]);
+        $user = User::factory()->create();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260824-0004',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+        $service->record($line, [
+            'qty_good' => 210,
+            'qty_defect' => 0,
+            'status' => 'FINALIZED',
+            'execution_date' => '2026-08-24',
+            'recorded_by' => $user->id,
+        ]);
+
+        $line = $line->fresh();
+        $this->assertSame(0, $line->qty_outstanding); // accessor returns max(0, outstanding)
+    }
+
+    public function test_negative_quantity_rejected(): void
+    {
+        $plan = $this->createProductionPlan(['qty_planned' => 330]);
+        $user = User::factory()->create();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260824-0005',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $service = app(\App\Services\PrintExecutionService::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $service->record($line, [
+            'qty_good' => -10,
+            'qty_defect' => 0,
+            'status' => 'FINALIZED',
+            'execution_date' => '2026-08-24',
+            'recorded_by' => $user->id,
+        ]);
+    }
+
+    public function test_print_view_renders_untruncated_long_specifications_and_aisi(): void
+    {
+        $plan = $this->createProductionPlan([
+            'qty_planned' => 330,
+        ]);
+        $user = User::factory()->create();
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260824-0006',
+            'scheduled_date' => '2026-08-24',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+
+        $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => '4.1091150LB.A0025',
+            'item_name' => 'SS304 SORF ANSI 150LBS 1"',
+            'size' => '1"',
+            'aisi' => '304',
+            'customer' => 'A06',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        // Verify that long tokens and specs are rendered fully and not truncated
+        $response->assertSee('4.1091150LB.A0025');
+        $response->assertSee('SS304 SORF ANSI 150LBS 1"');
+        $response->assertSee('304');
+        $response->assertSee('1"');
+        $response->assertSee('A06');
+
+        // Verify that the HTML output does not use CSS truncate
+        $html = $response->getContent();
+        $this->assertStringNotContainsString('truncate', $html);
+    }
 }

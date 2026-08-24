@@ -393,7 +393,8 @@ class AssemblySimplifiedWOTest extends TestCase
 
         $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.print', $wo));
         $response->assertOk();
-        $response->assertSee('A5 landscape');
+        $response->assertSee('A4 portrait');
+        $response->assertDontSee('A5 landscape');
         $response->assertSee('Perintah Rangkai');
         $response->assertSee($wo->rangkai_order_number);
     }
