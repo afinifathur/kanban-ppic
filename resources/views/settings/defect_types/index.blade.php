@@ -55,7 +55,6 @@
         <input type="hidden" name="name" id="editNameInput">
     </form>
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         function editDefect(id, currentName) {
             Swal.fire({

@@ -517,12 +517,12 @@ class ScanOvenTest extends TestCase
 
         $this->advanceTreeToStage($tree, $user->id, 6);
 
-        Carbon::setTestNow(Carbon::create(2026, 8, 11, 18, 0, 0));
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 22, 0, 0));
 
         $result = $this->scanService->processOvenScan($tree->barcode, $user->id);
 
         $this->assertTrue($result['success']);
-        $this->assertSame(240, $result['event']->aging_minutes);
+        $this->assertSame(480, $result['event']->aging_minutes);
         $this->assertSame('normal', $result['aging_status']);
 
         Carbon::setTestNow(null);

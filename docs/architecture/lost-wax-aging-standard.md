@@ -84,31 +84,43 @@ Umur rak (*rack aging*) dihitung secara dinamis dari **Last Valid Scan** dari tr
 
 ## 8. Physical Production Standard vs System Monitoring Threshold
 
-Terdapat perbedaan mendasar antara standar proses fisik di pabrik dengan threshold yang diimplementasikan di dalam sistem untuk kebutuhan monitoring:
+Terdapat perbedaan mendasar antara standar proses fisik di pabrik dengan threshold yang diimplementasikan di dalam sistem untuk kebutuhan monitoring. Terdapat dua visualisasi/pencatatan status yang berbeda:
 
-| Parameter | Standard Proses Fisik | System Monitoring Threshold |
-|---|---|---|
-| **Drying Window L1-L2** | 4 – 6 jam | Min: 4 jam, Max: 6 jam, Buffer: 8 jam |
-| **Drying Window L3-L4** | 6 jam | Min: 6 jam, Max: 6 jam, Buffer: 8 jam |
-| **Drying Window L5-L6** | 8 jam | Min: 8 jam, Max: 8 jam, Buffer: 10 jam |
-| **Drying Window L7** | Min: 24 jam | Min: 24 jam, Max: 24 jam, Buffer: 26 jam |
-| **Oven State** | Selesai Pengeringan | Dianggap selesai (tidak di-aging) |
+### A. Scan Ledger (Standard Compliance)
+Digunakan oleh `ScanService::classifyAging` untuk mencatat status kepatuhan terhadap standar fisik ke dalam tabel `lost_wax_scan_events.aging_status`. Klasifikasi ini murni menggunakan parameter `min_hours` dan `max_hours`:
+- **`too_fast`** (Terlalu Cepat): `elapsed < min_hours`
+- **`normal`** (Sesuai Standar): `min_hours <= elapsed <= max_hours`
+- **`too_long`** (Terlalu Lama): `elapsed > max_hours`
 
-*Penjelasan Perbedaan:*
-Sistem membagi drying window menjadi 3 batas: `min_hours` (waktu minimum matang), `max_hours` (target ideal standar fisik), dan `buffer_hours` (toleransi sebelum terlambat). Penambahan `buffer_hours` di sistem berguna agar dashboard tidak langsung berkedip merah (LATE) begitu melewati batas standar fisik, melainkan memberikan toleransi operasional selama 2 jam bagi operator untuk memindahkan rak.
+### B. Rack Monitor Dashboard (Operational Buffer)
+Digunakan oleh `RackMonitorService` dan `RackMonitorController` untuk visualisasi status rak pada dashboard guna membantu SPV mengatur prioritas kerja. Klasifikasi ini menggunakan `min_hours` and `buffer_hours` sebagai toleransi operasional:
+- **`belum READY`** (NORMAL/NEAR_READY): `elapsed < min_hours`
+- **`READY`** (Siap): `min_hours <= elapsed <= buffer_hours`
+- **`LATE`** (Terlambat): `elapsed > buffer_hours`
+
+### Contoh Kasus Pada Lapisan 7
+Lapisan 7 dikonfigurasi dengan: `min_hours = 24`, `max_hours = 24`, dan `buffer_hours = 26`. Perbedaan klasifikasi yang terjadi (intentional):
+
+| Durasi Pengeringan | Klasifikasi Scan Ledger (Kepatuhan Standar) | Status Dashboard (Toleransi Monitor Rak) | Keterangan |
+|---|---|---|---|
+| **23 Jam** | `too_fast` (23 < 24) | Belum `READY` / `NORMAL` | Belum mencapai batas minimum matang. |
+| **24 Jam** | `normal` (24 <= 24 <= 24) | `READY` | Tepat pada batas standar fisik dan siap diproses. |
+| **25 Jam** | `too_long` (25 > 24) | `READY` | Melebihi standar fisik ideal, tetapi masih dalam batas toleransi operasional SPV. |
+| **26 Jam** | `too_long` (26 > 24) | `READY` | Melebihi standar fisik ideal, tetapi masih dalam batas toleransi operasional SPV. |
+| **27 Jam** | `too_long` (27 > 24) | `LATE` | Melebihi batas toleransi operasional, harus segera ditindaklanjuti. |
 
 ---
 
 ## 9. Important Findings
 
 ### Confirmed
-1.  **Autoritatif Konfigurasi**: `config/lost_wax.php` adalah satu-satunya berkas konfigurasi tempat seluruh threshold aging didefinisikan.
+1.  **Autoritatif Konfigurasi**: [lost_wax.php](file:///c:/laragon/www/kanban-ppic/config/lost_wax.php) adalah satu-satunya berkas konfigurasi tempat seluruh threshold aging didefinisikan.
 2.  **Kalkulasi Dashboard**: Perhitungan status `NORMAL`, `NEAR_READY`, `READY`, dan `LATE` pada monitor rak dilakukan secara real-time di level Controller menggunakan data agregat `RackMonitorService`.
 
-### Potential Gap
+### Resolved Gap
 1.  **Ketidakcocokan Logika pada `ScanService`**:
-    Metode `ScanService::classifyAging` yang digunakan untuk mencatat status aging pada ledger transaksi (`lost_wax_scan_events.aging_status`) **tidak menggunakan konfigurasi per-stage** (`config('lost_wax.aging.stages')`). Ia hanya menggunakan fallback global (min 4 jam, max 6 jam).
-    *Dampak:* Jika operator memindai tree Lapisan 7 setelah 12 jam (yang secara fisik terlalu cepat karena minimal 24 jam), sistem mencatat status transaksinya sebagai `too_long` (karena 12 > 6 jam fallback global) di database, bukan `too_fast`. Hal ini menyebabkan inkonsistensi data riwayat penuaan di database scan event ledger.
+    Metode `ScanService::classifyAging` yang digunakan untuk mencatat status aging pada ledger transaksi (`lost_wax_scan_events.aging_status`) kini telah menggunakan konfigurasi per-stage (`config('lost_wax.aging.stages')`).
+    - *Solusi:* Metode `classifyAging(int $minutes, ?string $stage = null)` sekarang menerima parameter tambahan `$stage` dan memuat min/max hours yang sesuai dari konfigurasi per-stage. Jika parameter `$stage` kosong atau stage tidak terdaftar, sistem aman beralih ke fallback global (4 - 6 jam).
 
 ### No Assumption
 1.  **Aging Tahapan Oven**: Tahapan `oven` tidak memiliki aturan aging di dalam `config/lost_wax.php` maupun dalam filter controller. Oven dianggap sebagai tahapan akhir sehingga tidak masuk dalam monitor antrean aging.
@@ -118,7 +130,7 @@ Sistem membagi drying window menjadi 3 batas: `min_hours` (waktu minimum matang)
 ## 10. Recommendation
 
 1.  **Penyelarasan Logika Transaksi (`ScanService`)**:
-    Disarankan untuk memperbarui `ScanService::classifyAging(int $minutes)` agar menerima parameter tambahan `$stage` sehingga klasifikasi di tabel database `lost_wax_scan_events` selaras dengan aturan stage masing-masing (terutama untuk mendeteksi `too_fast` pada Lapisan 7).
+    Diimplementasikan parameter tambahan `$stage` pada `ScanService::classifyAging(int $minutes, ?string $stage = null)` agar klasifikasi di tabel database `lost_wax_scan_events` selaras dengan aturan stage masing-masing.
 
 ---
 
@@ -126,8 +138,8 @@ Sistem membagi drying window menjadi 3 batas: `min_hours` (waktu minimum matang)
 
 | Area | Source | Finding |
 |---|---|---|
-| **Aging Config** | [lost_wax.php](file:///c:/laragon/www/KANBAN-PPIC/config/lost_wax.php#L33-L73) | Konfigurasi threshold per-stage (`min_hours`, `max_hours`, `buffer_hours`). |
-| **Dashboard Mapping** | [RackMonitorController.php](file:///c:/laragon/www/KANBAN-PPIC/app/Http/Controllers/LostWax/RackMonitorController.php#L23-L73) | Logika klasifikasi `NORMAL`, `NEAR_READY`, `READY`, `LATE` dan sisa durasi / overdue. |
-| **Service Integration** | [RackMonitorService.php](file:///c:/laragon/www/KANBAN-PPIC/app/Services/LostWax/RackMonitorService.php#L167-L195) | Agregasi dan pencarian dominant stage, `MAX(last_scan_at)`. |
-| **Scan Ledger Logic** | [ScanService.php](file:///c:/laragon/www/KANBAN-PPIC/app/Services/ScanService.php#L113-L129) | Fungsi `classifyAging` menggunakan hardcoded fallback global (4 - 6 jam). |
-| **Regression Verification** | [RackMonitorDashboardTest.php](file:///c:/laragon/www/KANBAN-PPIC/tests/Feature/LostWax/RackMonitorDashboardTest.php) | Pengujian fungsionalitas threshold, prioritas, mixed, dan split stage (100% Passed). |
+| **Aging Config** | [lost_wax.php](file:///c:/laragon/www/kanban-ppic/config/lost_wax.php#L33-L73) | Konfigurasi threshold per-stage (`min_hours`, `max_hours`, `buffer_hours`). |
+| **Dashboard Mapping** | [RackMonitorController.php](file:///c:/laragon/www/kanban-ppic/app/Http/Controllers/LostWax/RackMonitorController.php#L23-L73) | Logika klasifikasi `NORMAL`, `NEAR_READY`, `READY`, `LATE` dan sisa durasi / overdue. |
+| **Service Integration** | [RackMonitorService.php](file:///c:/laragon/www/kanban-ppic/app/Services/LostWax/RackMonitorService.php#L167-L195) | Agregasi dan pencarian dominant stage, `MAX(last_scan_at)`. |
+| **Scan Ledger Logic** | [ScanService.php](file:///c:/laragon/www/kanban-ppic/app/Services/ScanService.php#L113-L135) | Fungsi `classifyAging` menggunakan stage-specific configurations dengan fallback global. |
+| **Regression Verification** | [RackMonitorDashboardTest.php](file:///c:/laragon/www/kanban-ppic/tests/Feature/LostWax/RackMonitorDashboardTest.php) | Pengujian fungsionalitas threshold, prioritas, mixed, dan split stage (100% Passed). |

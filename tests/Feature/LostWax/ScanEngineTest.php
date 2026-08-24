@@ -552,4 +552,33 @@ class ScanEngineTest extends TestCase
         $this->assertSame('normal', $this->scanService->classifyAging(240));   // 4h
         $this->assertSame('too_long', $this->scanService->classifyAging(360));  // 6h
     }
+
+    public function test_stage_aware_aging_classification(): void
+    {
+        // LAYER 1: min 4h, max 6h
+        $this->assertSame('too_fast', $this->scanService->classifyAging(3 * 60, 'layer_1'));
+        $this->assertSame('normal', $this->scanService->classifyAging(5 * 60, 'layer_1'));
+        $this->assertSame('too_long', $this->scanService->classifyAging(7 * 60, 'layer_1'));
+
+        // LAYER 3: min 6h, max 6h
+        $this->assertSame('too_fast', $this->scanService->classifyAging(5 * 60, 'layer_3'));
+        $this->assertSame('normal', $this->scanService->classifyAging(6 * 60, 'layer_3'));
+        $this->assertSame('too_long', $this->scanService->classifyAging(7 * 60, 'layer_3'));
+
+        // LAYER 5: min 8h, max 8h
+        $this->assertSame('too_fast', $this->scanService->classifyAging(7 * 60, 'layer_5'));
+        $this->assertSame('normal', $this->scanService->classifyAging(8 * 60, 'layer_5'));
+        $this->assertSame('too_long', $this->scanService->classifyAging(9 * 60, 'layer_5'));
+
+        // LAYER 7: min 24h, max 24h
+        $this->assertSame('too_fast', $this->scanService->classifyAging(23 * 60, 'layer_7'));
+        $this->assertSame('normal', $this->scanService->classifyAging(24 * 60, 'layer_7'));
+        $this->assertSame('too_long', $this->scanService->classifyAging(25 * 60, 'layer_7'));
+        $this->assertSame('too_long', $this->scanService->classifyAging(27 * 60, 'layer_7'));
+
+        // Legacy / Unknown stage: fallback to global config (default min 4h, max 6h)
+        $this->assertSame('too_fast', $this->scanService->classifyAging(3 * 60, 'unknown_stage'));
+        $this->assertSame('normal', $this->scanService->classifyAging(5 * 60, 'unknown_stage'));
+        $this->assertSame('too_long', $this->scanService->classifyAging(7 * 60, 'unknown_stage'));
+    }
 }

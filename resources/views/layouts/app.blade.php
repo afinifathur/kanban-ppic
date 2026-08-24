@@ -8,6 +8,8 @@
     <title>FIFO Tracking - Production System</title>
     <script src="{{ asset('js/tailwindcss.js') }}"></script>
     <script src="{{ asset('js/axios.min.js') }}"></script>
+    <!-- Fonts -->
+    <link rel="stylesheet" href="{{ asset('css/fonts.css') }}">
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');

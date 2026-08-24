@@ -33,7 +33,7 @@ class ScanService
 
             if ($tree->last_scan_at) {
                 $agingMinutes = (int) round($tree->last_scan_at->diffInMinutes($scannedAt));
-                $agingStatus = $this->classifyAging($agingMinutes);
+                $agingStatus = $this->classifyAging($agingMinutes, $tree->current_stage);
             }
 
             $event = LostWaxScanEvent::create([
@@ -110,10 +110,26 @@ class ScanService
         });
     }
 
-    public function classifyAging(int $minutes): string
+    public function classifyAging(int $minutes, ?string $stage = null): string
     {
-        $minHours = (float) config('lost_wax.aging.min_hours', 4);
-        $maxHours = (float) config('lost_wax.aging.max_hours', 6);
+        $minHours = null;
+        $maxHours = null;
+
+        if ($stage !== null) {
+            $stageConfig = config("lost_wax.aging.stages.{$stage}");
+            if ($stageConfig) {
+                $minHours = isset($stageConfig['min_hours']) ? (float) $stageConfig['min_hours'] : null;
+                $maxHours = isset($stageConfig['max_hours']) ? (float) $stageConfig['max_hours'] : null;
+            }
+        }
+
+        if ($minHours === null) {
+            $minHours = (float) config('lost_wax.aging.min_hours', 4);
+        }
+
+        if ($maxHours === null) {
+            $maxHours = (float) config('lost_wax.aging.max_hours', 6);
+        }
 
         $hours = $minutes / 60;
 
@@ -201,7 +217,7 @@ class ScanService
 
             if ($tree->last_scan_at) {
                 $agingMinutes = (int) round($tree->last_scan_at->diffInMinutes($scannedAt));
-                $agingStatus = $this->classifyAging($agingMinutes);
+                $agingStatus = $this->classifyAging($agingMinutes, $tree->current_stage);
             }
 
             $event = LostWaxScanEvent::create([
