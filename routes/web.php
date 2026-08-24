@@ -145,6 +145,8 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/trees/{tree}/traveler', [TreeController::class, 'traveler'])->name('trees.traveler');
             Route::get('/trees/{tree}/barcode', [TreeController::class, 'barcode'])->name('trees.barcode');
             Route::post('/trees/print-thermal', [TreeController::class, 'printThermal'])->name('trees.print-thermal');
+            Route::post('/trees/bulk-rack', [TreeController::class, 'bulkUpdateRack'])->name('trees.bulk-rack');
+            Route::patch('/trees/{tree}/rack', [TreeController::class, 'updateRack'])->name('trees.update-rack');
 
             // Scan
             Route::get('/scan', [ScanController::class, 'index'])->name('scan.index');
@@ -165,6 +167,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/production-status', [ProductionStatusController::class, 'index'])->name('production-status');
             Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
             Route::get('/production-status/export', [ProductionStatusController::class, 'exportCsv'])->name('production-status.export');
+
+            // Rack Monitoring
+            Route::get('/rack-monitor', [\App\Http\Controllers\LostWax\RackMonitorController::class, 'index'])->name('rack-monitor.index');
         });
     });
 });

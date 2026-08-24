@@ -89,17 +89,18 @@
     </style>
 </head>
 <body class="min-h-screen">
-    @php
-        if (request()->has('ids')) {
-            $ids = explode(',', request()->input('ids'));
-            $treesList = \App\Models\LostWaxTree::with(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan'])
-                ->whereIn('id', $ids)
-                ->get();
-        } else {
-            $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
-            $treesList = collect([$tree]);
-        }
-    @endphp
+    @if(isset($warnings) && count($warnings) > 0)
+        <div class="no-print max-w-4xl mx-auto my-4 p-4 bg-amber-100 border border-amber-400 text-amber-800 rounded-lg shadow-sm">
+            <h4 class="font-bold flex items-center gap-1.5 mb-1 text-sm">
+                <i class="fas fa-exclamation-triangle"></i> Peringatan Traveler Gate
+            </h4>
+            <ul class="list-disc pl-5 text-xs space-y-0.5">
+                @foreach($warnings as $warning)
+                    <li>{{ $warning }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
     <div class="print-container">
         @foreach($treesList->chunk(6) as $pageChunk)
@@ -140,6 +141,10 @@
                                 <div class="flex justify-between">
                                     <span>PLAN:</span>
                                     <span class="font-bold">{{ optional($t->plan)->wave_number ? 'Wave '.str_pad((string) $t->plan->wave_number, 3, '0', STR_PAD_LEFT) : '-' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>RACK:</span>
+                                    <span class="font-bold">{{ $t->coatingRack ? 'RAK-' . str_pad($t->coatingRack->rack_number, 2, '0', STR_PAD_LEFT) : '-' }}</span>
                                 </div>
                                 <div class="flex justify-between">
                                     <span>CODE:</span>

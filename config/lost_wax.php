@@ -31,6 +31,43 @@ return [
     ],
 
     'aging' => [
+        'stages' => [
+            'layer_1' => [
+                'min_hours' => 4,
+                'max_hours' => 6,
+                'buffer_hours' => 8,
+            ],
+            'layer_2' => [
+                'min_hours' => 4,
+                'max_hours' => 6,
+                'buffer_hours' => 8,
+            ],
+            'layer_3' => [
+                'min_hours' => 6,
+                'max_hours' => 6,
+                'buffer_hours' => 8,
+            ],
+            'layer_4' => [
+                'min_hours' => 6,
+                'max_hours' => 6,
+                'buffer_hours' => 8,
+            ],
+            'layer_5' => [
+                'min_hours' => 8,
+                'max_hours' => 8,
+                'buffer_hours' => 10,
+            ],
+            'layer_6' => [
+                'min_hours' => 8,
+                'max_hours' => 8,
+                'buffer_hours' => 10,
+            ],
+            'layer_7' => [
+                'min_hours' => 24,
+                'max_hours' => 24,
+                'buffer_hours' => 26,
+            ],
+        ],
         'min_hours' => (float) env('LOST_WAX_AGING_MIN_HOURS', 4),
         'max_hours' => (float) env('LOST_WAX_AGING_MAX_HOURS', 6),
     ],

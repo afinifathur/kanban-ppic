@@ -382,6 +382,8 @@ class Phase2UatTest extends TestCase
         // UAT STEP 10: TRAVELER
         // ==========================================
         $firstTree = $treesW01[0];
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
+        $firstTree->update(['rack_id' => $rack->id, 'rack_assigned_at' => now()]);
 
         $travelerResponse = $this->actingAs($user)
             ->get(route('lost-wax.trees.traveler', $firstTree));

@@ -216,6 +216,8 @@ class ThermalPrintTest extends TestCase
         ]);
 
         // Create Trees
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
+
         $treeStainless = LostWaxTree::create([
             'lost_wax_print_order_line_id' => $lineStainless->id,
             'barcode' => '260821001',
@@ -225,6 +227,8 @@ class ThermalPrintTest extends TestCase
             'production_date' => now(),
             'family_code' => '3',
             'daily_sequence' => 1,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         $treeBesi = LostWaxTree::create([
@@ -236,6 +240,8 @@ class ThermalPrintTest extends TestCase
             'production_date' => now(),
             'family_code' => '3',
             'daily_sequence' => 2,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         // 2. Unauthenticated user is blocked (redirected)
@@ -302,6 +308,8 @@ class ThermalPrintTest extends TestCase
             'item_name' => 'SS304 Flange 3"',
         ]);
 
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 17, 'status' => 'active']);
+
         $tree = LostWaxTree::create([
             'lost_wax_print_order_line_id' => $line->id,
             'barcode' => '260821001',
@@ -311,6 +319,8 @@ class ThermalPrintTest extends TestCase
             'production_date' => now(),
             'family_code' => '3',
             'daily_sequence' => 1,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         $response = $this->actingAs($this->adminUser)->postJson(route('lost-wax.trees.print-thermal'), [
@@ -336,7 +346,7 @@ class ThermalPrintTest extends TestCase
         $this->assertStringContainsString('15 PCS', $tspl);
         $this->assertStringContainsString('TGL PRINT     : '.now()->format('d-m-Y'), $tspl);
         $this->assertStringContainsString('JAM PRINT     : '.now()->format('H:i'), $tspl);
-        $this->assertStringContainsString('KODE RAK : _____________', $tspl);
+        $this->assertStringContainsString('KODE RAK : RAK-17', $tspl);
         $this->assertStringContainsString('KETERANGAN: _____________', $tspl);
     }
 
@@ -375,6 +385,8 @@ class ThermalPrintTest extends TestCase
             'item_name' => 'SS304 Flange 3 Inch',
         ]);
 
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
+
         $tree1 = LostWaxTree::create([
             'lost_wax_print_order_line_id' => $line->id,
             'barcode' => '260821001',
@@ -384,6 +396,8 @@ class ThermalPrintTest extends TestCase
             'production_date' => now(),
             'family_code' => '3',
             'daily_sequence' => 1,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         $tree2 = LostWaxTree::create([
@@ -395,6 +409,8 @@ class ThermalPrintTest extends TestCase
             'production_date' => now(),
             'family_code' => '3',
             'daily_sequence' => 2,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         $this->assertEquals(0, PrintJob::count());
@@ -453,6 +469,9 @@ class ThermalPrintTest extends TestCase
             'family_code' => '3',
             'daily_sequence' => 1,
         ]);
+
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
+        $tree->update(['rack_id' => $rack->id, 'rack_assigned_at' => now()]);
 
         $response = $this->actingAs($this->adminUser)->get(route('lost-wax.trees.traveler', $tree));
         $response->assertStatus(200);

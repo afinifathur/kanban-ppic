@@ -11,6 +11,7 @@ class LostWaxTree extends Model
         'work_order_plan_id',
         'lost_wax_print_order_line_id',
         'rangkai_execution_id',
+        'rack_id',
         'barcode',
         'tree_number',
         'quantity',
@@ -21,6 +22,7 @@ class LostWaxTree extends Model
         'family_code',
         'daily_sequence',
         'require_layer_7',
+        'rack_assigned_at',
     ];
 
     protected $casts = [
@@ -30,7 +32,9 @@ class LostWaxTree extends Model
         'production_date' => 'date',
         'last_scan_at' => 'datetime',
         'rangkai_execution_id' => 'integer',
+        'rack_id' => 'integer',
         'require_layer_7' => 'boolean',
+        'rack_assigned_at' => 'datetime',
     ];
 
     public function workOrder()
@@ -51,6 +55,11 @@ class LostWaxTree extends Model
     public function rangkaiExecution()
     {
         return $this->belongsTo(LostWaxRangkaiExecution::class, 'rangkai_execution_id');
+    }
+
+    public function coatingRack()
+    {
+        return $this->belongsTo(LostWaxCoatingRack::class, 'rack_id');
     }
 
     public function getHumanBarcodeAttribute(): string

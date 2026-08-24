@@ -354,7 +354,9 @@ class TreeTest extends TestCase
             ])
             ->assertSessionHasNoErrors();
 
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
         $tree = LostWaxTree::first();
+        $tree->update(['rack_id' => $rack->id, 'rack_assigned_at' => now()]);
 
         $response = $this->actingAs($user)
             ->get(route('lost-wax.trees.traveler', $tree));
@@ -569,6 +571,7 @@ class TreeTest extends TestCase
     public function test_sprint_traveler_refactoring_behavior(): void
     {
         $user = User::factory()->create();
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
 
         // 1. Create a workflow-new tree (without work_order_id, linked to print order line)
         $planNew = $this->createProductionPlan([
@@ -599,6 +602,8 @@ class TreeTest extends TestCase
             'production_date' => '2026-08-19',
             'family_code' => '1',
             'daily_sequence' => 1,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         // 2. Create a legacy tree (with work_order_id)
@@ -618,6 +623,8 @@ class TreeTest extends TestCase
             'production_date' => '2026-08-19',
             'family_code' => '1',
             'daily_sequence' => 2,
+            'rack_id' => $rack->id,
+            'rack_assigned_at' => now(),
         ]);
 
         // 3. Test: Both workflow-new and legacy tree load on the index page
@@ -701,6 +708,8 @@ class TreeTest extends TestCase
                 'production_date' => '2026-08-19',
                 'family_code' => '1',
                 'daily_sequence' => $i + 3,
+                'rack_id' => $rack->id,
+                'rack_assigned_at' => now(),
             ]);
         }
 

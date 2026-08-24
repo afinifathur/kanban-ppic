@@ -39,6 +39,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             CustomerSeeder::class,
+            LostWaxCoatingRackSeeder::class,
         ]);
 
         if (app()->environment('local', 'testing', 'dev')) {

@@ -20,6 +20,7 @@ class TreeController extends Controller
             'plan',
             'printOrderLine.printOrder',
             'printOrderLine.productionPlan',
+            'coatingRack',
         ]);
 
         $scope = auth()->user()->product_scope;
@@ -64,6 +65,14 @@ class TreeController extends Controller
             });
         }
 
+        if ($request->filled('rack_id')) {
+            if ($request->rack_id === 'none' || $request->rack_id === 'null') {
+                $treesQuery->whereNull('rack_id');
+            } else {
+                $treesQuery->where('rack_id', $request->rack_id);
+            }
+        }
+
         $trees = $treesQuery->orderByDesc('id')
             ->paginate(50)
             ->withQueryString();
@@ -100,7 +109,17 @@ class TreeController extends Controller
             });
         }
 
-        return view('lost-wax.trees.index', compact('trees', 'uniqueCodes', 'uniqueCustomers'));
+        $coatingRacks = \App\Models\LostWaxCoatingRack::where('status', 'active')
+            ->orderBy('rack_number', 'asc')
+            ->get();
+
+        $rackCounts = \App\Models\LostWaxTree::whereNotNull('rack_id')
+            ->groupBy('rack_id')
+            ->select('rack_id', \DB::raw('count(*) as total'))
+            ->pluck('total', 'rack_id')
+            ->toArray();
+
+        return view('lost-wax.trees.index', compact('trees', 'uniqueCodes', 'uniqueCustomers', 'coatingRacks', 'rackCounts'));
     }
 
     public function generate(LostWaxWorkOrderPlan $plan)
@@ -202,12 +221,44 @@ class TreeController extends Controller
         }
     }
 
-    public function traveler(LostWaxTree $tree)
+    public function traveler(Request $request, LostWaxTree $tree)
     {
-        $this->authorizeTree($tree);
-        $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
+        if ($request->has('ids')) {
+            $ids = array_filter(explode(',', $request->input('ids')));
+        } else {
+            $ids = [$tree->id];
+        }
 
-        return view('lost-wax.trees.traveler', compact('tree'));
+        $allTrees = \App\Models\LostWaxTree::with([
+            'workOrder.itemReference',
+            'plan',
+            'printOrderLine.printOrder',
+            'printOrderLine.productionPlan',
+            'coatingRack',
+        ])
+            ->whereIn('id', $ids)
+            ->get();
+
+        $validTrees = [];
+        $skippedBarcodes = [];
+
+        foreach ($allTrees as $t) {
+            $this->authorizeTree($t);
+            if (is_null($t->rack_id)) {
+                $skippedBarcodes[] = $t->barcode;
+            } else {
+                $validTrees[] = $t;
+            }
+        }
+
+        $treesList = collect($validTrees);
+
+        $warnings = [];
+        if (count($skippedBarcodes) > 0) {
+            $warnings[] = 'Rangkaian berikut dilewati karena belum memiliki Rack: '.implode(', ', $skippedBarcodes);
+        }
+
+        return view('lost-wax.trees.traveler', compact('treesList', 'warnings'));
     }
 
     public function printThermal(Request $request)
@@ -221,7 +272,6 @@ class TreeController extends Controller
             return response()->json(['success' => false, 'message' => 'Tidak ada Rangkaian terpilih.'], 400);
         }
 
-        // 10. RBAC HARUS DILAKUKAN SEBELUM CREATE PRINT JOB
         $trees = [];
         foreach ($ids as $id) {
             $tree = \App\Models\LostWaxTree::with([
@@ -229,6 +279,7 @@ class TreeController extends Controller
                 'plan',
                 'printOrderLine.printOrder',
                 'printOrderLine.productionPlan',
+                'coatingRack',
             ])->find($id);
 
             if (! $tree) {
@@ -239,25 +290,169 @@ class TreeController extends Controller
             $trees[] = $tree;
         }
 
+        $validTrees = [];
+        $skippedTrees = [];
+
+        foreach ($trees as $tree) {
+            if (is_null($tree->rack_id)) {
+                $skippedTrees[] = [
+                    'barcode' => $tree->barcode,
+                    'reason' => 'Nomor Rack belum diisi.',
+                ];
+            } else {
+                $validTrees[] = $tree;
+            }
+        }
+
         $printerName = config('lost_wax.printer_name', 'TSC TE200');
         $tsplRenderer = new \App\Services\Barcode\Renderers\TsplRenderer;
         $printJobService = new \App\Services\Barcode\PrintJobService;
 
-        foreach ($trees as $tree) {
+        foreach ($validTrees as $tree) {
             $payloadTspl = $tsplRenderer->render($tree);
-            $printJobService->createTscJob(
+            $job = $printJobService->createTscJob(
                 $payloadTspl,
                 $printerName,
                 'TRAVELER_LABEL_90X50',
                 1
             );
+            $job->update(['tree_id' => $tree->id]);
         }
 
-        $count = count($trees);
+        $printedCount = count($validTrees);
+        $skippedCount = count($skippedTrees);
+
+        if ($printedCount > 0 && $skippedCount > 0) {
+            $message = "{$printedCount} traveler berhasil diproses. {$skippedCount} tree dilewati karena belum memiliki Rack.";
+        } elseif ($printedCount > 0) {
+            $message = "{$printedCount} Rangkaian masuk antrean printer thermal.";
+        } else {
+            $message = "Tidak ada Rangkaian yang dicetak. {$skippedCount} tree dilewati karena belum memiliki Rack.";
+        }
 
         return response()->json([
             'success' => true,
-            'message' => "{$count} Rangkaian masuk antrean printer thermal.",
+            'message' => $message,
+            'printed_count' => $printedCount,
+            'skipped_count' => $skippedCount,
+            'printed' => collect($validTrees)->pluck('barcode')->toArray(),
+            'skipped' => $skippedTrees,
+        ]);
+    }
+
+    public function updateRack(Request $request, LostWaxTree $tree)
+    {
+        $this->authorizeTree($tree);
+
+        $validated = $request->validate([
+            'rack_id' => 'nullable|exists:lost_wax_coating_racks,id',
+        ]);
+
+        if ($validated['rack_id']) {
+            $rack = \App\Models\LostWaxCoatingRack::find($validated['rack_id']);
+            if (! $rack || $rack->status !== 'active') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Rack tidak aktif atau tidak ditemukan.',
+                ], 422);
+            }
+        }
+
+        $tree->update([
+            'rack_id' => $validated['rack_id'],
+            'rack_assigned_at' => $validated['rack_id'] ? now() : null,
+        ]);
+
+        $count = $validated['rack_id']
+            ? \App\Models\LostWaxTree::where('rack_id', $validated['rack_id'])->count()
+            : 0;
+
+        $rackLabel = $tree->coatingRack
+            ? 'RAK-'.str_pad($tree->coatingRack->rack_number, 2, '0', STR_PAD_LEFT)
+            : '-';
+
+        return response()->json([
+            'success' => true,
+            'message' => $validated['rack_id']
+                ? "Tree berhasil ditempatkan ke {$rackLabel}."
+                : 'Tree berhasil dikeluarkan dari rak.',
+            'rack_label' => $rackLabel,
+            'is_over_capacity' => $count > 30,
+            'count' => $count,
+        ]);
+    }
+
+    public function bulkUpdateRack(Request $request)
+    {
+        $validated = $request->validate([
+            'tree_ids' => 'required|array',
+            'tree_ids.*' => 'required|integer',
+            'rack_id' => 'required|exists:lost_wax_coating_racks,id',
+        ]);
+
+        $rack = \App\Models\LostWaxCoatingRack::find($validated['rack_id']);
+        if (! $rack || $rack->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Rack tidak aktif atau tidak ditemukan.',
+            ], 422);
+        }
+
+        $successList = [];
+        $failList = [];
+
+        \DB::transaction(function () use ($validated, &$successList, &$failList) {
+            foreach ($validated['tree_ids'] as $id) {
+                $tree = \App\Models\LostWaxTree::find($id);
+                if (! $tree) {
+                    $failList[] = [
+                        'id' => $id,
+                        'barcode' => 'ID '.$id,
+                        'reason' => 'Tree tidak ditemukan.',
+                    ];
+
+                    continue;
+                }
+
+                try {
+                    $this->authorizeTree($tree);
+
+                    $tree->update([
+                        'rack_id' => $validated['rack_id'],
+                        'rack_assigned_at' => now(),
+                    ]);
+
+                    $successList[] = $tree->barcode;
+                } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                    $failList[] = [
+                        'id' => $id,
+                        'barcode' => $tree->barcode,
+                        'reason' => 'Tidak memiliki akses (Unauthorized).',
+                    ];
+                }
+            }
+        });
+
+        $successCount = count($successList);
+        $failCount = count($failList);
+
+        $rackLabel = 'RAK-'.str_pad($rack->rack_number, 2, '0', STR_PAD_LEFT);
+
+        if ($successCount > 0 && $failCount > 0) {
+            $message = "{$successCount} tree berhasil ditempatkan ke {$rackLabel}. {$failCount} tree gagal.";
+        } elseif ($successCount > 0) {
+            $message = "{$successCount} tree berhasil ditempatkan ke {$rackLabel}.";
+        } else {
+            $message = 'Gagal memproses bulk assignment.';
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'success_count' => $successCount,
+            'fail_count' => $failCount,
+            'success_list' => $successList,
+            'failures' => $failList,
         ]);
     }
 

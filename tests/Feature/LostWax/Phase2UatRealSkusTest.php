@@ -234,6 +234,9 @@ class Phase2UatRealSkusTest extends TestCase
         $this->assertSame('4110826001', $treesW03[0]->barcode);
 
         // --- TRAVELER ---
+        $rack = \App\Models\LostWaxCoatingRack::create(['rack_number' => 1, 'status' => 'active']);
+        $treesW01[0]->update(['rack_id' => $rack->id, 'rack_assigned_at' => now()]);
+
         $this->actingAs($user)
             ->get(route('lost-wax.trees.traveler', $treesW01[0]))
             ->assertOk()

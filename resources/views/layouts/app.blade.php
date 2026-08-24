@@ -369,6 +369,14 @@
                         <span class="text-sm sidebar-text ml-2">Production Status</span>
                     </a>
                 </li>
+                <li>
+                    <a href="{{ route('lost-wax.rack-monitor.index') }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.rack-monitor.index') ? 'bg-blue-600 text-white' : 'text-slate-300' }}"
+                        title="Rack Monitoring">
+                        <i class="fas fa-desktop w-6 shrink-0 text-center"></i>
+                        <span class="text-sm sidebar-text ml-2">Rack Monitoring</span>
+                    </a>
+                </li>
 
                 <!-- 5. WIP -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">

@@ -26,7 +26,10 @@ class TsplRenderer
 
         $printDate = $this->sanitize(now()->format('d-m-Y'));
         $printTime = $this->sanitize(now()->format('H:i'));
-        $rackPlaceholder = $this->sanitize('_____________');
+        $rackNumber = $tree->coatingRack?->rack_number
+            ? 'RAK-'.str_pad((string) $tree->coatingRack->rack_number, 2, '0', STR_PAD_LEFT)
+            : 'Belum diisi';
+        $rackPlaceholder = $this->sanitize($rackNumber);
         $descPlaceholder = $this->sanitize('_____________');
 
         // Wrap item name: 23 characters per line using Font 2 (word-wrapped to show maximum 2 lines)
