@@ -84,6 +84,10 @@
                 break-after: page;
                 page-break-after: always;
                 width: 210mm !important;
+                transform: scale(0.95);
+                transform-origin: top left;
+                margin-left: 5.25mm;
+                margin-top: 5mm;
             }
 
             .print-page:last-child {
@@ -209,7 +213,7 @@
                                     <td class="border border-black p-1 font-mono text-center break-all text-[10px] leading-tight">{{ $line->code ?: '-' }}</td>
                                     <td class="border border-black p-1 font-bold leading-tight break-words text-[10px]">{{ $line->item_name }}</td>
                                     <td class="border border-black p-1 text-center font-mono break-words text-[10px] leading-tight">{{ $line->size ?: '-' }}</td>
-                                    <td class="border border-black p-1 text-center font-bold">{{ number_format($line->qty_ordered) }}</td>
+                                    <td class="border border-black p-1 text-center font-bold">{{ number_format($line->qty_outstanding) }}</td>
                                     <td class="border border-black p-1 text-center font-mono break-words text-[10px] leading-tight">{{ $line->aisi ?: '-' }}</td>
                                     <td class="border border-black p-1 text-center"></td>
                                     <td class="border border-black p-1 text-center uppercase font-bold break-words text-[10px] leading-tight">{{ $line->customer ?: '-' }}</td>
@@ -443,7 +447,7 @@
                                         <td class="border border-black p-1 font-mono text-center break-all text-[10px] leading-tight">{{ $line->code ?: '-' }}</td>
                                         <td class="border border-black p-1 font-bold leading-tight break-words text-[10px]">{{ $line->item_name }}</td>
                                         <td class="border border-black p-1 text-center font-mono break-words text-[10px] leading-tight">{{ $line->size ?: '-' }}</td>
-                                        <td class="border border-black p-1 text-center font-bold">{{ number_format($line->qty_ordered) }}</td>
+                                        <td class="border border-black p-1 text-center font-bold">{{ number_format($line->qty_outstanding) }}</td>
                                         <td class="border border-black p-1 text-center font-mono break-words text-[10px] leading-tight">{{ $line->aisi ?: '-' }}</td>
                                         <td class="border border-black p-1 text-center"></td>
                                         <td class="border border-black p-1 text-center uppercase font-bold break-words text-[10px] leading-tight">{{ $line->customer ?: '-' }}</td>

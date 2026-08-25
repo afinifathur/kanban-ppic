@@ -83,6 +83,44 @@ class PrintOrderTest extends TestCase
     }
 
     /**
+     * Helper to create a single-line print order with a specific command quantity.
+     */
+    protected function createSingleLineOrder(User $user, string $code, int $qtyOrdered, string $status = 'ISSUED'): \App\Models\LostWaxPrintOrder
+    {
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-CONT-'.$code,
+            'scheduled_date' => '2026-08-25',
+            'status' => $status,
+            'created_by' => $user->id,
+        ]);
+
+        $order->lines()->create([
+            'qty_ordered' => $qtyOrdered,
+            'code' => $code,
+            'customer' => 'CUST-001',
+            'item_name' => 'Produk '.$code,
+            'size' => '1"',
+            'aisi' => '304',
+        ]);
+
+        return $order;
+    }
+
+    /**
+     * Helper to record a FINALIZED execution against a print order line.
+     */
+    protected function recordExecution(\App\Models\LostWaxPrintOrderLine $line, int $good, int $defect): void
+    {
+        app(\App\Services\PrintExecutionService::class)->record($line, [
+            'qty_good' => $good,
+            'qty_defect' => $defect,
+            'execution_date' => '2026-08-25',
+            'status' => 'FINALIZED',
+            'recorded_by' => $line->printOrder->created_by,
+        ]);
+    }
+
+    /**
      * Test 1-5: Multiple print orders can belong to one plan, scheduled quantities,
      * sisa (remaining) calculated correctly, and planned qty remains untouched.
      */
@@ -473,6 +511,25 @@ class PrintOrderTest extends TestCase
         $response->assertSee('FORM SETTING MESIN CETAK');
     }
 
+    public function test_print_expanded_mode_applies_print_safe_scale(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createMultiLineOrder($user, 11);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('transform: scale(0.95)', $html);
+        $this->assertStringContainsString('transform-origin: top left', $html);
+
+        // Still two pages with both forms
+        $this->assertSame(2, substr_count($html, '<div class="print-page">'));
+        $response->assertSee('FORM LAPORAN KERJA CETAK LILIN');
+        $response->assertSee('FORM SETTING MESIN CETAK');
+    }
+
     public function test_print_expanded_mode_for_twenty_one_items_keeps_all_items_in_order(): void
     {
         $user = $this->makePpicUser();
@@ -528,6 +585,131 @@ class PrintOrderTest extends TestCase
         // Read-only: status unchanged, no executions created
         $this->assertSame('DRAFT', $order->fresh()->status);
         $this->assertSame(0, \App\Models\LostWaxPrintExecution::count());
+    }
+
+    public function test_continuation_print_fresh_order_shows_full_qty(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createSingleLineOrder($user, '268KS103', 250);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertSame(1, substr_count($html, '>250</td>'));
+    }
+
+    public function test_continuation_print_partial_execution_shows_outstanding(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createSingleLineOrder($user, '268KS103', 250);
+
+        $this->recordExecution($order->lines->first(), 120, 0);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertSame(1, substr_count($html, '>130</td>'));
+        $this->assertSame(0, substr_count($html, '>250</td>'));
+    }
+
+    public function test_continuation_print_partial_with_defect_shows_net_outstanding(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createSingleLineOrder($user, '268KS103', 250);
+
+        $this->recordExecution($order->lines->first(), 120, 10);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertSame(1, substr_count($html, '>120</td>'));
+        $this->assertSame(0, substr_count($html, '>250</td>'));
+    }
+
+    public function test_continuation_print_fully_completed_item_redirects_instead_of_empty_pdf(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createSingleLineOrder($user, '268KS103', 250);
+
+        $this->recordExecution($order->lines->first(), 250, 0);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+
+        $response->assertRedirect(route('lost-wax.print-orders.show', $order));
+        $response->assertSessionHas('error', 'Seluruh item sudah selesai dicetak, tidak ada sisa yang perlu dicetak ulang.');
+    }
+
+    public function test_continuation_print_mixed_items_only_shows_outstanding_item(): void
+    {
+        $user = $this->makePpicUser();
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-MIXED-1',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+
+        $itemA = $order->lines()->create([
+            'qty_ordered' => 250,
+            'code' => '268KS103',
+            'customer' => 'CUST-001',
+            'item_name' => 'Produk A',
+            'size' => '1"',
+            'aisi' => '304',
+        ]);
+
+        $itemB = $order->lines()->create([
+            'qty_ordered' => 250,
+            'code' => '268ST007',
+            'customer' => 'CUST-001',
+            'item_name' => 'Produk B',
+            'size' => '1"',
+            'aisi' => '304',
+        ]);
+
+        // A fully completed, B partially completed (180 good)
+        $this->recordExecution($itemA, 250, 0);
+        $this->recordExecution($itemB, 180, 0);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        // Only B remains with 70 outstanding; A is omitted entirely.
+        $this->assertSame(1, substr_count($html, '>70</td>'));
+        $this->assertStringContainsString('268ST007', $html);
+        $this->assertStringNotContainsString('268KS103', $html);
+    }
+
+    public function test_continuation_print_multi_day_and_historical_integrity(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createSingleLineOrder($user, '268KS103', 250);
+        $line = $order->lines->first();
+
+        // Day 1: 120 good -> outstanding 130
+        $this->recordExecution($line, 120, 0);
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $this->assertSame(1, substr_count($response->getContent(), '>130</td>'));
+
+        // Day 2: +100 good -> outstanding 30
+        $this->recordExecution($line, 100, 0);
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $this->assertSame(1, substr_count($response->getContent(), '>30</td>'));
+
+        // Day 3: +30 good -> outstanding 0 -> redirect
+        $this->recordExecution($line, 30, 0);
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertRedirect(route('lost-wax.print-orders.show', $order));
+
+        // Historical integrity: original command quantity remains 250
+        $this->assertSame(250, $line->fresh()->qty_ordered);
+        $this->assertSame(250, (int) $line->fresh()->qty_executed_good);
     }
 
     /**

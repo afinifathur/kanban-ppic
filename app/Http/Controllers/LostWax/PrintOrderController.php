@@ -401,6 +401,18 @@ class PrintOrderController extends Controller
         $this->authorizePrintOrder($printOrder);
         $printOrder->load(['creator', 'lines']);
 
+        // Continuation print: only lines with remaining outstanding quantity are printed.
+        $printableLines = $printOrder->lines->filter(function ($line) {
+            return $line->qty_outstanding > 0;
+        })->values();
+
+        if ($printableLines->isEmpty()) {
+            return redirect()->route('lost-wax.print-orders.show', $printOrder)
+                ->with('error', 'Seluruh item sudah selesai dicetak, tidak ada sisa yang perlu dicetak ulang.');
+        }
+
+        $printOrder->setRelation('lines', $printableLines);
+
         return view('lost-wax.print-orders.print', compact('printOrder'));
     }
 
