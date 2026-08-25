@@ -6,6 +6,9 @@
             <h1 class="text-lg font-bold text-slate-800 leading-tight">Detail Perintah Cetak</h1>
             <p class="text-gray-500 text-[10px]">Informasi dokumen dan detail item pekerjaan cetak lilin</p>
         </div>
+        @php
+            $selectionStorageKey = 'lost-wax-print-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
+        @endphp
         <a href="{{ route('lost-wax.print-orders.plans') }}" class="text-slate-500 hover:text-slate-700 text-xs flex items-center gap-1.5 font-bold">
             <i class="fas fa-arrow-left"></i> Kembali ke Daftar
         </a>
@@ -59,6 +62,11 @@
             <div class="flex items-center gap-3">
                 @if($printOrder->status === 'DRAFT')
                     <!-- DRAFT ACTIONS -->
+                    <a href="{{ route('lost-wax.print-orders.print', $printOrder) }}" target="_blank"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-lg text-sm shadow flex items-center gap-2 transition-all">
+                        <i class="fas fa-print"></i> Cetak Draft
+                    </a>
+
                     <a href="{{ route('lost-wax.print-orders.edit', $printOrder) }}" 
                         class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-lg text-sm shadow flex items-center gap-2 transition-all">
                         <i class="fas fa-edit"></i> Edit Dokumen
@@ -154,4 +162,10 @@
             </div>
         </div>
     </div>
+
+    @if(session('success'))
+        <script>
+            sessionStorage.removeItem(@json($selectionStorageKey));
+        </script>
+    @endif
 @endsection

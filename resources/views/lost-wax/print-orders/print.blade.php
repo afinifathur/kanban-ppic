@@ -6,6 +6,44 @@
     <title>Perintah Cetak Lilin - {{ $printOrder->print_order_number }}</title>
     <script src="{{ asset('js/tailwindcss.js') }}"></script>
     <style>
+        .print-form-page {
+            position: relative;
+        }
+
+        .draft-watermark {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            user-select: none;
+            z-index: 30;
+        }
+
+        .draft-watermark__content {
+            transform: rotate(-38deg);
+            text-align: center;
+            font-weight: 900;
+            letter-spacing: 0.45em;
+            color: rgba(239, 68, 68, 0.16);
+            text-shadow: 0 0 2px rgba(239, 68, 68, 0.12);
+            line-height: 0.95;
+            white-space: nowrap;
+        }
+
+        .draft-watermark__title {
+            display: block;
+            font-size: 92px;
+        }
+
+        .draft-watermark__subtitle {
+            display: block;
+            margin-top: 8px;
+            font-size: 11px;
+            letter-spacing: 0.18em;
+        }
+
         @media print {
             @page {
                 size: A4 portrait;
@@ -47,6 +85,16 @@
         <!-- ========================================== -->
         <!-- FORM 1: FORM LAPORAN KERJA CETAK LILIN     -->
         <!-- ========================================== -->
+        <div class="print-form-page">
+            @if($printOrder->status === 'DRAFT')
+                <div class="draft-watermark">
+                    <div class="draft-watermark__content">
+                        <span class="draft-watermark__title">DRAFT</span>
+                        <span class="draft-watermark__subtitle">BELUM DITERBITKAN - JANGAN DIGUNAKAN SEBAGAI PERINTAH PRODUKSI</span>
+                    </div>
+                </div>
+            @endif
+
         <div class="text-center mb-2 border-b border-black pb-1">
             <h1 class="text-base font-extrabold uppercase tracking-wider">FORM LAPORAN KERJA CETAK LILIN</h1>
         </div>
@@ -147,6 +195,7 @@
                 <p class="text-[9px] font-bold mt-0.5">{{ optional($printOrder->creator)->name }}</p>
             </div>
         </div>
+        </div>
 
         <!-- ========================================== -->
         <!-- DIVIDER                                    -->
@@ -156,6 +205,16 @@
         <!-- ========================================== -->
         <!-- FORM 2: FORM SETTING MESIN CETAK           -->
         <!-- ========================================== -->
+        <div class="print-form-page">
+            @if($printOrder->status === 'DRAFT')
+                <div class="draft-watermark">
+                    <div class="draft-watermark__content">
+                        <span class="draft-watermark__title">DRAFT</span>
+                        <span class="draft-watermark__subtitle">BELUM DITERBITKAN - JANGAN DIGUNAKAN SEBAGAI PERINTAH PRODUKSI</span>
+                    </div>
+                </div>
+            @endif
+
         <div class="text-center mb-2">
             <h1 class="text-base font-extrabold uppercase tracking-wider">FORM SETTING MESIN CETAK</h1>
         </div>
@@ -257,6 +316,7 @@
                 <span class="text-[9px] text-slate-500 uppercase font-bold block">Tanda Tangan Operator</span>
                 <div class="border-t border-dashed border-black w-24 mx-auto mb-1"></div>
             </div>
+        </div>
         </div>
 
         </div>

@@ -6,7 +6,10 @@
             <h1 class="text-lg font-bold text-slate-800 leading-tight">Buat Perintah Cetak Baru</h1>
             <p class="text-gray-500 text-[10px]">Tentukan tanggal dan jumlah cetak untuk setiap item terpilih</p>
         </div>
-        <a href="{{ route('lost-wax.print-orders.plans') }}" class="text-slate-500 hover:text-slate-700 text-xs flex items-center gap-1.5 font-bold">
+        @php
+            $selectionStorageKey = 'lost-wax-print-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
+        @endphp
+        <a href="{{ route('lost-wax.print-orders.plans') }}" onclick="sessionStorage.removeItem(@json($selectionStorageKey));" class="text-slate-500 hover:text-slate-700 text-xs flex items-center gap-1.5 font-bold">
             <i class="fas fa-arrow-left"></i> Batal & Kembali
         </a>
     </div>
@@ -110,7 +113,7 @@
 
             <!-- Submit action -->
             <div class="flex justify-end gap-3">
-                <a href="{{ route('lost-wax.print-orders.plans') }}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-6 rounded-lg text-sm transition-all">
+                <a href="{{ route('lost-wax.print-orders.plans') }}" onclick="sessionStorage.removeItem(@json($selectionStorageKey));" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-6 rounded-lg text-sm transition-all">
                     Batal
                 </a>
                 <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-6 rounded-lg text-sm shadow transition-all flex items-center gap-2">

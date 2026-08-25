@@ -169,6 +169,42 @@ class PrintPlanningAuthorizationTest extends TestCase
         $this->assertSame(0, LostWaxPrintOrder::count());
     }
 
+    public function test_ppic_cannot_store_print_order_with_mixed_scope_selected_ids(): void
+    {
+        $otherPlan = ProductionPlan::create([
+            'code' => 'SS-AUDIT-002',
+            'customer' => 'Cust-B',
+            'item_code' => 'LY002',
+            'item_name' => 'SS304 Flange B',
+            'product_scope' => 'FLANGE_BESI',
+            'aisi' => '304',
+            'qty_planned' => 300,
+            'qty_remaining' => 300,
+            'status' => 'planning',
+            'line_number' => 2,
+            'po_number' => 'PO-AUDIT-002',
+        ]);
+
+        $response = $this->actingAs($this->ppicFlange)
+            ->post(route('lost-wax.print-orders.store'), [
+                'scheduled_date' => '2026-08-25',
+                'print_order_number' => 'PC-20260825-MIX-0001',
+                'items' => [
+                    [
+                        'production_plan_id' => $this->plan->id,
+                        'qty_ordered' => 100,
+                    ],
+                    [
+                        'production_plan_id' => $otherPlan->id,
+                        'qty_ordered' => 100,
+                    ],
+                ],
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertSame(0, LostWaxPrintOrder::count());
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // T-6: Admin can still read all plans across scopes (aggregator view)
     // ─────────────────────────────────────────────────────────────────────────

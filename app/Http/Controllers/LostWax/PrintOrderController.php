@@ -72,7 +72,7 @@ class PrintOrderController extends Controller
         }
 
         $plans = $plansQuery->orderBy('id', 'desc')
-            ->paginate(15, ['*'], 'plans_page')
+            ->paginate(50, ['*'], 'plans_page')
             ->withQueryString();
 
         // 3. Dokumen Perintah Cetak (Print Orders)
@@ -113,9 +113,9 @@ class PrintOrderController extends Controller
      */
     public function create(Request $request)
     {
-        $planIds = $request->input('plan_ids');
+        $planIds = $this->normalizeSelectedPlanIds($request->input('plan_ids'));
 
-        if (empty($planIds) || ! is_array($planIds)) {
+        if (empty($planIds)) {
             return redirect()->route('lost-wax.print-orders.plans')
                 ->with('error', 'Pilih minimal satu item rencana untuk membuat perintah cetak.');
         }
@@ -129,23 +129,27 @@ class PrintOrderController extends Controller
             abort(403, 'Hanya PPIC owner yang dapat membuat Perintah Cetak.');
         }
 
-        $unauthorizedCount = \App\Models\ProductionPlan::whereIn('id', $planIds)
-            ->where('product_scope', '!=', $scope)
-            ->count();
-        if ($unauthorizedCount > 0) {
-            abort(403, 'Unauthorized.');
-        }
-
         $plans = \App\Models\ProductionPlan::whereIn('id', $planIds)->get();
 
-        if ($plans->isEmpty()) {
+        if ($plans->count() !== count($planIds)) {
             return redirect()->route('lost-wax.print-orders.plans')
                 ->with('error', 'Item rencana tidak ditemukan.');
         }
 
-        if ($plans->contains('is_closed', true)) {
+        foreach ($plans as $plan) {
+            if ($plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
+
+            if ($plan->is_closed || $plan->qty_remaining_scheduled <= 0) {
+                return redirect()->route('lost-wax.print-orders.plans')
+                    ->with('error', 'Item Production Plan ini sudah tidak aktif dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+            }
+        }
+
+        if ($plans->isEmpty()) {
             return redirect()->route('lost-wax.print-orders.plans')
-                ->with('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+                ->with('error', 'Item rencana tidak ditemukan.');
         }
 
         $date = $request->input('scheduled_date', date('Y-m-d'));
@@ -197,8 +201,8 @@ class PrintOrderController extends Controller
             if (! ($isPpic && $scope)) {
                 abort(403, 'Hanya PPIC owner yang dapat menutup rencana produksi.');
             }
-            $planIds = $request->input('plan_ids');
-            if (empty($planIds) || ! is_array($planIds)) {
+            $planIds = $this->normalizeSelectedPlanIds($request->input('plan_ids'));
+            if (empty($planIds)) {
                 return redirect()->back()->with('error', 'Pilih minimal satu item rencana untuk ditutup.');
             }
 
@@ -227,11 +231,22 @@ class PrintOrderController extends Controller
             abort(403, 'Hanya PPIC owner yang dapat membuat Perintah Cetak.');
         }
 
+        $items = collect($request->input('items', []))
+            ->filter(function ($item) {
+                return is_array($item) && isset($item['production_plan_id']);
+            })
+            ->unique('production_plan_id')
+            ->values();
+
+        $request->merge([
+            'items' => $items->all(),
+        ]);
+
         $request->validate([
             'scheduled_date' => 'required|date',
             'print_order_number' => 'required|string|unique:lost_wax_print_orders,print_order_number',
             'items' => 'required|array|min:1',
-            'items.*.production_plan_id' => 'required|exists:production_plans,id',
+            'items.*.production_plan_id' => 'required|integer|exists:production_plans,id',
             'items.*.qty_ordered' => 'required|integer|min:1',
         ]);
 
@@ -240,9 +255,9 @@ class PrintOrderController extends Controller
             if ($plan->product_scope !== $scope) {
                 abort(403, 'Unauthorized.');
             }
-            if ($plan->is_closed) {
+            if ($plan->is_closed || $plan->qty_remaining_scheduled <= 0) {
                 return redirect()->route('lost-wax.print-orders.plans')
-                    ->with('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+                    ->with('error', 'Item Production Plan ini sudah tidak aktif dan tidak dapat dibuat menjadi Perintah Cetak baru.');
             }
         }
 
@@ -444,5 +459,17 @@ class PrintOrderController extends Controller
                 abort(403, 'Unauthorized.');
             }
         }
+    }
+
+    protected function normalizeSelectedPlanIds($planIds): array
+    {
+        return collect(is_array($planIds) ? $planIds : [$planIds])
+            ->map(function ($planId) {
+                return (int) $planId;
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 }

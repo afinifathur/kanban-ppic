@@ -10,6 +10,10 @@
 @endsection
 
 @section('content')
+    @php
+        $selectionStorageKey = 'lost-wax-print-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
+    @endphp
+
     <div class="space-y-6">
         <!-- Tabs Header -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-1 flex gap-2">
@@ -17,7 +21,7 @@
                 class="flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition-all {{ ($activeTab ?? 'plans') === 'plans' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50' }}">
                 <i class="fas fa-clipboard-list mr-2"></i> Rencana Cetak (Plan Items)
             </a>
-            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'orders'] + request()->except(['tab', 'plans_page', 'orders_page'])) }}"
+            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'orders'] + request()->except(['tab', 'plans_page', 'orders_page'])) }}" data-clear-selection-on-click="true"
                 class="flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition-all {{ ($activeTab ?? 'plans') === 'orders' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50' }}">
                 <i class="fas fa-file-invoice mr-2"></i> Dokumen Perintah Cetak (Print Orders)
             </a>
@@ -27,7 +31,7 @@
             <!-- Tab 1: Rencana Cetak -->
             <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-4">
                 <!-- Filters -->
-                <form method="GET" action="{{ route('lost-wax.print-orders.plans') }}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <form method="GET" action="{{ route('lost-wax.print-orders.plans') }}" data-plan-filter="true" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <input type="hidden" name="tab" value="plans">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tanggal Rencana</label>
@@ -63,7 +67,7 @@
                         <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center gap-1.5">
                             <i class="fas fa-filter"></i> Filter
                         </button>
-                        <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'plans']) }}" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center">
+                        <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'plans']) }}" data-clear-selection-reset="true" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center">
                             Reset
                         </a>
                     </div>
@@ -71,6 +75,10 @@
 
                 <!-- Selection Form -->
                 <form id="create-order-form" method="GET" action="{{ route('lost-wax.print-orders.create') }}">
+                    <div class="mt-1 mb-3 flex items-center justify-between gap-3">
+                        <div id="selection-summary" class="text-xs font-bold text-slate-500" aria-live="polite">0 rencana dipilih</div>
+                        <div id="selected-plan-inputs"></div>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="min-w-full border-collapse border border-slate-200 text-sm">
                             <thead class="bg-slate-50">
@@ -95,7 +103,7 @@
                                         <td class="border border-slate-200 p-3 text-center">
                                             @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
                                                 @if(!$plan->is_closed)
-                                                    <input type="checkbox" name="plan_ids[]" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                                    <input type="checkbox" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
                                                 @else
                                                     <span class="text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded border border-red-200">Closed</span>
                                                 @endif
@@ -326,72 +334,180 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            const selectionStorageKey = @json($selectionStorageKey);
             const selectAll = document.getElementById('select-all');
-            const checkboxes = document.querySelectorAll('.plan-checkbox');
+            const checkboxes = Array.from(document.querySelectorAll('.plan-checkbox'));
             const submitBtn = document.getElementById('submit-btn');
             const bulkCloseBtn = document.getElementById('bulk-close-btn');
+            const selectionSummary = document.getElementById('selection-summary');
+            const selectedPlanInputs = document.getElementById('selected-plan-inputs');
+            const filterForm = document.querySelector('form[data-plan-filter="true"]');
+            const resetLink = document.querySelector('[data-clear-selection-reset="true"]');
+            const ordersTabLink = document.querySelector('[data-clear-selection-on-click="true"]');
 
-            function toggleSubmitBtn() {
-                const checked = document.querySelectorAll('.plan-checkbox:checked');
-                if (checked.length > 0) {
-                    submitBtn.disabled = false;
-                    submitBtn.classList.remove('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
-                    submitBtn.classList.add('bg-amber-600', 'hover:bg-amber-700', 'text-white');
-
-                    if (bulkCloseBtn) {
-                        bulkCloseBtn.disabled = false;
-                        bulkCloseBtn.classList.remove('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
-                        bulkCloseBtn.classList.add('bg-red-600', 'hover:bg-red-700', 'text-white');
+            function readSelectedIds() {
+                try {
+                    const parsed = JSON.parse(sessionStorage.getItem(selectionStorageKey) || '[]');
+                    if (!Array.isArray(parsed)) {
+                        return [];
                     }
-                } else {
-                    submitBtn.disabled = true;
-                    submitBtn.classList.add('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
-                    submitBtn.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white');
 
-                    if (bulkCloseBtn) {
-                        bulkCloseBtn.disabled = true;
-                        bulkCloseBtn.classList.add('bg-slate-300', 'text-slate-500', 'cursor-not-allowed');
-                        bulkCloseBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'text-white');
-                    }
+                    return parsed
+                        .map(function (value) {
+                            return parseInt(value, 10);
+                        })
+                        .filter(function (value, index, array) {
+                            return Number.isInteger(value) && value > 0 && array.indexOf(value) === index;
+                        });
+                } catch (error) {
+                    return [];
                 }
+            }
+
+            function writeSelectedIds(ids) {
+                const uniqueIds = Array.from(new Set(ids.map(function (value) {
+                    return parseInt(value, 10);
+                }).filter(function (value) {
+                    return Number.isInteger(value) && value > 0;
+                })));
+
+                sessionStorage.setItem(selectionStorageKey, JSON.stringify(uniqueIds));
+                return uniqueIds;
+            }
+
+            function clearSelection() {
+                sessionStorage.removeItem(selectionStorageKey);
+            }
+
+            let selectedIds = new Set(readSelectedIds());
+
+            function syncVisibleCheckboxes() {
+                checkboxes.forEach(function (checkbox) {
+                    checkbox.checked = selectedIds.has(parseInt(checkbox.value, 10));
+                });
+
+                if (selectAll) {
+                    selectAll.checked = checkboxes.length > 0 && checkboxes.every(function (checkbox) {
+                        return checkbox.checked;
+                    });
+                }
+            }
+
+            function syncSummary() {
+                if (selectionSummary) {
+                    selectionSummary.textContent = selectedIds.size + ' rencana dipilih';
+                }
+            }
+
+            function syncHiddenInputs() {
+                if (!selectedPlanInputs) {
+                    return;
+                }
+
+                selectedPlanInputs.innerHTML = '';
+                Array.from(selectedIds).forEach(function (planId) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'plan_ids[]';
+                    input.value = planId;
+                    selectedPlanInputs.appendChild(input);
+                });
+            }
+
+            function syncSubmitButton() {
+                if (!submitBtn) {
+                    return;
+                }
+
+                submitBtn.disabled = selectedIds.size === 0;
+                submitBtn.classList.toggle('bg-amber-600', selectedIds.size > 0);
+                submitBtn.classList.toggle('hover:bg-amber-700', selectedIds.size > 0);
+                submitBtn.classList.toggle('text-white', selectedIds.size > 0);
+                submitBtn.classList.toggle('bg-slate-300', selectedIds.size === 0);
+                submitBtn.classList.toggle('text-slate-500', selectedIds.size === 0);
+                submitBtn.classList.toggle('cursor-not-allowed', selectedIds.size === 0);
+            }
+
+            function syncBulkCloseButton() {
+                if (!bulkCloseBtn) {
+                    return;
+                }
+
+                const checkedVisibleCount = checkboxes.filter(function (checkbox) {
+                    return checkbox.checked;
+                }).length;
+
+                bulkCloseBtn.disabled = checkedVisibleCount === 0;
+                bulkCloseBtn.classList.toggle('bg-red-600', checkedVisibleCount > 0);
+                bulkCloseBtn.classList.toggle('hover:bg-red-700', checkedVisibleCount > 0);
+                bulkCloseBtn.classList.toggle('text-white', checkedVisibleCount > 0);
+                bulkCloseBtn.classList.toggle('bg-slate-300', checkedVisibleCount === 0);
+                bulkCloseBtn.classList.toggle('text-slate-500', checkedVisibleCount === 0);
+                bulkCloseBtn.classList.toggle('cursor-not-allowed', checkedVisibleCount === 0);
+            }
+
+            function persistAndRender() {
+                selectedIds = new Set(writeSelectedIds(Array.from(selectedIds)));
+                syncVisibleCheckboxes();
+                syncSummary();
+                syncHiddenInputs();
+                syncSubmitButton();
+                syncBulkCloseButton();
+            }
+
+            function handleCheckboxChange(checkbox) {
+                const planId = parseInt(checkbox.value, 10);
+
+                if (checkbox.checked) {
+                    selectedIds.add(planId);
+                } else {
+                    selectedIds.delete(planId);
+                }
+
+                persistAndRender();
             }
 
             if (selectAll) {
                 selectAll.addEventListener('change', function () {
-                    checkboxes.forEach(cb => {
-                        cb.checked = selectAll.checked;
+                    checkboxes.forEach(function (checkbox) {
+                        const planId = parseInt(checkbox.value, 10);
+                        checkbox.checked = selectAll.checked;
+
+                        if (selectAll.checked) {
+                            selectedIds.add(planId);
+                        } else {
+                            selectedIds.delete(planId);
+                        }
                     });
-                    toggleSubmitBtn();
+
+                    persistAndRender();
                 });
             }
 
-            checkboxes.forEach(cb => {
-                cb.addEventListener('change', function () {
-                    const checked = document.querySelectorAll('.plan-checkbox:checked');
-                    if (selectAll) {
-                        selectAll.checked = (checked.length === checkboxes.length);
-                    }
-                    toggleSubmitBtn();
+            checkboxes.forEach(function (checkbox) {
+                checkbox.addEventListener('change', function () {
+                    handleCheckboxChange(checkbox);
                 });
             });
 
             if (bulkCloseBtn) {
                 bulkCloseBtn.addEventListener('click', function () {
                     const checked = document.querySelectorAll('.plan-checkbox:checked');
-                    if (checked.length === 0) return;
+                    if (checked.length === 0) {
+                        return;
+                    }
 
                     if (confirm(`Apakah Anda yakin ingin menutup ${checked.length} rencana produksi terpilih dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.`)) {
                         const form = document.getElementById('bulk-close-form');
-                        
-                        // Hapus input plan_ids yang lama di form bulk-close jika ada
-                        form.querySelectorAll('input[name="plan_ids[]"]').forEach(el => el.remove());
+                        form.querySelectorAll('input[name="plan_ids[]"]').forEach(function (el) {
+                            el.remove();
+                        });
 
-                        // Tambahkan input plan_ids baru dari checkbox yang dicentang
-                        checked.forEach(cb => {
+                        checked.forEach(function (checkbox) {
                             const input = document.createElement('input');
                             input.type = 'hidden';
                             input.name = 'plan_ids[]';
-                            input.value = cb.value;
+                            input.value = checkbox.value;
                             form.appendChild(input);
                         });
 
@@ -399,6 +515,26 @@
                     }
                 });
             }
+
+            if (filterForm) {
+                filterForm.addEventListener('submit', function () {
+                    clearSelection();
+                });
+            }
+
+            if (resetLink) {
+                resetLink.addEventListener('click', function () {
+                    clearSelection();
+                });
+            }
+
+            if (ordersTabLink) {
+                ordersTabLink.addEventListener('click', function () {
+                    clearSelection();
+                });
+            }
+
+            persistAndRender();
         });
     </script>
 @endsection

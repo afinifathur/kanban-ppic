@@ -311,6 +311,8 @@ class PrintOrderTest extends TestCase
         $html = $response->getContent();
         $this->assertStringContainsString('transform: scale(0.95)', $html);
         $this->assertStringContainsString('print-wrapper', $html);
+        $this->assertStringNotContainsString('<div class="draft-watermark">', $html);
+        $this->assertStringNotContainsString('BELUM DITERBITKAN - JANGAN DIGUNAKAN SEBAGAI PERINTAH PRODUKSI', $html);
 
         // Assert document state did not change automatically due to opening print view
         $this->assertSame('ISSUED', $order->fresh()->status);
@@ -328,6 +330,58 @@ class PrintOrderTest extends TestCase
         ]);
         $response->assertSessionHas('error');
         $this->assertSame('CANCELLED', $order->fresh()->status);
+    }
+
+    public function test_draft_print_renders_dual_watermarks_without_mutation(): void
+    {
+        $plan1 = $this->createProductionPlan(['code' => 'DRAFT-001', 'item_name' => 'Draft Produk 1']);
+        $plan2 = $this->createProductionPlan(['code' => 'DRAFT-002', 'item_name' => 'Draft Produk 2']);
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-0002',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'DRAFT',
+            'created_by' => $user->id,
+        ]);
+
+        $order->lines()->create([
+            'production_plan_id' => $plan1->id,
+            'qty_ordered' => 120,
+            'code' => $plan1->code,
+            'customer' => $plan1->customer,
+            'item_name' => $plan1->item_name,
+            'size' => $plan1->size,
+            'aisi' => $plan1->aisi,
+        ]);
+
+        $order->lines()->create([
+            'production_plan_id' => $plan2->id,
+            'qty_ordered' => 80,
+            'code' => $plan2->code,
+            'customer' => $plan2->customer,
+            'item_name' => $plan2->item_name,
+            'size' => $plan2->size,
+            'aisi' => $plan2->aisi,
+        ]);
+
+        $this->assertSame('DRAFT', $order->fresh()->status);
+        $this->assertSame(0, \App\Models\LostWaxPrintExecution::count());
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertSame(2, substr_count($html, '<div class="draft-watermark">'));
+        $this->assertSame(2, substr_count($html, '<span class="draft-watermark__title">DRAFT</span>'));
+        $this->assertSame(2, substr_count($html, 'BELUM DITERBITKAN - JANGAN DIGUNAKAN SEBAGAI PERINTAH PRODUKSI'));
+        $response->assertSee('DRAFT');
+        $response->assertSee('FORM LAPORAN KERJA CETAK LILIN');
+        $response->assertSee('FORM SETTING MESIN CETAK');
+
+        $this->assertSame('DRAFT', $order->fresh()->status);
+        $this->assertSame(0, \App\Models\LostWaxPrintExecution::count());
     }
 
     /**
@@ -476,7 +530,7 @@ class PrintOrderTest extends TestCase
         // Try load create page with CLOSED plan
         $response = $this->actingAs($user)->get(route('lost-wax.print-orders.create', ['plan_ids' => [$planClosed->id]]));
         $response->assertRedirect(route('lost-wax.print-orders.plans'));
-        $response->assertSessionHas('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+        $response->assertSessionHas('error', 'Item Production Plan ini sudah tidak aktif dan tidak dapat dibuat menjadi Perintah Cetak baru.');
 
         // Try store print order with CLOSED plan
         $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
@@ -490,7 +544,7 @@ class PrintOrderTest extends TestCase
             ],
         ]);
         $response->assertRedirect(route('lost-wax.print-orders.plans'));
-        $response->assertSessionHas('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+        $response->assertSessionHas('error', 'Item Production Plan ini sudah tidak aktif dan tidak dapat dibuat menjadi Perintah Cetak baru.');
 
         // 10. Autocomplete Kode Cust bekerja & 11. Autocomplete Customer bekerja
         $planAutocomplete = $this->createProductionPlan([
@@ -499,8 +553,8 @@ class PrintOrderTest extends TestCase
             'is_closed' => false,
         ]);
 
-        // Create 15 more plans to trigger pagination
-        for ($i = 0; $i < 15; $i++) {
+        // Create enough plans to trigger pagination with the new 50-item page size
+        for ($i = 0; $i < 55; $i++) {
             $this->createProductionPlan([
                 'code' => 'AUTO-CODE',
                 'customer' => 'AUTO-CUST',
@@ -604,7 +658,7 @@ class PrintOrderTest extends TestCase
         // 5. Closed plan cannot be chosen to create a new print order
         $response = $this->actingAs($user)->get(route('lost-wax.print-orders.create', ['plan_ids' => [$plan1->id]]));
         $response->assertRedirect(route('lost-wax.print-orders.plans'));
-        $response->assertSessionHas('error', 'Item Production Plan ini sudah ditutup dan tidak dapat dibuat menjadi Perintah Cetak baru.');
+        $response->assertSessionHas('error', 'Item Production Plan ini sudah tidak aktif dan tidak dapat dibuat menjadi Perintah Cetak baru.');
 
         // 6. Action safety: closing does NOT create print orders or modify execution counts
         $this->assertSame(0, \App\Models\LostWaxPrintOrder::count());
@@ -744,6 +798,104 @@ class PrintOrderTest extends TestCase
 
         $line = $line->fresh();
         $this->assertSame(0, $line->qty_outstanding); // accessor returns max(0, outstanding)
+    }
+
+    public function test_plans_pagination_uses_fifty_items_per_page_and_create_accepts_multi_page_selected_ids(): void
+    {
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
+
+        $plans = collect();
+        for ($i = 1; $i <= 120; $i++) {
+            $plans->push($this->createProductionPlan([
+                'code' => 'PG-'.$i,
+                'customer' => 'CUST-'.$i,
+                'po_number' => 'PO-'.$i,
+                'item_name' => 'Plan '.$i,
+            ]));
+        }
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'active']));
+        $response->assertOk();
+        $response->assertSee('Menampilkan 1 - 50 dari 120 Rencana');
+        $response->assertSee('plans_page=2');
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', [
+            'status' => 'active',
+            'plans_page' => 2,
+        ]));
+        $response->assertOk();
+        $response->assertSee('Menampilkan 51 - 100 dari 120 Rencana');
+
+        $page1Plan = $plans[119];
+        $page2Plan = $plans[69];
+        $page3Plan = $plans[19];
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.create', [
+            'plan_ids' => [$page1Plan->id, $page2Plan->id, $page3Plan->id],
+        ]));
+
+        $response->assertOk();
+        $response->assertSee($page1Plan->code);
+        $response->assertSee($page2Plan->code);
+        $response->assertSee($page3Plan->code);
+    }
+
+    public function test_duplicate_selected_ids_are_deduplicated_before_store(): void
+    {
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
+
+        $planA = $this->createProductionPlan(['code' => 'DUP-A']);
+        $planB = $this->createProductionPlan(['code' => 'DUP-B']);
+
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.store'), [
+            'scheduled_date' => '2026-08-25',
+            'print_order_number' => 'PC-20260825-DUP-001',
+            'items' => [
+                [
+                    'production_plan_id' => $planA->id,
+                    'qty_ordered' => 100,
+                ],
+                [
+                    'production_plan_id' => $planA->id,
+                    'qty_ordered' => 100,
+                ],
+                [
+                    'production_plan_id' => $planB->id,
+                    'qty_ordered' => 75,
+                ],
+            ],
+        ]);
+
+        $response->assertRedirect();
+
+        $order = \App\Models\LostWaxPrintOrder::where('print_order_number', 'PC-20260825-DUP-001')->first();
+        $this->assertNotNull($order);
+        $this->assertSame(2, $order->lines()->count());
+        $this->assertSame(2, $order->lines()->distinct('production_plan_id')->count('production_plan_id'));
+    }
+
+    public function test_successful_create_page_exposes_selection_clear_script(): void
+    {
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
+
+        $plan = $this->createProductionPlan(['code' => 'CLEAR-1']);
+
+        $response = $this->actingAs($user)->followingRedirects()->post(route('lost-wax.print-orders.store'), [
+            'scheduled_date' => '2026-08-25',
+            'print_order_number' => 'PC-20260825-CLEAR-001',
+            'items' => [
+                [
+                    'production_plan_id' => $plan->id,
+                    'qty_ordered' => 100,
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertSee('sessionStorage.removeItem');
     }
 
     public function test_negative_quantity_rejected(): void
