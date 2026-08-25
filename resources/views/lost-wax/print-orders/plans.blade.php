@@ -93,10 +93,18 @@
                                 @forelse($plans as $plan)
                                     <tr class="hover:bg-slate-50/50 transition-colors">
                                         <td class="border border-slate-200 p-3 text-center">
-                                            @if(!$plan->is_closed)
-                                                <input type="checkbox" name="plan_ids[]" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                            @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
+                                                @if(!$plan->is_closed)
+                                                    <input type="checkbox" name="plan_ids[]" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                                @else
+                                                    <span class="text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded border border-red-200">Closed</span>
+                                                @endif
                                             @else
-                                                <span class="text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded border border-red-200">Closed</span>
+                                                @if($plan->is_closed)
+                                                    <span class="text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded border border-red-200">Closed</span>
+                                                @else
+                                                    <span class="text-xs text-slate-300">—</span>
+                                                @endif
                                             @endif
                                         </td>
                                         <td class="border border-slate-200 p-3 font-mono text-xs font-bold text-slate-700">{{ $plan->code }}</td>
@@ -132,18 +140,22 @@
                                             {{ $plan->created_at->format('d/m/Y') }}
                                         </td>
                                         <td class="border border-slate-200 p-3 text-center">
-                                            @if(!$plan->is_closed)
-                                                <button type="button" 
-                                                    onclick="submitSingleAction('close_plan', '{{ $plan->id }}', 'Tutup rencana ini dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.')"
-                                                    class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1 px-2 rounded text-xs border border-red-200 transition-all flex items-center gap-1 mx-auto" title="Tutup Rencana">
-                                                    <i class="fas fa-times-circle"></i> Tutup
-                                                </button>
+                                            @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
+                                                @if(!$plan->is_closed)
+                                                    <button type="button" 
+                                                        onclick="submitSingleAction('close_plan', '{{ $plan->id }}', 'Tutup rencana ini dari Pool Perencanaan Cetak?\nData Production Plan tidak akan dihapus dan dapat dibuka kembali.')"
+                                                        class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1 px-2 rounded text-xs border border-red-200 transition-all flex items-center gap-1 mx-auto" title="Tutup Rencana">
+                                                        <i class="fas fa-times-circle"></i> Tutup
+                                                    </button>
+                                                @else
+                                                    <button type="button"
+                                                        onclick="submitSingleAction('open_plan', '{{ $plan->id }}', 'Buka kembali rencana produksi ini?')"
+                                                        class="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-1 px-2 rounded text-xs border border-emerald-200 transition-all flex items-center gap-1 mx-auto" title="Buka Rencana">
+                                                        <i class="fas fa-check-circle"></i> Buka
+                                                    </button>
+                                                @endif
                                             @else
-                                                <button type="button"
-                                                    onclick="submitSingleAction('open_plan', '{{ $plan->id }}', 'Buka kembali rencana produksi ini?')"
-                                                    class="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold py-1 px-2 rounded text-xs border border-emerald-200 transition-all flex items-center gap-1 mx-auto" title="Buka Rencana">
-                                                    <i class="fas fa-check-circle"></i> Buka
-                                                </button>
+                                                <span class="text-xs text-slate-300">—</span>
                                             @endif
                                         </td>
                                     </tr>
@@ -168,6 +180,7 @@
                     </div>
 
                     <div class="mt-6 border-t border-slate-100 pt-4 flex justify-end gap-3">
+                        @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
                         <button type="button" id="bulk-close-btn" disabled
                             class="bg-slate-300 text-slate-500 cursor-not-allowed font-bold py-2.5 px-6 rounded-lg text-sm shadow transition-all flex items-center gap-2">
                             <i class="fas fa-times-circle"></i> Tutup Terpilih
@@ -176,6 +189,7 @@
                             class="bg-slate-300 text-slate-500 cursor-not-allowed font-bold py-2.5 px-6 rounded-lg text-sm shadow transition-all flex items-center gap-2">
                             <i class="fas fa-file-signature"></i> Buat Perintah Cetak
                         </button>
+                        @endif
                     </div>
                 </form>
             </div>

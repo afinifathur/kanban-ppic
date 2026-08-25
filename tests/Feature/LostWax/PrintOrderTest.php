@@ -41,6 +41,7 @@ class PrintOrderTest extends TestCase
             'qty_remaining' => 200,
             'line_number' => 1,
             'status' => 'planning',
+            'product_scope' => 'FLANGE_STAINLESS',
         ], $attributes));
     }
 
@@ -261,7 +262,8 @@ class PrintOrderTest extends TestCase
     public function test_print_order_http_actions_and_print_empty_columns(): void
     {
         $plan = $this->createProductionPlan();
-        $user = User::factory()->create();
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
 
         // 1. Load plans page
         $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans'));
@@ -329,7 +331,8 @@ class PrintOrderTest extends TestCase
      */
     public function test_sprint_1_plans_pool_behavior(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
 
         // 1. Plan dengan Sisa > 0 (tampil di pool Aktif)
         $planActive = $this->createProductionPlan([
@@ -455,7 +458,8 @@ class PrintOrderTest extends TestCase
      */
     public function test_sprint_1_security_and_filters_behavior(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
 
         // 9. CLOSED plan tidak dapat digunakan membuat Print Order baru (create & store)
         $planClosed = $this->createProductionPlan([
@@ -553,7 +557,7 @@ class PrintOrderTest extends TestCase
 
     public function test_bulk_close_and_single_close_workflow_safety(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
         $user->assignRole('ppic');
 
         $plan1 = $this->createProductionPlan(['code' => 'P1', 'is_closed' => false]);

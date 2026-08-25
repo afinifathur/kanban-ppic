@@ -123,13 +123,17 @@ class PrintOrderController extends Controller
         $scope = auth()->user()->product_scope;
         $isPpic = auth()->user()->hasRole('ppic');
 
-        if ($isPpic && $scope) {
-            $unauthorizedCount = \App\Models\ProductionPlan::whereIn('id', $planIds)
-                ->where('product_scope', '!=', $scope)
-                ->count();
-            if ($unauthorizedCount > 0) {
-                abort(403, 'Unauthorized.');
-            }
+        // Only PPIC with a product_scope may create Print Orders.
+        // Admin (role=admin, product_scope=null) is read-only.
+        if (! ($isPpic && $scope)) {
+            abort(403, 'Hanya PPIC owner yang dapat membuat Perintah Cetak.');
+        }
+
+        $unauthorizedCount = \App\Models\ProductionPlan::whereIn('id', $planIds)
+            ->where('product_scope', '!=', $scope)
+            ->count();
+        if ($unauthorizedCount > 0) {
+            abort(403, 'Unauthorized.');
         }
 
         $plans = \App\Models\ProductionPlan::whereIn('id', $planIds)->get();
@@ -159,9 +163,13 @@ class PrintOrderController extends Controller
         $isPpic = auth()->user()->hasRole('ppic');
 
         if ($request->input('action') === 'close_plan') {
+            // Only PPIC with a product_scope may close plans.
+            if (! ($isPpic && $scope)) {
+                abort(403, 'Hanya PPIC owner yang dapat menutup rencana produksi.');
+            }
             $planId = $request->input('production_plan_id');
             $plan = \App\Models\ProductionPlan::findOrFail($planId);
-            if ($isPpic && $scope && $plan->product_scope !== $scope) {
+            if ($plan->product_scope !== $scope) {
                 abort(403, 'Unauthorized.');
             }
             $plan->update(['is_closed' => true]);
@@ -170,9 +178,13 @@ class PrintOrderController extends Controller
         }
 
         if ($request->input('action') === 'open_plan') {
+            // Only PPIC with a product_scope may reopen plans.
+            if (! ($isPpic && $scope)) {
+                abort(403, 'Hanya PPIC owner yang dapat membuka kembali rencana produksi.');
+            }
             $planId = $request->input('production_plan_id');
             $plan = \App\Models\ProductionPlan::findOrFail($planId);
-            if ($isPpic && $scope && $plan->product_scope !== $scope) {
+            if ($plan->product_scope !== $scope) {
                 abort(403, 'Unauthorized.');
             }
             $plan->update(['is_closed' => false]);
@@ -181,6 +193,10 @@ class PrintOrderController extends Controller
         }
 
         if ($request->input('action') === 'bulk_close_plans') {
+            // Only PPIC with a product_scope may bulk-close plans.
+            if (! ($isPpic && $scope)) {
+                abort(403, 'Hanya PPIC owner yang dapat menutup rencana produksi.');
+            }
             $planIds = $request->input('plan_ids');
             if (empty($planIds) || ! is_array($planIds)) {
                 return redirect()->back()->with('error', 'Pilih minimal satu item rencana untuk ditutup.');
@@ -191,11 +207,9 @@ class PrintOrderController extends Controller
                 return redirect()->back()->with('error', 'Rencana produksi tidak ditemukan.');
             }
 
-            if ($isPpic && $scope) {
-                foreach ($plans as $plan) {
-                    if ($plan->product_scope !== $scope) {
-                        abort(403, 'Unauthorized.');
-                    }
+            foreach ($plans as $plan) {
+                if ($plan->product_scope !== $scope) {
+                    abort(403, 'Unauthorized.');
                 }
             }
 
@@ -208,6 +222,11 @@ class PrintOrderController extends Controller
             return redirect()->back()->with('success', count($plans).' rencana produksi berhasil ditutup (CLOSED).');
         }
 
+        // Creating a new Print Order: only PPIC with product_scope is allowed.
+        if (! ($isPpic && $scope)) {
+            abort(403, 'Hanya PPIC owner yang dapat membuat Perintah Cetak.');
+        }
+
         $request->validate([
             'scheduled_date' => 'required|date',
             'print_order_number' => 'required|string|unique:lost_wax_print_orders,print_order_number',
@@ -218,7 +237,7 @@ class PrintOrderController extends Controller
 
         foreach ($request->items as $itemData) {
             $plan = \App\Models\ProductionPlan::findOrFail($itemData['production_plan_id']);
-            if ($isPpic && $scope && $plan->product_scope !== $scope) {
+            if ($plan->product_scope !== $scope) {
                 abort(403, 'Unauthorized.');
             }
             if ($plan->is_closed) {
