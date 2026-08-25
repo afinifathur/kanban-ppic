@@ -46,6 +46,43 @@ class PrintOrderTest extends TestCase
     }
 
     /**
+     * Helper to create a PPIC user scoped to FLANGE_STAINLESS.
+     */
+    protected function makePpicUser(): User
+    {
+        $user = User::factory()->create(['product_scope' => 'FLANGE_STAINLESS']);
+        $user->assignRole('ppic');
+
+        return $user;
+    }
+
+    /**
+     * Helper to create a print order with a given number of unique-item lines.
+     */
+    protected function createMultiLineOrder(User $user, int $lineCount, string $status = 'ISSUED'): \App\Models\LostWaxPrintOrder
+    {
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-MULTI-'.$lineCount,
+            'scheduled_date' => '2026-08-25',
+            'status' => $status,
+            'created_by' => $user->id,
+        ]);
+
+        for ($i = 1; $i <= $lineCount; $i++) {
+            $order->lines()->create([
+                'qty_ordered' => 10,
+                'code' => sprintf('ITEM-%03d', $i),
+                'customer' => 'CUST-001',
+                'item_name' => 'Produk Fitting '.$i,
+                'size' => '1"',
+                'aisi' => '304',
+            ]);
+        }
+
+        return $order;
+    }
+
+    /**
      * Test 1-5: Multiple print orders can belong to one plan, scheduled quantities,
      * sisa (remaining) calculated correctly, and planned qty remains untouched.
      */
@@ -380,6 +417,115 @@ class PrintOrderTest extends TestCase
         $response->assertSee('FORM LAPORAN KERJA CETAK LILIN');
         $response->assertSee('FORM SETTING MESIN CETAK');
 
+        $this->assertSame('DRAFT', $order->fresh()->status);
+        $this->assertSame(0, \App\Models\LostWaxPrintExecution::count());
+    }
+
+    public function test_print_compact_mode_preserves_existing_layout_for_up_to_ten_items(): void
+    {
+        $user = $this->makePpicUser();
+
+        foreach ([9, 10] as $lineCount) {
+            $order = $this->createMultiLineOrder($user, $lineCount);
+
+            $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+            $response->assertOk();
+
+            $html = $response->getContent();
+
+            $this->assertStringContainsString('data-print-layout="compact"', $html);
+            $this->assertStringNotContainsString('data-print-layout="expanded"', $html);
+            $this->assertStringNotContainsString('<div class="print-page">', $html);
+
+            $response->assertSee('FORM LAPORAN KERJA CETAK LILIN');
+            $response->assertSee('FORM SETTING MESIN CETAK');
+
+            // 10 rows per form (2 forms) = 20 rows
+            $this->assertSame(20, substr_count($html, '<tr class="h-6">'));
+
+            // Existing print-safe scaling is retained
+            $this->assertStringContainsString('transform: scale(0.95)', $html);
+        }
+    }
+
+    public function test_print_expanded_mode_for_eleven_items_renders_two_pages_with_thirty_rows(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createMultiLineOrder($user, 11);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('data-print-layout="expanded"', $html);
+        $this->assertStringNotContainsString('data-print-layout="compact"', $html);
+        $this->assertSame(2, substr_count($html, '<div class="print-page">'));
+
+        // 30 rows per form (2 forms) = 60 rows
+        $this->assertSame(60, substr_count($html, '<tr class="h-6">'));
+
+        // Every item appears exactly once per form
+        $this->assertSame(2, substr_count($html, 'ITEM-001'));
+        $this->assertSame(2, substr_count($html, 'ITEM-011'));
+
+        $response->assertSee('FORM LAPORAN KERJA CETAK LILIN');
+        $response->assertSee('FORM SETTING MESIN CETAK');
+    }
+
+    public function test_print_expanded_mode_for_twenty_one_items_keeps_all_items_in_order(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createMultiLineOrder($user, 21);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertSame(2, substr_count($html, '<div class="print-page">'));
+        $this->assertSame(60, substr_count($html, '<tr class="h-6">'));
+
+        // First and last items both present in each form, ordered identically
+        $this->assertSame(2, substr_count($html, 'ITEM-001'));
+        $this->assertSame(2, substr_count($html, 'ITEM-021'));
+        $this->assertTrue(strpos($html, 'ITEM-001') < strpos($html, 'ITEM-021'));
+    }
+
+    public function test_print_expanded_mode_for_twenty_five_items_no_missing_or_overflow(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createMultiLineOrder($user, 25);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertSame(2, substr_count($html, '<div class="print-page">'));
+        $this->assertSame(60, substr_count($html, '<tr class="h-6">'));
+
+        // Last item must not be dropped
+        $this->assertSame(2, substr_count($html, 'ITEM-025'));
+        $this->assertSame(2, substr_count($html, 'ITEM-001'));
+    }
+
+    public function test_draft_expanded_print_renders_watermark_on_both_pages(): void
+    {
+        $user = $this->makePpicUser();
+        $order = $this->createMultiLineOrder($user, 12, 'DRAFT');
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.print', $order));
+        $response->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertSame(2, substr_count($html, '<div class="print-page">'));
+        $this->assertSame(2, substr_count($html, '<div class="draft-watermark">'));
+        $this->assertSame(2, substr_count($html, '<span class="draft-watermark__title">DRAFT</span>'));
+        $this->assertSame(2, substr_count($html, 'BELUM DITERBITKAN - JANGAN DIGUNAKAN SEBAGAI PERINTAH PRODUKSI'));
+
+        // Read-only: status unchanged, no executions created
         $this->assertSame('DRAFT', $order->fresh()->status);
         $this->assertSame(0, \App\Models\LostWaxPrintExecution::count());
     }
