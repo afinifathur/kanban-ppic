@@ -308,6 +308,10 @@ class PrintOrderTest extends TestCase
         $response->assertSee('HASIL');
         $response->assertSee('RUSAK');
 
+        $html = $response->getContent();
+        $this->assertStringContainsString('transform: scale(0.95)', $html);
+        $this->assertStringContainsString('print-wrapper', $html);
+
         // Assert document state did not change automatically due to opening print view
         $this->assertSame('ISSUED', $order->fresh()->status);
 

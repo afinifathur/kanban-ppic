@@ -7,28 +7,42 @@
     <script src="{{ asset('js/tailwindcss.js') }}"></script>
     <style>
         @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0;
+            }
             body {
                 background: #fff !important;
                 color: #000 !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 -webkit-print-color-adjust: exact;
-            }
-            @page {
-                size: A4 portrait;
-                margin: 5mm;
             }
             .no-print {
                 display: none !important;
+            }
+            .print-wrapper {
+                transform: scale(0.95) !important;
+                transform-origin: top left !important;
+                margin-left: 5.25mm !important;
+                margin-top: 5mm !important;
+                display: block !important;
+                width: 210mm !important;
             }
         }
         body {
             font-family: 'Times New Roman', Times, serif;
             background-color: #f8fafc;
         }
+        .print-wrapper {
+            display: block;
+        }
     </style>
 </head>
 <body class="p-4 bg-slate-50 print:bg-white print:p-0" onload="window.print()">
 
-    <div class="max-w-4xl mx-auto bg-white p-6 shadow-sm border border-slate-200 print:border-none print:shadow-none print:w-full print:p-0">
+    <div class="print-wrapper">
+        <div class="max-w-4xl mx-auto bg-white p-6 shadow-sm border border-slate-200 print:border-none print:shadow-none print:w-full print:p-0">
         
         <!-- ========================================== -->
         <!-- FORM 1: FORM LAPORAN KERJA CETAK LILIN     -->
@@ -245,6 +259,7 @@
             </div>
         </div>
 
+        </div>
     </div>
 
     <!-- Print control bar for screen viewing -->
