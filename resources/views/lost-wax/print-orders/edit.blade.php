@@ -1,14 +1,34 @@
 @extends('layouts.app')
 
 @section('top_bar')
-    <div class="flex items-center justify-between w-full">
-        <div>
+    <div class="flex items-center justify-between w-full gap-4">
+        <div class="shrink-0">
             <h1 class="text-lg font-bold text-slate-800 leading-tight">Edit Perintah Cetak: {{ $printOrder->print_order_number }}</h1>
             <p class="text-gray-500 text-[10px]">Ubah informasi dokumen atau kuantitas untuk Perintah Cetak draft ini</p>
         </div>
-        <a href="{{ route('lost-wax.print-orders.show', $printOrder) }}" class="text-slate-500 hover:text-slate-700 text-xs flex items-center gap-1.5 font-bold">
-            <i class="fas fa-arrow-left"></i> Batal & Kembali
-        </a>
+        <div class="flex items-stretch divide-x divide-slate-200 bg-white border border-slate-200 rounded-lg shadow-sm shrink-0">
+            <div class="flex items-center gap-2 px-3 py-1.5">
+                <span class="text-blue-500 text-sm" aria-hidden="true"><i class="fas fa-list"></i></span>
+                <div class="text-right leading-tight">
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Item</div>
+                    <div id="summary-item-count" class="text-sm font-bold text-slate-800 whitespace-nowrap" aria-live="polite">0 ITEM</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 px-3 py-1.5">
+                <span class="text-indigo-500 text-sm" aria-hidden="true"><i class="fas fa-cubes"></i></span>
+                <div class="text-right leading-tight">
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Total Qty (PCS)</div>
+                    <div id="summary-total-pcs" class="text-sm font-bold text-slate-800 whitespace-nowrap" aria-live="polite">0 pcs</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 px-3 py-1.5">
+                <span class="text-emerald-500 text-sm" aria-hidden="true"><i class="fas fa-weight-hanging"></i></span>
+                <div class="text-right leading-tight">
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Total Berat (KG)</div>
+                    <div id="summary-total-kg" class="text-sm font-bold text-emerald-600 whitespace-nowrap" aria-live="polite">0 kg</div>
+                </div>
+            </div>
+        </div>
     </div>
 @endsection
 
@@ -102,6 +122,7 @@
                                         <input type="number" name="items[{{ $index }}][qty_ordered]" 
                                             value="{{ old("items.{$index}.qty_ordered", $line->qty_ordered) }}" 
                                             min="1" required
+                                            data-weight-per-piece="{{ $line->productionPlan?->weight ?? 0 }}"
                                             class="qty-input w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-center font-bold text-slate-800 focus:outline-none focus:border-amber-500">
                                         <div class="warning-text text-[10px] text-amber-600 mt-1 font-semibold hidden">
                                             Over-scheduled!
@@ -147,7 +168,45 @@
         document.addEventListener('DOMContentLoaded', function () {
             // Watch qty inputs for warnings
             const qtyInputs = document.querySelectorAll('.qty-input');
-            
+
+            const summaryTotalPcsEl = document.getElementById('summary-total-pcs');
+            const summaryTotalKgEl = document.getElementById('summary-total-kg');
+            const summaryItemCountEl = document.getElementById('summary-item-count');
+
+            function formatPcs(value) {
+                return Number(value || 0).toLocaleString('en-US');
+            }
+
+            function formatKg(value) {
+                const rounded = Math.round((value || 0) * 100) / 100;
+                return Number(rounded).toLocaleString('en-US', { maximumFractionDigits: 2 });
+            }
+
+            function recalcSummary() {
+                let totalPcs = 0;
+                let totalKg = 0;
+                let itemCount = 0;
+
+                qtyInputs.forEach(function (input) {
+                    const qty = parseInt(input.value, 10) || 0;
+                    const weight = parseFloat(input.getAttribute('data-weight-per-piece')) || 0;
+
+                    totalPcs += qty;
+                    totalKg += qty * weight;
+                    itemCount += 1;
+                });
+
+                if (summaryTotalPcsEl) {
+                    summaryTotalPcsEl.textContent = formatPcs(totalPcs) + ' pcs';
+                }
+                if (summaryTotalKgEl) {
+                    summaryTotalKgEl.textContent = formatKg(totalKg) + ' kg';
+                }
+                if (summaryItemCountEl) {
+                    summaryItemCountEl.textContent = itemCount + ' ITEM';
+                }
+            }
+
             function checkWarning(input) {
                 const tr = input.closest('tr');
                 const remainingCell = tr.querySelector('[data-remaining-qty]');
@@ -170,9 +229,12 @@
             qtyInputs.forEach(input => {
                 input.addEventListener('input', function () {
                     checkWarning(input);
+                    recalcSummary();
                 });
                 checkWarning(input);
             });
+
+            recalcSummary();
 
             // Delete single line (DRAFT-only)
             const deleteForm = document.getElementById('delete-line-form');
