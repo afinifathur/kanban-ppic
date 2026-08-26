@@ -1292,4 +1292,237 @@ class PrintOrderTest extends TestCase
         $html = $response->getContent();
         $this->assertStringNotContainsString('truncate', $html);
     }
+
+    /**
+     * Helper to create a DRAFT print order linked to a production plan.
+     */
+    protected function createDraftOrderWithLine(User $user, \App\Models\ProductionPlan $plan, int $qty, string $number): array
+    {
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => $number,
+            'scheduled_date' => '2026-08-25',
+            'status' => 'DRAFT',
+            'created_by' => $user->id,
+        ]);
+
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => $qty,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+        ]);
+
+        return [$order, $line];
+    }
+
+    public function test_delete_item_from_draft_releases_allocation(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'DL-A', 'qty_planned' => 120]);
+        $planB = $this->createProductionPlan(['code' => 'DL-B', 'qty_planned' => 220]);
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-DEL-001',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'DRAFT',
+            'created_by' => $user->id,
+        ]);
+        $lineA = $order->lines()->create([
+            'production_plan_id' => $planA->id,
+            'qty_ordered' => 100,
+            'item_name' => $planA->item_name,
+        ]);
+        $lineB = $order->lines()->create([
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 220,
+            'item_name' => $planB->item_name,
+        ]);
+
+        $response = $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $lineB]));
+
+        $response->assertRedirect(route('lost-wax.print-orders.edit', $order));
+        $response->assertSessionHas('success');
+
+        // Line 2 deleted, line 1 remains, order stays DRAFT.
+        $this->assertDatabaseMissing('lost_wax_print_order_lines', ['id' => $lineB->id]);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $lineA->id]);
+        $this->assertSame('DRAFT', $order->fresh()->status);
+
+        // Plan B allocation released back to planning.
+        $this->assertSame(0, $planB->fresh()->qty_scheduled);
+        $this->assertSame(220, $planB->fresh()->qty_remaining_scheduled);
+
+        // Plan A allocation unchanged.
+        $this->assertSame(100, $planA->fresh()->qty_scheduled);
+        $this->assertSame(20, $planA->fresh()->qty_remaining_scheduled);
+    }
+
+    public function test_deleted_allocation_makes_plan_available_in_planning(): void
+    {
+        $user = $this->makePpicUser();
+        $plan = $this->createProductionPlan(['code' => 'DL-PLAN', 'qty_planned' => 220]);
+
+        [$order, $line] = $this->createDraftOrderWithLine($user, $plan, 220, 'PC-20260825-DEL-002');
+
+        // Fully scheduled plan is auto-hidden from the active pool.
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'active']));
+        preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $response->getContent(), $matches);
+        $this->assertStringNotContainsString('DL-PLAN', $matches[1] ?? '');
+
+        $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $line]));
+
+        $plan = $plan->fresh();
+        $this->assertSame(0, $plan->qty_scheduled);
+        $this->assertSame(220, $plan->qty_remaining_scheduled);
+
+        // Plan is selectable again in planning.
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.plans', ['status' => 'active']));
+        preg_match('/<tbody[^>]*>(.*?)<\/tbody>/is', $response->getContent(), $matches);
+        $this->assertStringContainsString('DL-PLAN', $matches[1] ?? '');
+    }
+
+    public function test_cannot_delete_item_from_issued_print_order(): void
+    {
+        $user = $this->makePpicUser();
+        $plan = $this->createProductionPlan(['code' => 'DL-ISS', 'qty_planned' => 220]);
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-DEL-003',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 220,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $response = $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $line]));
+
+        $response->assertStatus(403);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $line->id]);
+        $this->assertSame(220, $plan->fresh()->qty_scheduled);
+        $this->assertSame(0, $plan->fresh()->qty_remaining_scheduled);
+    }
+
+    public function test_delete_last_item_removes_empty_draft(): void
+    {
+        $user = $this->makePpicUser();
+        $plan = $this->createProductionPlan(['code' => 'DL-LAST', 'qty_planned' => 220]);
+
+        [$order, $line] = $this->createDraftOrderWithLine($user, $plan, 220, 'PC-20260825-DEL-004');
+
+        $response = $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $line]));
+
+        $response->assertRedirect(route('lost-wax.print-orders.plans'));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('lost_wax_print_orders', ['id' => $order->id]);
+        $this->assertDatabaseMissing('lost_wax_print_order_lines', ['id' => $line->id]);
+
+        $this->assertSame(0, $plan->fresh()->qty_scheduled);
+        $this->assertSame(220, $plan->fresh()->qty_remaining_scheduled);
+    }
+
+    public function test_edit_page_renders_delete_buttons_and_edit_quantity_still_works(): void
+    {
+        $user = $this->makePpicUser();
+        $plan = $this->createProductionPlan(['code' => 'DL-EDIT', 'qty_planned' => 200]);
+
+        [$order, $line] = $this->createDraftOrderWithLine($user, $plan, 100, 'PC-20260825-DEL-005');
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.edit', $order));
+        $response->assertOk();
+        $response->assertSee('data-delete-url');
+        $response->assertSee('delete-line-btn');
+
+        // Existing quantity editing must still work.
+        $response = $this->actingAs($user)->put(route('lost-wax.print-orders.update', $order), [
+            'scheduled_date' => '2026-08-25',
+            'print_order_number' => 'PC-20260825-DEL-005',
+            'items' => [
+                ['id' => $line->id, 'qty_ordered' => 150],
+            ],
+        ]);
+        $response->assertRedirect(route('lost-wax.print-orders.show', $order));
+        $this->assertSame(150, $line->fresh()->qty_ordered);
+    }
+
+    public function test_delete_middle_item_preserves_other_lines(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'DL-MA', 'qty_planned' => 100]);
+        $planB = $this->createProductionPlan(['code' => 'DL-MB', 'qty_planned' => 200]);
+        $planC = $this->createProductionPlan(['code' => 'DL-MC', 'qty_planned' => 300]);
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-DEL-006',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'DRAFT',
+            'created_by' => $user->id,
+        ]);
+        $lineA = $order->lines()->create(['production_plan_id' => $planA->id, 'qty_ordered' => 100, 'item_name' => 'A']);
+        $lineB = $order->lines()->create(['production_plan_id' => $planB->id, 'qty_ordered' => 200, 'item_name' => 'B']);
+        $lineC = $order->lines()->create(['production_plan_id' => $planC->id, 'qty_ordered' => 300, 'item_name' => 'C']);
+
+        $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $lineB]));
+
+        $this->assertDatabaseMissing('lost_wax_print_order_lines', ['id' => $lineB->id]);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $lineA->id, 'qty_ordered' => 100]);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $lineC->id, 'qty_ordered' => 300]);
+
+        $this->assertSame(0, $planA->fresh()->qty_remaining_scheduled);
+        $this->assertSame(200, $planB->fresh()->qty_remaining_scheduled);
+        $this->assertSame(0, $planC->fresh()->qty_remaining_scheduled);
+    }
+
+    public function test_line_with_execution_history_cannot_be_deleted(): void
+    {
+        $user = $this->makePpicUser();
+        $plan = $this->createProductionPlan(['code' => 'DL-EXEC', 'qty_planned' => 250]);
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-DEL-007',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 250,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $this->recordExecution($line, 100, 0);
+
+        $response = $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $line]));
+
+        $response->assertStatus(403);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $line->id]);
+        $this->assertSame(1, \App\Models\LostWaxPrintExecution::count());
+    }
+
+    public function test_ppic_cannot_delete_line_from_other_scope(): void
+    {
+        $user = $this->makePpicUser();
+        $otherPlan = $this->createProductionPlan([
+            'code' => 'DL-OTHER',
+            'qty_planned' => 100,
+            'product_scope' => 'FLANGE_BESI',
+        ]);
+
+        $otherUser = User::factory()->create(['product_scope' => 'FLANGE_BESI']);
+        $otherUser->assignRole('ppic');
+
+        [$order, $line] = $this->createDraftOrderWithLine($otherUser, $otherPlan, 100, 'PC-20260825-DEL-008');
+
+        $response = $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $line]));
+
+        $response->assertStatus(403);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $line->id]);
+    }
 }

@@ -1,11 +1,37 @@
 @extends('layouts.app')
 
 @section('top_bar')
-    <div class="flex items-center justify-between w-full">
-        <div>
+    <div class="flex items-center justify-between w-full gap-4">
+        <div class="shrink-0">
             <h1 class="text-lg font-bold text-slate-800 leading-tight">Perencanaan Perintah Cetak Lilin</h1>
             <p class="text-gray-500 text-[10px]">Pilih rencana produksi untuk diterbitkan menjadi Perintah Cetak Lilin</p>
         </div>
+        @if(($activeTab ?? 'plans') === 'plans')
+        <div id="selection-summary-bar" title="Total dihitung dari item yang dicentang (mencakup seluruh halaman pagination)"
+            class="flex items-stretch divide-x divide-slate-200 bg-white border border-slate-200 rounded-lg shadow-sm shrink-0">
+            <div class="flex items-center gap-2 px-3 py-1.5">
+                <span class="text-blue-500 text-sm" aria-hidden="true"><i class="fas fa-check-square"></i></span>
+                <div class="text-right leading-tight">
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Item Terpilih</div>
+                    <div id="summary-count" class="text-sm font-bold text-slate-800 whitespace-nowrap" aria-live="polite">0 item</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 px-3 py-1.5">
+                <span class="text-indigo-500 text-sm" aria-hidden="true"><i class="fas fa-cubes"></i></span>
+                <div class="text-right leading-tight">
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Total Qty (PCS)</div>
+                    <div id="summary-qty" class="text-sm font-bold text-slate-800 whitespace-nowrap" aria-live="polite">0 pcs</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 px-3 py-1.5">
+                <span class="text-emerald-500 text-sm" aria-hidden="true"><i class="fas fa-weight-hanging"></i></span>
+                <div class="text-right leading-tight">
+                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Total Berat (KG)</div>
+                    <div id="summary-weight" class="text-sm font-bold text-emerald-600 whitespace-nowrap" aria-live="polite">0 kg</div>
+                </div>
+            </div>
+        </div>
+        @endif
     </div>
 @endsection
 
@@ -103,7 +129,7 @@
                                         <td class="border border-slate-200 p-3 text-center">
                                             @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
                                                 @if(!$plan->is_closed)
-                                                    <input type="checkbox" value="{{ $plan->id }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                                    <input type="checkbox" value="{{ $plan->id }}" data-qty="{{ max(0, $plan->qty_remaining_scheduled) }}" data-weight="{{ $plan->weight ?? 0 }}" class="plan-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
                                                 @else
                                                     <span class="text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded border border-red-200">Closed</span>
                                                 @endif
@@ -341,49 +367,91 @@
             const bulkCloseBtn = document.getElementById('bulk-close-btn');
             const selectionSummary = document.getElementById('selection-summary');
             const selectedPlanInputs = document.getElementById('selected-plan-inputs');
+            const summaryCountEl = document.getElementById('summary-count');
+            const summaryQtyEl = document.getElementById('summary-qty');
+            const summaryWeightEl = document.getElementById('summary-weight');
             const filterForm = document.querySelector('form[data-plan-filter="true"]');
             const resetLink = document.querySelector('[data-clear-selection-reset="true"]');
             const ordersTabLink = document.querySelector('[data-clear-selection-on-click="true"]');
 
-            function readSelectedIds() {
+            function formatQty(value) {
+                return Number(value || 0).toLocaleString('en-US');
+            }
+
+            function formatWeight(value) {
+                return Number(value || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+            }
+
+            // Read persisted selection. Supports both the legacy array-of-ids
+            // format and the current object format ({ id, qty, weight }).
+            function readStoredSelection() {
                 try {
                     const parsed = JSON.parse(sessionStorage.getItem(selectionStorageKey) || '[]');
                     if (!Array.isArray(parsed)) {
-                        return [];
+                        return { ids: [], meta: {} };
                     }
 
-                    return parsed
-                        .map(function (value) {
-                            return parseInt(value, 10);
-                        })
-                        .filter(function (value, index, array) {
-                            return Number.isInteger(value) && value > 0 && array.indexOf(value) === index;
-                        });
+                    const ids = [];
+                    const meta = {};
+
+                    parsed.forEach(function (value) {
+                        let id = null;
+
+                        if (value !== null && typeof value === 'object') {
+                            id = parseInt(value.id, 10);
+                            if (Number.isInteger(id) && id > 0) {
+                                meta[id] = {
+                                    qty: parseInt(value.qty, 10) || 0,
+                                    weight: parseFloat(value.weight) || 0,
+                                };
+                            }
+                        } else {
+                            id = parseInt(value, 10);
+                        }
+
+                        if (Number.isInteger(id) && id > 0 && ids.indexOf(id) === -1) {
+                            ids.push(id);
+                        }
+                    });
+
+                    return { ids: ids, meta: meta };
                 } catch (error) {
-                    return [];
+                    return { ids: [], meta: {} };
                 }
             }
 
-            function writeSelectedIds(ids) {
-                const uniqueIds = Array.from(new Set(ids.map(function (value) {
-                    return parseInt(value, 10);
-                }).filter(function (value) {
-                    return Number.isInteger(value) && value > 0;
-                })));
+            function persistSelection() {
+                const data = Array.from(selectedIds).map(function (id) {
+                    const m = selectedMeta[id] || { qty: 0, weight: 0 };
 
-                sessionStorage.setItem(selectionStorageKey, JSON.stringify(uniqueIds));
-                return uniqueIds;
+                    return { id: id, qty: m.qty, weight: m.weight };
+                });
+
+                sessionStorage.setItem(selectionStorageKey, JSON.stringify(data));
             }
 
             function clearSelection() {
                 sessionStorage.removeItem(selectionStorageKey);
             }
 
-            let selectedIds = new Set(readSelectedIds());
+            const stored = readStoredSelection();
+            let selectedIds = new Set(stored.ids);
+            let selectedMeta = stored.meta;
 
             function syncVisibleCheckboxes() {
                 checkboxes.forEach(function (checkbox) {
-                    checkbox.checked = selectedIds.has(parseInt(checkbox.value, 10));
+                    const planId = parseInt(checkbox.value, 10);
+                    checkbox.checked = selectedIds.has(planId);
+
+                    if (checkbox.checked && !selectedMeta[planId]) {
+                        selectedMeta[planId] = {
+                            qty: parseInt(checkbox.getAttribute('data-qty'), 10) || 0,
+                            weight: parseFloat(checkbox.getAttribute('data-weight')) || 0,
+                        };
+                    }
                 });
 
                 if (selectAll) {
@@ -394,8 +462,32 @@
             }
 
             function syncSummary() {
+                let totalQty = 0;
+                let totalWeight = 0;
+
+                Array.from(selectedIds).forEach(function (id) {
+                    const m = selectedMeta[id];
+                    if (m) {
+                        const qty = m.qty || 0;
+                        totalQty += qty;
+                        totalWeight += qty * (m.weight || 0);
+                    }
+                });
+
                 if (selectionSummary) {
                     selectionSummary.textContent = selectedIds.size + ' rencana dipilih';
+                }
+
+                if (summaryCountEl) {
+                    summaryCountEl.textContent = selectedIds.size + ' item';
+                }
+
+                if (summaryQtyEl) {
+                    summaryQtyEl.textContent = formatQty(totalQty) + ' pcs';
+                }
+
+                if (summaryWeightEl) {
+                    summaryWeightEl.textContent = formatWeight(totalWeight) + ' kg';
                 }
             }
 
@@ -447,7 +539,7 @@
             }
 
             function persistAndRender() {
-                selectedIds = new Set(writeSelectedIds(Array.from(selectedIds)));
+                persistSelection();
                 syncVisibleCheckboxes();
                 syncSummary();
                 syncHiddenInputs();
@@ -460,8 +552,13 @@
 
                 if (checkbox.checked) {
                     selectedIds.add(planId);
+                    selectedMeta[planId] = {
+                        qty: parseInt(checkbox.getAttribute('data-qty'), 10) || 0,
+                        weight: parseFloat(checkbox.getAttribute('data-weight')) || 0,
+                    };
                 } else {
                     selectedIds.delete(planId);
+                    delete selectedMeta[planId];
                 }
 
                 persistAndRender();
@@ -475,8 +572,13 @@
 
                         if (selectAll.checked) {
                             selectedIds.add(planId);
+                            selectedMeta[planId] = {
+                                qty: parseInt(checkbox.getAttribute('data-qty'), 10) || 0,
+                                weight: parseFloat(checkbox.getAttribute('data-weight')) || 0,
+                            };
                         } else {
                             selectedIds.delete(planId);
+                            delete selectedMeta[planId];
                         }
                     });
 

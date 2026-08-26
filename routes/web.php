@@ -102,6 +102,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/print-orders/{printOrder}/status', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'updateStatus'])->name('print-orders.update-status');
             Route::get('/print-orders/{printOrder}/print', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'print'])->name('print-orders.print');
             Route::delete('/print-orders/{printOrder}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroy'])->name('print-orders.destroy');
+            Route::delete('/print-orders/{printOrder}/lines/{line}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroyLine'])->name('print-orders.lines.destroy');
 
             // Actual Hasil Cetak
             Route::get('/outcomes', [\App\Http\Controllers\LostWax\OutcomeController::class, 'index'])->name('outcomes.index');

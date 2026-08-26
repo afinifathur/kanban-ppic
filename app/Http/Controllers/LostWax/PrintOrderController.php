@@ -434,6 +434,45 @@ class PrintOrderController extends Controller
     }
 
     /**
+     * Remove a single line from a DRAFT print order, releasing its
+     * allocation back to the originating Production Plan.
+     */
+    public function destroyLine(\App\Models\LostWaxPrintOrder $printOrder, \App\Models\LostWaxPrintOrderLine $line)
+    {
+        $this->authorizePrintOrder($printOrder);
+
+        if ($line->lost_wax_print_order_id !== $printOrder->id) {
+            abort(404);
+        }
+
+        if ($printOrder->status !== 'DRAFT') {
+            abort(403, 'Hanya item dari dokumen berstatus DRAFT yang dapat dihapus.');
+        }
+
+        $wasLastLine = $printOrder->lines()->count() <= 1;
+        $code = $line->code;
+        $qtyReleased = $line->qty_ordered;
+
+        DB::transaction(function () use ($printOrder, $line, $wasLastLine) {
+            $line->delete();
+
+            // Reuse the existing draft-deletion semantics when no items remain:
+            // never leave an orphaned empty DRAFT behind.
+            if ($wasLastLine) {
+                $printOrder->delete();
+            }
+        });
+
+        if ($wasLastLine) {
+            return redirect()->route('lost-wax.print-orders.plans')
+                ->with('success', 'Semua item telah dihapus. Draft Perintah Cetak telah dihapus.');
+        }
+
+        return redirect()->route('lost-wax.print-orders.edit', $printOrder)
+            ->with('success', 'Item '.$code.' berhasil dihapus. '.number_format($qtyReleased).' pcs telah dikembalikan ke Rencana Cetak.');
+    }
+
+    /**
      * Generate sequential print order number inside a concurrency-safe lock block.
      */
     protected function generateNextPrintOrderNumber($date)

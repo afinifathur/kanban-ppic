@@ -59,6 +59,7 @@
                                 <th class="border border-slate-200 p-3 text-center">Planned Qty</th>
                                 <th class="border border-slate-200 p-3 text-center">Belum Dijadwalkan (Sisa)</th>
                                 <th class="border border-slate-200 p-3 text-center w-40">Qty Perintah Cetak</th>
+                                <th class="border border-slate-200 p-3 text-center w-16">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -106,6 +107,16 @@
                                             Over-scheduled!
                                         </div>
                                     </td>
+                                    <td class="border border-slate-200 p-3 text-center">
+                                        <button type="button"
+                                            data-delete-url="{{ route('lost-wax.print-orders.lines.destroy', [$printOrder, $line->id]) }}"
+                                            data-line-code="{{ $line->code }}"
+                                            data-line-qty="{{ $line->qty_ordered }}"
+                                            class="delete-line-btn bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1.5 px-2.5 rounded text-xs border border-red-200 transition-all"
+                                            title="Hapus Item">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -124,6 +135,12 @@
             </div>
         </form>
     </div>
+
+    <!-- Hidden helper form for deleting a single line -->
+    <form id="delete-line-form" method="POST" class="hidden">
+        @csrf
+        @method('DELETE')
+    </form>
 
     <!-- Alert / Concurrency Logic -->
     <script>
@@ -155,6 +172,22 @@
                     checkWarning(input);
                 });
                 checkWarning(input);
+            });
+
+            // Delete single line (DRAFT-only)
+            const deleteForm = document.getElementById('delete-line-form');
+            document.querySelectorAll('.delete-line-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    const url = btn.getAttribute('data-delete-url');
+                    const code = btn.getAttribute('data-line-code');
+                    const qty = btn.getAttribute('data-line-qty');
+
+                    const message = 'Hapus item ' + code + ' dari Perintah Cetak?\n\n' + qty + ' pcs akan dikembalikan ke Rencana Cetak.';
+                    if (confirm(message) && deleteForm) {
+                        deleteForm.action = url;
+                        deleteForm.submit();
+                    }
+                });
             });
         });
     </script>
