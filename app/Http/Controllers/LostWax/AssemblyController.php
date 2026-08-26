@@ -9,10 +9,15 @@ use Illuminate\Support\Facades\DB;
 class AssemblyController extends Controller
 {
     /**
-     * Display listing of print order lines with available quantities for assembly.
+     * Display listing of print order lines with available quantities for assembly (Rangkai).
      */
     public function index(Request $request)
     {
+        // Backward compatibility: redirect old tab query to dedicated Hasil Rangkai route
+        if ($request->query('tab') === 'work-orders') {
+            return redirect()->route('lost-wax.assemblies.work-orders.index', $request->except('tab'));
+        }
+
         // Get lines where actual outcomes have been recorded
         $query = \App\Models\LostWaxPrintOrderLine::with(['printOrder', 'trees'])
             ->whereNotNull('qty_actual_good');
@@ -49,7 +54,6 @@ class AssemblyController extends Controller
         }
 
         // Fetch all lines first to filter by dynamic attribute available_qty
-        // Fetch all lines first to filter by dynamic attribute available_qty
         $lines = $query->orderBy('id', 'desc')->get()->filter(function ($line) {
             return $line->qty_available_for_rangkai > 0;
         });
@@ -65,13 +69,25 @@ class AssemblyController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
-        // Fetch Rangkai Work Orders
+        return view('lost-wax.assemblies.index', [
+            'lines' => $paginatedLines,
+        ]);
+    }
+
+    /**
+     * Display listing of created Rangkai Work Orders (Hasil Rangkai).
+     */
+    public function workOrdersIndex(Request $request)
+    {
+        $scope = auth()->user()->product_scope;
         $woQuery = \App\Models\LostWaxRangkaiWorkOrder::with(['printOrderLine.printOrder', 'executions.trees']);
+
         if (auth()->user()->hasRole('ppic') && $scope) {
             $woQuery->whereHas('printOrderLine.productionPlan', function ($q) use ($scope) {
                 $q->where('product_scope', $scope);
             });
         }
+
         if ($request->filled('search')) {
             $search = $request->search;
             $woQuery->whereHas('printOrderLine', function ($q) use ($search) {
@@ -104,10 +120,9 @@ class AssemblyController extends Controller
             });
         }
 
-        $workOrders = $woQuery->orderBy('id', 'desc')->paginate(15, ['*'], 'wo_page');
+        $workOrders = $woQuery->orderBy('id', 'desc')->paginate(15);
 
-        return view('lost-wax.assemblies.index', [
-            'lines' => $paginatedLines,
+        return view('lost-wax.assemblies.work_orders', [
             'workOrders' => $workOrders,
         ]);
     }
@@ -140,7 +155,7 @@ class AssemblyController extends Controller
                 'notes' => $request->notes,
             ]);
 
-            return redirect()->route('lost-wax.assemblies.index', ['tab' => 'work-orders'])
+            return redirect()->route('lost-wax.assemblies.work-orders.index')
                 ->with('success', 'Rangkai Work Order berhasil dibuat.');
         } catch (\Exception $e) {
             return back()->withInput()->with('error', $e->getMessage());

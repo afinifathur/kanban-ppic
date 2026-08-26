@@ -102,6 +102,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/print-orders/{printOrder}/status', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'updateStatus'])->name('print-orders.update-status');
             Route::get('/print-orders/{printOrder}/print', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'print'])->name('print-orders.print');
             Route::delete('/print-orders/{printOrder}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroy'])->name('print-orders.destroy');
+            Route::post('/print-orders/{printOrder}/lines', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'storeLine'])->name('print-orders.lines.store');
             Route::delete('/print-orders/{printOrder}/lines/{line}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroyLine'])->name('print-orders.lines.destroy');
 
             // Actual Hasil Cetak
@@ -112,10 +113,11 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/outcomes/executions/{execution}/finalize', [\App\Http\Controllers\LostWax\OutcomeController::class, 'finalizeExecution'])->name('outcomes.executions.finalize');
             Route::put('/outcomes/executions/{execution}', [\App\Http\Controllers\LostWax\OutcomeController::class, 'updateExecution'])->name('outcomes.executions.update');
 
-            // Perintah Rangkai (Assembly)
+            // Perintah Rangkai (Assembly) & Hasil Rangkai
             Route::get('/assemblies', [\App\Http\Controllers\LostWax\AssemblyController::class, 'index'])->name('assemblies.index');
             Route::get('/assemblies/{line}/create', [\App\Http\Controllers\LostWax\AssemblyController::class, 'create'])->name('assemblies.create');
             Route::post('/assemblies/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'store'])->name('assemblies.store');
+            Route::get('/assemblies/work-orders', [\App\Http\Controllers\LostWax\AssemblyController::class, 'workOrdersIndex'])->name('assemblies.work-orders.index');
             Route::post('/assemblies/work-orders/create-wo/{line}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'storeWorkOrder'])->name('assemblies.work-orders.store');
             Route::get('/assemblies/work-orders/{workOrder}', [\App\Http\Controllers\LostWax\AssemblyController::class, 'showWorkOrder'])->name('assemblies.work-orders.show');
             Route::get('/assemblies/work-orders/{workOrder}/print', [\App\Http\Controllers\LostWax\AssemblyController::class, 'printWorkOrder'])->name('assemblies.work-orders.print');

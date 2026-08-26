@@ -314,7 +314,22 @@ class PrintOrderController extends Controller
 
         $printOrder->load('lines.productionPlan');
 
-        return view('lost-wax.print-orders.edit', compact('printOrder'));
+        $scope = auth()->user()->product_scope;
+        $existingPlanIds = $printOrder->lines->pluck('production_plan_id')->filter()->all();
+
+        $availablePlansQuery = \App\Models\ProductionPlan::query()
+            ->where('is_closed', false)
+            ->whereNotIn('id', $existingPlanIds);
+
+        if (auth()->user()->hasRole('ppic') && $scope) {
+            $availablePlansQuery->where('product_scope', $scope);
+        }
+
+        $availablePlans = $availablePlansQuery->orderBy('code')->get()->filter(function ($plan) {
+            return $plan->qty_remaining_scheduled > 0;
+        })->values();
+
+        return view('lost-wax.print-orders.edit', compact('printOrder', 'availablePlans'));
     }
 
     /**
@@ -431,6 +446,70 @@ class PrintOrderController extends Controller
 
         return redirect()->route('lost-wax.print-orders.plans')
             ->with('success', 'Dokumen Perintah Cetak berhasil dihapus.');
+    }
+
+    /**
+     * Add a single Production Plan line to an existing DRAFT print order.
+     */
+    public function storeLine(Request $request, \App\Models\LostWaxPrintOrder $printOrder)
+    {
+        $this->authorizePrintOrder($printOrder);
+
+        if ($printOrder->status !== 'DRAFT') {
+            abort(403, 'Hanya dokumen berstatus DRAFT yang dapat ditambahkan item baru.');
+        }
+
+        $request->validate([
+            'production_plan_id' => 'required|integer|exists:production_plans,id',
+            'qty_ordered' => 'required|integer|min:1',
+        ]);
+
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if (! ($isPpic && $scope)) {
+            abort(403, 'Hanya PPIC owner yang dapat menambahkan item ke Perintah Cetak.');
+        }
+
+        $plan = DB::transaction(function () use ($request, $printOrder, $scope) {
+            $plan = \App\Models\ProductionPlan::lockForUpdate()->findOrFail($request->production_plan_id);
+
+            if ($plan->product_scope !== $scope) {
+                abort(403, 'Unauthorized.');
+            }
+
+            if ($plan->is_closed) {
+                return back()->with('error', 'Item rencana produksi ini sudah ditutup (CLOSED).');
+            }
+
+            if ($printOrder->lines()->where('production_plan_id', $plan->id)->exists()) {
+                return back()->with('error', 'Item rencana produksi ini sudah ada di dalam dokumen Perintah Cetak.');
+            }
+
+            $remaining = $plan->qty_remaining_scheduled;
+            if ($request->qty_ordered > $remaining) {
+                return back()->with('error', 'Kuantitas melebihi sisa yang belum dijadwalkan (Maks: '.number_format($remaining).' pcs).');
+            }
+
+            $printOrder->lines()->create([
+                'production_plan_id' => $plan->id,
+                'qty_ordered' => $request->qty_ordered,
+                'code' => $plan->code,
+                'customer' => $plan->customer,
+                'item_name' => $plan->item_name,
+                'size' => $plan->size,
+                'aisi' => $plan->aisi,
+            ]);
+
+            return $plan;
+        });
+
+        if ($plan instanceof \Illuminate\Http\RedirectResponse) {
+            return $plan;
+        }
+
+        return redirect()->route('lost-wax.print-orders.edit', $printOrder)
+            ->with('success', 'Item '.$plan->code.' ('.number_format($request->qty_ordered).' pcs) berhasil ditambahkan ke Perintah Cetak.');
     }
 
     /**

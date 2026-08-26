@@ -10,7 +10,7 @@
             <a href="{{ route('lost-wax.assemblies.work-orders.print', $workOrder) }}" target="_blank" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm">
                 <i class="fas fa-print"></i> Print A5
             </a>
-            <a href="{{ route('lost-wax.assemblies.index') }}?tab=work-orders" class="bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 border border-slate-200 shadow-sm">
+            <a href="{{ route('lost-wax.assemblies.work-orders.index') }}" class="bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 border border-slate-200 shadow-sm">
                 <i class="fas fa-arrow-left"></i> Kembali
             </a>
         </div>
@@ -304,7 +304,38 @@
     </div>
 
     @if($workOrder->qty_outstanding > 0)
-        <!-- Real-time calculation script -->
+        <!-- CONFIRMATION MODAL -->
+        <div id="confirmTravelerModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 transform transition-all">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                        <i class="fas fa-exclamation-triangle text-lg"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide" id="modal-title">
+                            Konfirmasi Terbitkan Traveler
+                        </h3>
+                        <p class="text-xs font-semibold text-slate-800 mt-1">
+                            Apakah data eksekusi sudah benar?
+                        </p>
+                        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                            Setelah Traveler diterbitkan, data akan diproses sebagai hasil eksekusi dan tidak boleh diterbitkan secara tidak sengaja.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" id="cancelConfirmBtn" class="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-slate-300">
+                        Batal
+                    </button>
+                    <button type="button" id="proceedConfirmBtn" class="px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors shadow-sm flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                        <i class="fas fa-check"></i> Ya, Terbitkan Traveler
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time calculation and confirmation script -->
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const qtyInput = document.getElementById('qtyExecutionInput');
@@ -314,6 +345,12 @@
                 const totalQtyEl = document.getElementById('totalQty');
                 const submitBtn = document.getElementById('submitBtn');
                 const validationWarning = document.getElementById('validationWarning');
+                const form = document.getElementById('executionForm');
+                const modal = document.getElementById('confirmTravelerModal');
+                const cancelBtn = document.getElementById('cancelConfirmBtn');
+                const proceedBtn = document.getElementById('proceedConfirmBtn');
+
+                let confirmedSubmit = false;
                 
                 const outstanding = {{ $workOrder->qty_outstanding }};
                 const available = {{ $line->qty_available_for_rangkai }};
@@ -411,11 +448,96 @@
                     });
                 }
 
+                function openConfirmationModal() {
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                    if (proceedBtn) {
+                        proceedBtn.focus();
+                    }
+                }
+
+                function closeConfirmationModal() {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }
+
                 qtyInput.addEventListener('input', autoDistribute);
                 capacityInput.addEventListener('input', autoDistribute);
 
                 // Run first-time distribution on load
                 autoDistribute();
+
+                // Form submit interception (covers click, Enter key in any input field, etc.)
+                if (form) {
+                    form.addEventListener('submit', function (e) {
+                        if (confirmedSubmit) {
+                            return; // Allow native submission
+                        }
+
+                        e.preventDefault();
+
+                        // Check standard HTML5 validation first
+                        if (!form.checkValidity()) {
+                            form.reportValidity();
+                            return;
+                        }
+
+                        // Check distribution calculation validation
+                        const expectedTotal = parseInt(qtyInput.value) || 0;
+                        let total = 0;
+                        document.querySelectorAll('.tree-qty').forEach(function (input) {
+                            total += parseInt(input.value) || 0;
+                        });
+
+                        if (expectedTotal <= 0 || expectedTotal > maxAvailable || total !== expectedTotal) {
+                            updateSummary();
+                            return;
+                        }
+
+                        // Open confirmation modal
+                        openConfirmationModal();
+                    });
+                }
+
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', function () {
+                        closeConfirmationModal();
+                    });
+                }
+
+                if (modal) {
+                    modal.addEventListener('click', function (e) {
+                        if (e.target === modal) {
+                            closeConfirmationModal();
+                        }
+                    });
+                }
+
+                document.addEventListener('keydown', function (e) {
+                    if (modal && !modal.classList.contains('hidden') && e.key === 'Escape') {
+                        closeConfirmationModal();
+                    }
+                });
+
+                if (proceedBtn) {
+                    proceedBtn.addEventListener('click', function () {
+                        if (confirmedSubmit) {
+                            return;
+                        }
+
+                        confirmedSubmit = true;
+                        proceedBtn.disabled = true;
+                        cancelBtn.disabled = true;
+                        proceedBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i> Menerbitkan...';
+
+                        if (submitBtn) {
+                            submitBtn.disabled = true;
+                            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i> Memproses...';
+                        }
+
+                        form.submit();
+                    });
+                }
             });
         </script>
     @endif

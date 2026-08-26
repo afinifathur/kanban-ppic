@@ -1525,4 +1525,251 @@ class PrintOrderTest extends TestCase
         $response->assertStatus(403);
         $this->assertDatabaseHas('lost_wax_print_order_lines', ['id' => $line->id]);
     }
+
+    /**
+     * Test 1: Draft Print Order dapat menambahkan Production Plan baru.
+     */
+    public function test_draft_print_order_can_add_new_production_plan_line(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 800]);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 1000, 'PC-20260825-ADD-001');
+
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 800,
+        ]);
+
+        $response->assertRedirect(route('lost-wax.print-orders.edit', $order));
+        $response->assertSessionHas('success');
+
+        $this->assertCount(2, $order->fresh()->lines);
+        $this->assertDatabaseHas('lost_wax_print_order_lines', [
+            'lost_wax_print_order_id' => $order->id,
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 800,
+            'code' => 'ITEM-B',
+        ]);
+    }
+
+    /**
+     * Test 2: Qty yang ditambahkan tidak boleh melebihi remaining.
+     */
+    public function test_cannot_add_line_exceeding_remaining_scheduled_qty(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 500]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 500]);
+
+        // Plan B already scheduled 300 in another order -> remaining is 200
+        $otherOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-OTHER-1',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $otherOrder->lines()->create([
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 300,
+            'code' => 'ITEM-B',
+            'item_name' => $planB->item_name,
+        ]);
+
+        $this->assertSame(200, $planB->fresh()->qty_remaining_scheduled);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 500, 'PC-20260825-ADD-002');
+
+        // Attempting to add 250 (exceeding 200)
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 250,
+        ]);
+
+        $response->assertSessionHas('error');
+        $this->assertCount(1, $order->fresh()->lines);
+    }
+
+    /**
+     * Test 3: Production Plan yang sudah digunakan pada Print Order yang sama tidak dapat ditambahkan lagi.
+     */
+    public function test_cannot_add_duplicate_production_plan_to_same_print_order(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 500, 'PC-20260825-ADD-003');
+
+        // Attempting to add planA again to the same order
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planA->id,
+            'qty_ordered' => 200,
+        ]);
+
+        $response->assertSessionHas('error');
+        $this->assertCount(1, $order->fresh()->lines);
+    }
+
+    /**
+     * Test 4 & 5: qty_scheduled dan qty_remaining_scheduled terupdate dengan benar.
+     */
+    public function test_production_plan_allocation_updates_correctly_after_adding_line(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 1200]);
+
+        $this->assertSame(0, $planB->qty_scheduled);
+        $this->assertSame(1200, $planB->qty_remaining_scheduled);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 1000, 'PC-20260825-ADD-004');
+
+        $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 700,
+        ]);
+
+        $freshPlanB = $planB->fresh();
+        $this->assertSame(700, $freshPlanB->qty_scheduled);
+        $this->assertSame(500, $freshPlanB->qty_remaining_scheduled);
+    }
+
+    /**
+     * Test 6: Line baru dapat dihapus dan allocation kembali tersedia.
+     */
+    public function test_destroy_newly_added_line_releases_allocation(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 1200]);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 1000, 'PC-20260825-ADD-005');
+
+        $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 1200,
+        ]);
+
+        $this->assertSame(0, $planB->fresh()->qty_remaining_scheduled);
+
+        $lineB = $order->lines()->where('production_plan_id', $planB->id)->first();
+        $this->assertNotNull($lineB);
+
+        // Delete line B
+        $response = $this->actingAs($user)->delete(route('lost-wax.print-orders.lines.destroy', [$order, $lineB]));
+        $response->assertRedirect(route('lost-wax.print-orders.edit', $order));
+
+        $this->assertSame(1200, $planB->fresh()->qty_remaining_scheduled);
+        $this->assertCount(1, $order->fresh()->lines);
+    }
+
+    /**
+     * Test 7: Print Order ID dan number tetap sama setelah penambahan line.
+     */
+    public function test_print_order_retains_same_id_and_number_after_adding_line(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 800]);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 1000, 'PC-20260825-SAME-001');
+        $initialId = $order->id;
+        $initialNumber = $order->print_order_number;
+
+        $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 800,
+        ]);
+
+        $freshOrder = $order->fresh();
+        $this->assertSame($initialId, $freshOrder->id);
+        $this->assertSame($initialNumber, $freshOrder->print_order_number);
+    }
+
+    /**
+     * Test 8 & 9: Issued / Cancelled Print Order tidak dapat ditambahkan line.
+     */
+    public function test_cannot_add_line_to_issued_or_cancelled_print_order(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 800]);
+
+        $issuedOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-ISSUED-001',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $issuedOrder->lines()->create([
+            'production_plan_id' => $planA->id,
+            'qty_ordered' => 1000,
+            'code' => 'ITEM-A',
+            'item_name' => $planA->item_name,
+        ]);
+
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $issuedOrder), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 800,
+        ]);
+
+        $response->assertStatus(403);
+        $this->assertCount(1, $issuedOrder->fresh()->lines);
+
+        $cancelledOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260825-CANC-001',
+            'scheduled_date' => '2026-08-25',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+
+        $responseCanc = $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $cancelledOrder), [
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 800,
+        ]);
+
+        $responseCanc->assertStatus(403);
+    }
+
+    /**
+     * Test 10: Scope isolation check when adding line.
+     */
+    public function test_user_with_different_scope_cannot_add_plan(): void
+    {
+        $user = $this->makePpicUser(); // FLANGE_STAINLESS
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000, 'product_scope' => 'FLANGE_STAINLESS']);
+        $planOther = $this->createProductionPlan(['code' => 'ITEM-OTHER', 'qty_planned' => 800, 'product_scope' => 'FLANGE_BESI']);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 1000, 'PC-20260825-SCOPE-001');
+
+        $response = $this->actingAs($user)->post(route('lost-wax.print-orders.lines.store', $order), [
+            'production_plan_id' => $planOther->id,
+            'qty_ordered' => 800,
+        ]);
+
+        $response->assertStatus(403);
+        $this->assertCount(1, $order->fresh()->lines);
+    }
+
+    /**
+     * Test 11: Edit page renders Tambah Item button, modal, and available plans.
+     */
+    public function test_edit_page_renders_add_item_elements_and_available_plans(): void
+    {
+        $user = $this->makePpicUser();
+        $planA = $this->createProductionPlan(['code' => 'ITEM-A', 'qty_planned' => 1000]);
+        $planB = $this->createProductionPlan(['code' => 'ITEM-B', 'qty_planned' => 800]);
+
+        [$order, $lineA] = $this->createDraftOrderWithLine($user, $planA, 1000, 'PC-20260825-UI-001');
+
+        $response = $this->actingAs($user)->get(route('lost-wax.print-orders.edit', $order));
+
+        $response->assertOk();
+        $response->assertSee('Tambah Item');
+        $response->assertSee('addItemModal');
+        $response->assertSee('ITEM-B');
+        $response->assertSee('800 pcs');
+    }
 }
+

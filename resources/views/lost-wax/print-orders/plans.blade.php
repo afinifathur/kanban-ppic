@@ -93,7 +93,7 @@
                         <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center gap-1.5">
                             <i class="fas fa-filter"></i> Filter
                         </button>
-                        <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'plans']) }}" data-clear-selection-reset="true" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center">
+                        <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'plans']) }}" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center">
                             Reset
                         </a>
                     </div>
@@ -102,7 +102,12 @@
                 <!-- Selection Form -->
                 <form id="create-order-form" method="GET" action="{{ route('lost-wax.print-orders.create') }}">
                     <div class="mt-1 mb-3 flex items-center justify-between gap-3">
-                        <div id="selection-summary" class="text-xs font-bold text-slate-500" aria-live="polite">0 rencana dipilih</div>
+                        <div class="flex items-center gap-3">
+                            <div id="selection-summary" class="text-xs font-bold text-slate-500" aria-live="polite">0 rencana dipilih</div>
+                            <button type="button" id="clear-selection-btn" class="hidden text-xs text-red-600 hover:text-red-800 hover:underline font-semibold transition-colors items-center gap-1">
+                                <i class="fas fa-times-circle"></i> Bersihkan Pilihan
+                            </button>
+                        </div>
                         <div id="selected-plan-inputs"></div>
                     </div>
                     <div class="overflow-x-auto">
@@ -366,12 +371,11 @@
             const submitBtn = document.getElementById('submit-btn');
             const bulkCloseBtn = document.getElementById('bulk-close-btn');
             const selectionSummary = document.getElementById('selection-summary');
+            const clearSelectionBtn = document.getElementById('clear-selection-btn');
             const selectedPlanInputs = document.getElementById('selected-plan-inputs');
             const summaryCountEl = document.getElementById('summary-count');
             const summaryQtyEl = document.getElementById('summary-qty');
             const summaryWeightEl = document.getElementById('summary-weight');
-            const filterForm = document.querySelector('form[data-plan-filter="true"]');
-            const resetLink = document.querySelector('[data-clear-selection-reset="true"]');
             const ordersTabLink = document.querySelector('[data-clear-selection-on-click="true"]');
 
             function formatQty(value) {
@@ -476,6 +480,16 @@
 
                 if (selectionSummary) {
                     selectionSummary.textContent = selectedIds.size + ' rencana dipilih';
+                }
+
+                if (clearSelectionBtn) {
+                    if (selectedIds.size > 0) {
+                        clearSelectionBtn.classList.remove('hidden');
+                        clearSelectionBtn.classList.add('inline-flex');
+                    } else {
+                        clearSelectionBtn.classList.add('hidden');
+                        clearSelectionBtn.classList.remove('inline-flex');
+                    }
                 }
 
                 if (summaryCountEl) {
@@ -592,6 +606,15 @@
                 });
             });
 
+            if (clearSelectionBtn) {
+                clearSelectionBtn.addEventListener('click', function () {
+                    selectedIds.clear();
+                    selectedMeta = {};
+                    clearSelection();
+                    persistAndRender();
+                });
+            }
+
             if (bulkCloseBtn) {
                 bulkCloseBtn.addEventListener('click', function () {
                     const checked = document.querySelectorAll('.plan-checkbox:checked');
@@ -615,18 +638,6 @@
 
                         form.submit();
                     }
-                });
-            }
-
-            if (filterForm) {
-                filterForm.addEventListener('submit', function () {
-                    clearSelection();
-                });
-            }
-
-            if (resetLink) {
-                resetLink.addEventListener('click', function () {
-                    clearSelection();
                 });
             }
 

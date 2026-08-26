@@ -182,8 +182,7 @@ class AssemblyFilterTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.index', [
-            'tab' => 'work-orders',
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.index', [
             'code' => '26AB001',
         ]));
 
@@ -220,8 +219,7 @@ class AssemblyFilterTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.index', [
-            'tab' => 'work-orders',
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.index', [
             'customer' => 'A06',
         ]));
 
@@ -258,8 +256,7 @@ class AssemblyFilterTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.index', [
-            'tab' => 'work-orders',
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.index', [
             'size' => '1/2"',
         ]));
 
@@ -306,8 +303,7 @@ class AssemblyFilterTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.index', [
-            'tab' => 'work-orders',
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.index', [
             'customer' => 'A06',
             'size' => '1/2"',
         ]));
@@ -318,7 +314,7 @@ class AssemblyFilterTest extends TestCase
         $response->assertDontSee($wo3->rangkai_order_number);
     }
 
-    public function test_pagination_retains_filters_and_tab(): void
+    public function test_pagination_retains_filters(): void
     {
         $user = User::factory()->create();
         $order = LostWaxPrintOrder::create([
@@ -341,17 +337,29 @@ class AssemblyFilterTest extends TestCase
             ]);
         }
 
-        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.index', [
-            'tab' => 'work-orders',
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.index', [
             'customer' => 'A06',
             'size' => '1/2"',
         ]));
 
         $response->assertStatus(200);
 
-        // Assert that the page links contain both the tab, customer, and size parameters
-        $response->assertSee('tab=work-orders');
+        // Assert that the page links contain customer and size parameters
         $response->assertSee('customer=A06');
         $response->assertSee('size=1%2F2'); // URL encoded 1/2"
+    }
+
+    public function test_backward_compatibility_tab_redirect(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.index', [
+            'tab' => 'work-orders',
+            'customer' => 'A06',
+        ]));
+
+        $response->assertRedirect(route('lost-wax.assemblies.work-orders.index', [
+            'customer' => 'A06',
+        ]));
     }
 }

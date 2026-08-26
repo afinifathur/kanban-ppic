@@ -327,10 +327,18 @@
                         </li>
                         <li>
                             <a href="{{ route('lost-wax.assemblies.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.assemblies.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Perintah Rangkai">
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ (request()->routeIs('lost-wax.assemblies.index') || request()->routeIs('lost-wax.assemblies.create')) ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Rangkai">
                                 <i class="fas fa-link w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Perintah Rangkai</span>
+                                <span class="text-sm sidebar-text">Rangkai</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.assemblies.work-orders.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.assemblies.work-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Hasil Rangkai">
+                                <i class="fas fa-clipboard-list w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Hasil Rangkai</span>
                             </a>
                         </li>
                         <li>
