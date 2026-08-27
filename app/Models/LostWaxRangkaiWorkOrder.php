@@ -16,6 +16,9 @@ class LostWaxRangkaiWorkOrder extends Model
         'require_layer_7',
         'status',
         'notes',
+        'closure_reason',
+        'closed_by',
+        'closed_at',
         'reference_image_path',
         'created_by',
         'standard_capacity_guide',
@@ -26,11 +29,17 @@ class LostWaxRangkaiWorkOrder extends Model
         'qty_trees_planned' => 'integer',
         'tree_capacity' => 'integer',
         'standard_capacity_guide' => 'integer',
+        'closed_at' => 'datetime',
     ];
 
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function closer()
+    {
+        return $this->belongsTo(User::class, 'closed_by');
     }
 
     public function printOrderLine()
@@ -85,6 +94,10 @@ class LostWaxRangkaiWorkOrder extends Model
     // Accessor: Outstanding in pcs
     public function getQtyOutstandingAttribute(): int
     {
+        if ($this->status === 'CLOSED_WITH_SHORTAGE') {
+            return 0;
+        }
+
         return max(0, $this->qty_planned_pcs - $this->qty_executed_pcs);
     }
 }

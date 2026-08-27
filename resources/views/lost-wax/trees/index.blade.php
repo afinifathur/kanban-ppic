@@ -10,88 +10,90 @@
 @endsection
 
 @section('content')
-    <div class="space-y-4">
-        <!-- Form Pencarian & Filter -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <form method="GET" action="{{ route('lost-wax.trees.index') }}" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Cari Rangkaian / Kode Produksi</label>
-                    <input type="text" name="barcode" value="{{ request('barcode') }}" placeholder="Contoh: 1110826001" 
-                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
+    <div class="space-y-3 pb-6">
+        <!-- Form Pencarian & Filter (Compact & Sticky Control Panel) -->
+        <div class="sticky top-0 z-20 bg-white rounded-xl shadow-xs border border-slate-200 p-3.5">
+            <form method="GET" action="{{ route('lost-wax.trees.index') }}" class="space-y-3">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2.5 items-end">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cari Rangkaian / Barcode</label>
+                        <div class="relative">
+                            <i class="fas fa-barcode absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" name="barcode" value="{{ request('barcode') }}" placeholder="Contoh: 1110826001" 
+                                class="w-full pl-7 pr-2.5 py-1.5 rounded-lg border-slate-300 text-xs font-mono focus:ring-amber-500 focus:border-amber-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kode Cust</label>
+                        <input type="text" name="code" list="code-list" value="{{ request('code') }}" placeholder="Contoh: AB01" 
+                            class="w-full py-1.5 px-2.5 rounded-lg border-slate-300 text-xs font-mono focus:ring-amber-500 focus:border-amber-500">
+                        <datalist id="code-list">
+                            @foreach($uniqueCodes as $uCode)
+                                <option value="{{ $uCode }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Customer</label>
+                        <input type="text" name="customer" list="customer-list" value="{{ request('customer') }}" placeholder="Contoh: PT. ABC" 
+                            class="w-full py-1.5 px-2.5 rounded-lg border-slate-300 text-xs focus:ring-amber-500 focus:border-amber-500">
+                        <datalist id="customer-list">
+                            @foreach($uniqueCustomers as $uCust)
+                                <option value="{{ $uCust }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Item / Product</label>
+                        <input type="text" name="item" value="{{ request('item') }}" placeholder="Contoh: Flange" 
+                            class="w-full py-1.5 px-2.5 rounded-lg border-slate-300 text-xs focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rack</label>
+                        <select name="rack_id" class="w-full py-1.5 px-2.5 rounded-lg border-slate-300 text-xs focus:ring-amber-500 focus:border-amber-500">
+                            <option value="">Semua Rack</option>
+                            <option value="none" {{ request('rack_id') === 'none' ? 'selected' : '' }}>Belum Ada Rack</option>
+                            @foreach($coatingRacks as $rack)
+                                <option value="{{ $rack->id }}" {{ request('rack_id') == $rack->id ? 'selected' : '' }}>
+                                    RAK-{{ str_pad((string)$rack->rack_number, 2, '0', STR_PAD_LEFT) }} {{ $rack->label ? '('.$rack->label.')' : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kode Cust</label>
-                    <input type="text" name="code" list="code-list" value="{{ request('code') }}" placeholder="Contoh: AB01" 
-                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
-                    <datalist id="code-list">
-                        @foreach($uniqueCodes as $uCode)
-                            <option value="{{ $uCode }}"></option>
-                        @endforeach
-                    </datalist>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Customer</label>
-                    <input type="text" name="customer" list="customer-list" value="{{ request('customer') }}" placeholder="Contoh: PT. ABC" 
-                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
-                    <datalist id="customer-list">
-                        @foreach($uniqueCustomers as $uCust)
-                            <option value="{{ $uCust }}"></option>
-                        @endforeach
-                    </datalist>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Item / Product</label>
-                    <input type="text" name="item" value="{{ request('item') }}" placeholder="Contoh: Flange" 
-                        class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Rack</label>
-                    <select name="rack_id" class="w-full rounded-lg border-slate-300 text-sm focus:ring-amber-500 focus:border-amber-500">
-                        <option value="">Semua Rack</option>
-                        <option value="none" {{ request('rack_id') === 'none' ? 'selected' : '' }}>Belum Ada Rack</option>
-                        @foreach($coatingRacks as $rack)
-                            <option value="{{ $rack->id }}" {{ request('rack_id') == $rack->id ? 'selected' : '' }}>
-                                RAK-{{ str_pad((string)$rack->rack_number, 2, '0', STR_PAD_LEFT) }} {{ $rack->label ? '('.$rack->label.')' : '' }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="md:col-span-5 flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+
+                <!-- Action Bar: Cari, Filter Reset & Bulk Action Buttons -->
+                <div class="flex items-center justify-between gap-2.5 pt-2 border-t border-slate-100 flex-wrap">
                     <div class="flex items-center gap-2">
-                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-colors">
-                            <i class="fas fa-search"></i> Cari &amp; Filter
+                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-3.5 rounded-lg shadow-2xs inline-flex items-center gap-1.5 transition-colors">
+                            <i class="fas fa-search text-[10px]"></i> Cari &amp; Filter
                         </button>
                         @if(request()->anyFilled(['barcode', 'code', 'customer', 'item', 'rack_id']))
-                            <a href="{{ route('lost-wax.trees.index') }}" class="text-xs text-slate-500 hover:text-slate-700 font-bold py-2 px-3 transition-colors">
-                                Reset Filter
+                            <a href="{{ route('lost-wax.trees.index') }}" class="text-xs text-slate-500 hover:text-slate-700 font-bold py-1.5 px-2.5 transition-colors flex items-center gap-1">
+                                <i class="fas fa-undo text-[9px]"></i> Reset
                             </a>
                         @endif
                     </div>
                     
                     @if($trees->count() > 0)
                         <div class="flex items-center gap-2 flex-wrap">
-                            <!-- Tombol Bulk Print Terpilih -->
+                            <!-- Tombol Bulk Print Terpilih (Epson A4) -->
                             <button type="button" id="bulk-print-btn" disabled 
-                                class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-all">
-                                <i class="fas fa-print"></i> Cetak Terpilih (<span id="checked-count">0</span> Rangkaian)
+                                class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-1.5 px-3 rounded-lg shadow-2xs inline-flex items-center gap-1.5 transition-all">
+                                <i class="fas fa-print text-[10px]"></i> Cetak Terpilih (<span id="checked-count">0</span>)
                             </button>
-                            <!-- Tombol Bulk Print Thermal Terpilih -->
+                            <!-- Tombol Bulk Print Thermal Terpilih (TSC 90x50) -->
                             <button type="button" id="bulk-print-thermal-btn" disabled 
-                                class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-all">
-                                <i class="fas fa-barcode"></i> Cetak Thermal Terpilih
+                                class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-1.5 px-3.5 rounded-lg shadow-2xs inline-flex items-center gap-1.5 transition-all">
+                                <i class="fas fa-barcode text-[10px]"></i> Cetak Thermal Terpilih
                             </button>
-                            <!-- Tombol Cetak Semua Halaman Ini -->
-                            <a href="{{ route('lost-wax.trees.traveler', ['tree' => $trees->first()->id, 'ids' => $trees->pluck('id')->implode(',')]) }}?auto_print=1" target="_blank"
-                                class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded shadow-sm inline-flex items-center gap-1.5 transition-colors">
-                                <i class="fas fa-print"></i> Cetak Halaman Ini ({{ $trees->count() }} Rangkaian)
-                            </a>
                             
                             <!-- Bulk Rack Assignment Panel -->
-                            <div class="flex items-center gap-1.5 border-l border-slate-200 pl-3">
+                            <div class="flex items-center gap-1.5 border-l border-slate-200 pl-2.5">
                                 <input type="text" id="bulk-rack-select" list="coating-racks-list" disabled placeholder="- Pilih Rak -"
-                                    class="bg-slate-100 text-slate-400 cursor-not-allowed text-xs font-bold py-1.5 px-2 rounded shadow-sm border border-slate-200 focus:ring-amber-500 focus:border-amber-500 transition-all w-28">
+                                    class="bg-slate-100 text-slate-400 cursor-not-allowed text-xs font-bold py-1 px-2 rounded-lg border border-slate-200 focus:ring-amber-500 focus:border-amber-500 transition-all w-24 text-center">
                                 <button type="button" id="bulk-assign-rack-btn" disabled
-                                    class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-2 px-3 rounded shadow-sm inline-flex items-center gap-1 transition-all">
+                                    class="bg-slate-200 text-slate-400 cursor-not-allowed text-xs font-bold py-1.5 px-3 rounded-lg shadow-2xs inline-flex items-center gap-1 transition-all">
                                     Tetapkan Rak
                                 </button>
                             </div>
@@ -101,63 +103,63 @@
             </form>
         </div>
 
-        <!-- Tabel Daftar Rangkaian -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-left text-sm text-slate-600">
-                    <thead class="bg-slate-50/75 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <!-- Tabel Daftar Rangkaian dengan Internal Scroll & Sticky Header -->
+        <div class="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden">
+            <div class="table-scroll-container overflow-y-auto overflow-x-auto" style="max-height: calc(100vh - 240px); min-height: 380px;">
+                <table class="w-full border-collapse text-left text-xs text-slate-700">
+                    <thead class="sticky top-0 z-10 bg-slate-800 text-white uppercase text-[10px] tracking-wider font-bold shadow-xs">
                         <tr>
-                            <th class="p-4 w-10 text-center">
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-10 text-center">
                                 <input type="checkbox" id="select-all" class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
                             </th>
-                            <th class="p-4 w-40">Kode Rangkaian</th>
-                            <th class="p-4 w-20 text-center">Qty</th>
-                            <th class="p-4 w-28 text-center">Kode Cust</th>
-                            <th class="p-4 w-36">Customer</th>
-                            <th class="p-4">Produk / Item</th>
-                            <th class="p-4 w-32 text-center">Rack</th>
-                            <th class="p-4 w-40">Status/Lapisan</th>
-                            <th class="p-4 w-36 text-center">Aksi</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-36 font-mono">Kode Rangkaian</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-16 text-center">Qty</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-24 text-center">Kode Cust</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-32">Customer</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 min-w-[260px]">Produk / Item</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-28 text-center">Rack</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-32 text-center">Status/Lapisan</th>
+                            <th class="sticky top-0 bg-slate-800 py-2.5 px-3 w-20 text-center">Aksi</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200">
                         @forelse($trees as $tree)
-                            <tr class="hover:bg-slate-50/50 transition-colors">
-                                <td class="p-4 text-center">
+                            <tr class="hover:bg-slate-50/60 transition-colors">
+                                <td class="py-2.5 px-3 text-center">
                                     <input type="checkbox" name="tree_ids[]" value="{{ $tree->id }}" class="tree-checkbox h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
                                 </td>
-                                <td class="p-4 font-mono font-bold text-slate-800">
+                                <td class="py-2.5 px-3 font-mono font-bold text-slate-900">
                                     <a href="{{ route('lost-wax.trees.show', $tree) }}" class="hover:text-amber-600 transition-colors">
                                         {{ $tree->barcode }}
                                     </a>
                                 </td>
-                                <td class="p-4 text-center font-bold text-slate-800">
+                                <td class="py-2.5 px-3 text-center font-black text-slate-800">
                                     {{ number_format($tree->quantity) }}
                                 </td>
-                                <td class="p-4 text-center font-mono text-xs font-semibold text-slate-700">
+                                <td class="py-2.5 px-3 text-center font-mono text-xs font-semibold text-slate-700">
                                     {{ $tree->getSourceCode() ?? '-' }}
                                 </td>
-                                <td class="p-4 font-semibold text-slate-700 truncate max-w-[150px]" title="{{ $tree->getSourceCustomer() }}">
+                                <td class="py-2.5 px-3 font-semibold text-slate-700 truncate max-w-[140px]" title="{{ $tree->getSourceCustomer() }}">
                                     {{ $tree->getSourceCustomer() ?? '-' }}
                                 </td>
-                                <td class="p-4 font-medium text-slate-700 leading-tight">
-                                    <div class="font-bold text-slate-800">{{ $tree->getSourceProduct() ?? '-' }}</div>
+                                <td class="py-2.5 px-3 font-medium text-slate-800">
+                                    <div class="font-bold text-slate-900 leading-snug">{{ $tree->getSourceProduct() ?? '-' }}</div>
                                     <div class="text-[10px] text-slate-400 font-mono mt-0.5">{{ $tree->getSourceItemCode() ?? '-' }}</div>
                                 </td>
-                                <td class="p-4 text-center">
+                                <td class="py-2.5 px-3 text-center">
                                     @php
                                         $currentRackCount = $tree->rack_id ? ($rackCounts[$tree->rack_id] ?? 0) : 0;
                                         $isOverCapacity = $currentRackCount > 30;
                                         $originalValueLabel = $tree->rack_id && $tree->coatingRack ? 'RAK-'.str_pad($tree->coatingRack->rack_number, 2, '0', STR_PAD_LEFT) : '';
                                     @endphp
-                                    <div class="relative inline-block w-28 text-center" id="rack-container-{{ $tree->id }}">
+                                    <div class="relative inline-block w-24 text-center" id="rack-container-{{ $tree->id }}">
                                         <input type="text"
                                             list="coating-racks-list"
                                             onchange="onTreeRackInputChange(this, {{ $tree->id }})"
                                             data-original-value="{{ $originalValueLabel }}"
                                             value="{{ $originalValueLabel }}"
                                             placeholder="- Pilih Rak -"
-                                            class="rack-input w-full rounded border-slate-300 py-1 px-2 text-xs focus:ring-amber-500 focus:border-amber-500 cursor-pointer">
+                                            class="rack-input w-full rounded border-slate-300 py-1 px-1.5 text-xs focus:ring-amber-500 focus:border-amber-500 cursor-pointer text-center">
                                         <span class="rack-warning absolute -top-1.5 -right-1.5 text-amber-500 text-[10px] {{ $isOverCapacity ? '' : 'hidden' }}" 
                                             id="rack-warning-{{ $tree->id }}"
                                             title="Kapasitas rak ini saat ini {{ $currentRackCount }} tree (Kapasitas normal 25-30 tree)">
@@ -165,39 +167,27 @@
                                         </span>
                                     </div>
                                 </td>
-                                <td class="p-4 text-xs font-medium">
-                                    <div class="flex flex-col gap-1">
+                                <td class="py-2.5 px-3 text-center text-xs font-medium">
+                                    <div class="flex flex-col items-center gap-0.5">
                                         @if($tree->current_stage)
-                                            <span class="inline-block px-2 py-0.5 rounded-full w-fit font-bold
-                                                {{ $tree->current_stage === 'oven' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
+                                            <span class="inline-block px-2 py-0.5 rounded-full font-bold text-[10.5px]
+                                                {{ $tree->current_stage === 'oven' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200' }}">
                                                 {{ $tree->current_stage_label }}
                                             </span>
                                         @else
-                                            <span class="inline-block px-2 py-0.5 rounded-full w-fit bg-blue-100 text-blue-800 font-bold">
+                                            <span class="inline-block px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-bold text-[10.5px]">
                                                 Sebelum Scan
                                             </span>
                                         @endif
-                                        <span class="text-[10px] text-slate-400 italic">({{ $tree->status }})</span>
+                                        <span class="text-[9.5px] text-slate-400 italic">({{ $tree->status }})</span>
                                     </div>
                                 </td>
-                                <td class="p-4 text-center">
-                                    <div class="flex items-center justify-center gap-1.5">
-                                        <a href="{{ route('lost-wax.trees.traveler', $tree) }}?auto_print=1" target="_blank"
-                                            class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors inline-flex items-center gap-1"
-                                            title="Cetak Traveler (Epson A4)">
-                                            <i class="fas fa-print"></i> Cetak
-                                        </a>
-                                        <button onclick="printThermalSingle({{ $tree->id }})"
-                                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors inline-flex items-center gap-1"
-                                            title="Cetak Thermal 90x50">
-                                            <i class="fas fa-barcode"></i> Thermal
-                                        </button>
-                                        <a href="{{ route('lost-wax.trees.show', $tree) }}" 
-                                            class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1 px-2 rounded transition-colors"
-                                            title="Lihat Detail">
-                                            Detail
-                                        </a>
-                                    </div>
+                                <td class="py-2.5 px-3 text-center">
+                                    <a href="{{ route('lost-wax.trees.show', $tree) }}" 
+                                        class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1 px-2.5 rounded-lg border border-slate-200 transition-colors inline-flex items-center justify-center gap-1 shadow-2xs"
+                                        title="Lihat Detail">
+                                        <i class="fas fa-eye text-[10px] text-slate-500"></i> Detail
+                                    </a>
                                 </td>
                             </tr>
                         @empty
@@ -215,7 +205,7 @@
                 </table>
             </div>
             @if($trees->hasPages())
-                <div class="p-4 border-t border-slate-200 bg-slate-50/50">
+                <div class="p-3 border-t border-slate-200 bg-slate-50/50">
                     {{ $trees->links() }}
                 </div>
             @endif

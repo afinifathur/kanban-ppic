@@ -30,11 +30,11 @@
                 <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{{ $tree->current_stage_label }}</span>
             </div>
             <div class="text-sm text-slate-600">
-                <strong>{{ $tree->workOrder->et_code ?? '-' }}</strong>
+                <strong>{{ $tree->getSourceCode() ?? '-' }}</strong>
                 &mdash;
-                {{ optional($tree->workOrder->itemReference)->item_code_snapshot ?? '-' }}
+                {{ $tree->getSourceItemCode() ?? '-' }}
                 &mdash;
-                {{ optional($tree->workOrder->itemReference)->item_name_snapshot ?? '-' }}
+                {{ $tree->getSourceProduct() ?? '-' }}
             </div>
             <div class="text-xs text-slate-500 mt-2">
                 Tree #{{ str_pad((string) $tree->tree_number, 3, '0', STR_PAD_LEFT) }}

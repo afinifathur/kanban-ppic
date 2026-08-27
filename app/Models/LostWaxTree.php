@@ -83,6 +83,16 @@ class LostWaxTree extends Model
         return $this->hasMany(LostWaxScanEvent::class, 'tree_id');
     }
 
+    public function allocations()
+    {
+        return $this->hasMany(LostWaxTreeAllocation::class, 'lost_wax_tree_id');
+    }
+
+    public function getAllocationBreakdown()
+    {
+        return $this->allocations()->with('printOrderLine.printOrder')->get();
+    }
+
     // Compatibility Helpers for Explicit Traceability
     public function getSourceTypeAttribute(): string
     {

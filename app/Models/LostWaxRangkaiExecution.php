@@ -14,6 +14,9 @@ class LostWaxRangkaiExecution extends Model
         'trees_created',
         'family_code',
         'status',
+        'variance_qty',
+        'is_anomaly',
+        'anomaly_notes',
         'recorded_by',
         'recorded_at',
         'cancelled_at',
@@ -24,6 +27,8 @@ class LostWaxRangkaiExecution extends Model
     protected $casts = [
         'execution_date' => 'date',
         'trees_created' => 'integer',
+        'variance_qty' => 'integer',
+        'is_anomaly' => 'boolean',
         'recorded_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];

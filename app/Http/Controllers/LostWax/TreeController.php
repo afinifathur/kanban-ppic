@@ -200,9 +200,14 @@ class TreeController extends Controller
     public function show(LostWaxTree $tree)
     {
         $this->authorizeTree($tree);
-        $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
+        $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan', 'coatingRack']);
 
-        return view('lost-wax.trees.show', compact('tree'));
+        $events = \App\Models\LostWaxScanEvent::with(['operator', 'void.voidedByUser'])
+            ->where('tree_id', $tree->id)
+            ->orderBy('scanned_at', 'asc')
+            ->get();
+
+        return view('lost-wax.trees.show', compact('tree', 'events'));
     }
 
     public function update(Request $request, LostWaxTree $tree)

@@ -24,6 +24,7 @@ class LostWaxPrintOrderLine extends Model
         'require_layer_7',
         'qty_executed_good',
         'qty_executed_defect',
+        'qty_excess_closed',
     ];
 
     protected $casts = [
@@ -35,6 +36,7 @@ class LostWaxPrintOrderLine extends Model
         'require_layer_7' => 'boolean',
         'qty_executed_good' => 'integer',
         'qty_executed_defect' => 'integer',
+        'qty_excess_closed' => 'integer',
     ];
 
     public function printOrder()
@@ -50,6 +52,11 @@ class LostWaxPrintOrderLine extends Model
     public function trees()
     {
         return $this->hasMany(LostWaxTree::class, 'lost_wax_print_order_line_id');
+    }
+
+    public function treeAllocations()
+    {
+        return $this->hasMany(LostWaxTreeAllocation::class, 'lost_wax_print_order_line_id');
     }
 
     public function recorder()
@@ -79,9 +86,22 @@ class LostWaxPrintOrderLine extends Model
             ? (int) $this->qty_executed_good
             : (int) ($this->qty_actual_good ?? 0);
 
-        $allocated = (int) $this->trees()->where('status', '!=', 'cancelled')->sum('quantity');
+        $excessClosed = (int) ($this->qty_excess_closed ?? 0);
 
-        return max(0, $good - $allocated);
+        // 1. Allocation from new ledger (active trees)
+        $allocatedNew = (int) $this->treeAllocations()
+            ->whereHas('tree', function ($q) {
+                $q->where('status', '!=', 'cancelled');
+            })
+            ->sum('allocated_qty');
+
+        // 2. Allocation from legacy trees (without allocation ledger records)
+        $allocatedLegacy = (int) $this->trees()
+            ->where('status', '!=', 'cancelled')
+            ->whereDoesntHave('allocations')
+            ->sum('quantity');
+
+        return max(0, $good - $allocatedNew - $allocatedLegacy - $excessClosed);
     }
 
     public function getIsOutcomeRecordedAttribute(): bool

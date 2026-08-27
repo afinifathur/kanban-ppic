@@ -38,9 +38,9 @@ class OutcomeController extends Controller
     public function editOutcome(\App\Models\LostWaxPrintOrder $printOrder)
     {
         $this->authorizePrintOrder($printOrder);
-        if (! in_array($printOrder->status, ['ISSUED', 'PARTIALLY_COMPLETED'])) {
+        if (! in_array($printOrder->status, ['ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED'])) {
             return redirect()->route('lost-wax.outcomes.index')
-                ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen berstatus ISSUED atau PARTIALLY_COMPLETED.');
+                ->with('error', 'Hasil cetak hanya dapat dicatat untuk dokumen aktif.');
         }
 
         $printOrder->load('lines.trees', 'lines.executions.recorder');

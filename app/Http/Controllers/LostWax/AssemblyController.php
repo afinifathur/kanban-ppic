@@ -285,6 +285,48 @@ class AssemblyController extends Controller
         }
     }
 
+    /**
+     * Close a Rangkai Work Order with shortage.
+     */
+    public function closeShortage(Request $request, \App\Models\LostWaxRangkaiWorkOrder $workOrder)
+    {
+        $this->authorizeWorkOrder($workOrder);
+        $request->validate([
+            'closure_reason' => 'required|string|max:500',
+        ]);
+
+        try {
+            $service = app(\App\Services\RangkaiExecutionService::class);
+            $service->closeWorkOrderWithShortage($workOrder, $request->closure_reason, auth()->user());
+
+            return redirect()->route('lost-wax.assemblies.work-orders.show', $workOrder)
+                ->with('success', 'Work Order berhasil ditutup dengan status Shortage.');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Close excess balance on a Print Order Line.
+     */
+    public function closeExcess(Request $request, \App\Models\LostWaxPrintOrderLine $line)
+    {
+        $this->authorizeLine($line);
+        $request->validate([
+            'qty_to_close' => 'required|integer|min:1',
+        ]);
+
+        try {
+            $service = app(\App\Services\RangkaiExecutionService::class);
+            $service->closeExcessBalance($line, (int) $request->qty_to_close);
+
+            return redirect()->route('lost-wax.assemblies.index')
+                ->with('success', 'Saldo excess berhasil ditutup (closed/recycled).');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
     protected function authorizeWorkOrder(\App\Models\LostWaxRangkaiWorkOrder $workOrder)
     {
         $this->authorizeLine($workOrder->printOrderLine);
