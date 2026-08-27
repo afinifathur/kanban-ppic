@@ -28,7 +28,6 @@ class DatabaseSeeder extends Seeder
         $spvRole->syncPermissions([$accessExecution]);
 
         $this->seedUser('Admin PPIC', 'adminppicpf@peroniks.com', 'password', 'admin');
-        $this->seedUser('MR Peroniks', 'mr@peroniks.com', 'password123');
 
         // Seed new RBAC / product scope users
         $this->seedUser('PPIC Flange', 'ppicflange@peroniks.com', 'password', 'ppic', 'FLANGE_STAINLESS');
@@ -36,6 +35,18 @@ class DatabaseSeeder extends Seeder
         $this->seedUser('PPIC Fitting', 'ppicfitting@peroniks.com', 'password', 'ppic', 'FITTING_STAINLESS');
         $this->seedUser('Admin Fitting', 'adminfitting@peroniks.com', 'password', 'admin');
         $this->seedUser('SPV Lapisan', 'spvlapisan@peroniks.com', 'password', 'spv');
+
+        // Seed temporary admin access for MR & Direktur
+        if (User::where('email', 'direktur@peroniks.com')->exists() || env('DIREKTUR_INITIAL_PASSWORD')) {
+            $this->call([
+                TemporaryAdminAccessSeeder::class,
+            ]);
+        } else {
+            $mr = User::where('email', 'mr@peroniks.com')->first();
+            if ($mr) {
+                $mr->syncRoles(['admin']);
+            }
+        }
 
         $this->call([
             CustomerSeeder::class,
