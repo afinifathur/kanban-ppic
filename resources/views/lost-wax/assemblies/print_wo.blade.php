@@ -195,20 +195,28 @@
                             <!-- TAMPAK DEPAN -->
                             <div class="border border-dashed border-slate-300 rounded p-0.5 bg-slate-50/50 flex flex-col justify-center items-center text-center overflow-hidden">
                                 <span class="text-[6.5px] font-bold text-slate-500 block uppercase leading-none mb-0.5">TAMPAK DEPAN</span>
-                                @if($workOrder->reference_image_path)
+                                @if(!empty($assemblyPhoto?->front_image_url))
+                                    <img src="{{ $assemblyPhoto->front_image_url }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Depan">
+                                @elseif(!empty($workOrder->reference_image_path))
                                     <img src="{{ asset($workOrder->reference_image_path) }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Depan">
                                 @else
-                                    <div class="w-3.5 h-3.5 rounded-full border border-dashed border-slate-400 flex items-center justify-center text-[7px] text-slate-400 mt-0.5">+</div>
+                                    <div class="flex flex-col items-center justify-center p-1 text-center h-full">
+                                        <span class="text-[6.5px] font-bold text-slate-400 leading-tight">FOTO BELUM TERSEDIA</span>
+                                    </div>
                                 @endif
                             </div>
                             
                             <!-- TAMPAK SAMPING -->
                             <div class="border border-dashed border-slate-300 rounded p-0.5 bg-slate-50/50 flex flex-col justify-center items-center text-center overflow-hidden">
                                 <span class="text-[6.5px] font-bold text-slate-500 block uppercase leading-none mb-0.5">TAMPAK SAMPING</span>
-                                @if($workOrder->reference_image_path)
+                                @if(!empty($assemblyPhoto?->side_image_url))
+                                    <img src="{{ $assemblyPhoto->side_image_url }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Samping">
+                                @elseif(!empty($workOrder->reference_image_path))
                                     <img src="{{ asset($workOrder->reference_image_path) }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Samping">
                                 @else
-                                    <div class="w-3.5 h-3.5 rounded-full border border-dashed border-slate-400 flex items-center justify-center text-[7px] text-slate-400 mt-0.5">+</div>
+                                    <div class="flex flex-col items-center justify-center p-1 text-center h-full">
+                                        <span class="text-[6.5px] font-bold text-slate-400 leading-tight">FOTO BELUM TERSEDIA</span>
+                                    </div>
                                 @endif
                             </div>
                         </div>

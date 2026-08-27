@@ -1772,4 +1772,3 @@ class PrintOrderTest extends TestCase
         $response->assertSee('800 pcs');
     }
 }
-

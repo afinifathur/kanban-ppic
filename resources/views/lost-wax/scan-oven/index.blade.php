@@ -85,6 +85,38 @@
             scanInput.focus();
         });
 
+        function handleSessionRecovery(barcode) {
+            const RELOAD_GUARD_KEY = 'scanner_oven_last_reload';
+            const now = Date.now();
+            const lastReload = parseInt(sessionStorage.getItem(RELOAD_GUARD_KEY) || '0', 10);
+
+            // Avoid rapid reload loop if server is down or unauthenticated (throttle: 30s)
+            if (now - lastReload < 30000) {
+                showError({ reason: 'Sesi kedaluwarsa atau otentikasi gagal. Silakan muat ulang halaman atau login kembali.' }, barcode);
+                return;
+            }
+
+            sessionStorage.setItem(RELOAD_GUARD_KEY, now.toString());
+            statusIndicator.innerHTML = '<i class="fas fa-sync fa-spin mr-2"></i> MEMPERBARUI SESI...';
+            statusIndicator.className = 'text-lg font-bold text-blue-600';
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
+        }
+
+        // Heartbeat keepalive every 20 minutes to prevent session idle timeout
+        const KEEPALIVE_INTERVAL = 20 * 60 * 1000;
+        setInterval(function () {
+            fetch('{{ route('lost-wax.scan.keepalive') }}', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            }).catch(() => {
+                // Silently ignore temporary network blips
+            });
+        }, KEEPALIVE_INTERVAL);
+
         scanForm.addEventListener('submit', function (e) {
             e.preventDefault();
             if (processing) return;
@@ -110,8 +142,15 @@
                 },
                 body: JSON.stringify({ barcode: barcode }),
             })
-                .then(r => r.json())
+                .then(r => {
+                    if (r.status === 419 || r.status === 401) {
+                        handleSessionRecovery(barcode);
+                        return null;
+                    }
+                    return r.json();
+                })
                 .then(data => {
+                    if (!data) return;
                     if (data.success) {
                         showSuccess(data, barcode);
                     } else {

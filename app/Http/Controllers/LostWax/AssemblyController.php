@@ -214,7 +214,13 @@ class AssemblyController extends Controller
         $line = $workOrder->printOrderLine;
         $availableQty = $line->qty_available_for_rangkai;
 
-        return view('lost-wax.assemblies.print_wo', compact('workOrder', 'line', 'availableQty'));
+        $productCode = $line->productionPlan?->item_code ?? $line->code;
+        $productName = $line->item_name ?? $line->productionPlan?->item_name;
+
+        $photoService = app(\App\Services\AssemblyPhotoService::class);
+        $assemblyPhoto = $photoService->getCurrentPhoto($productCode, $productName);
+
+        return view('lost-wax.assemblies.print_wo', compact('workOrder', 'line', 'availableQty', 'assemblyPhoto'));
     }
 
     /**

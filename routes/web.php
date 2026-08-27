@@ -69,6 +69,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/customers', [\App\Http\Controllers\CustomerController::class, 'store'])->name('settings.customers.store');
     Route::delete('/settings/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'destroy'])->name('settings.customers.destroy');
 
+    // Master Foto Rangkai Settings
+    Route::get('/settings/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'index'])->name('settings.assembly-photos.index');
+    Route::get('/settings/assembly-photos/search', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'search'])->name('settings.assembly-photos.search');
+    Route::get('/settings/assembly-photos/detail', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'detail'])->name('settings.assembly-photos.detail');
+    Route::post('/settings/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'store'])->name('settings.assembly-photos.store');
+
     // Defect Entry
     Route::get('/defects/{dept}', [\App\Http\Controllers\DefectController::class, 'index'])->name('defects.index');
     Route::post('/defects/{item}', [\App\Http\Controllers\DefectController::class, 'store'])->name('defects.store');
@@ -153,6 +159,7 @@ Route::middleware(['auth'])->group(function () {
 
             // Scan
             Route::get('/scan', [ScanController::class, 'index'])->name('scan.index');
+            Route::get('/scan/keepalive', [ScanController::class, 'keepalive'])->name('scan.keepalive');
             Route::post('/scan', [ScanController::class, 'process'])->name('scan.process');
             Route::post('/stage-label', [ScanController::class, 'stageLabel'])->name('stage-label');
 

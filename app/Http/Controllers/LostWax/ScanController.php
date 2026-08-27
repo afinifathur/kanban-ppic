@@ -17,6 +17,13 @@ class ScanController extends Controller
         return view('lost-wax.scan.index');
     }
 
+    public function keepalive()
+    {
+        return response()->json([
+            'ok' => true,
+        ]);
+    }
+
     public function process(Request $request)
     {
         $barcode = trim($request->input('barcode', ''));

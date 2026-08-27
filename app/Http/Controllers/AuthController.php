@@ -19,7 +19,13 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        $remember = $request->has('remember');
+        $credentials['email'] = strtolower(trim((string) $credentials['email']));
+        $scannerEmails = array_map(
+            fn ($e) => strtolower(trim((string) $e)),
+            (array) config('lost_wax.scanner_emails', [])
+        );
+
+        $remember = in_array($credentials['email'], $scannerEmails, true) || $request->boolean('remember');
 
         if (Auth::attempt($credentials, $remember)) {
             $request->session()->regenerate();

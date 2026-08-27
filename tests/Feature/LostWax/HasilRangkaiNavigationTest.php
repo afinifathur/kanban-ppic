@@ -3,7 +3,6 @@
 namespace Tests\Feature\LostWax;
 
 use App\Models\LostWaxPrintOrder;
-use App\Models\LostWaxRangkaiWorkOrder;
 use App\Models\ProductionPlan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
