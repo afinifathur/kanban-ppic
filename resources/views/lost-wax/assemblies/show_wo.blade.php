@@ -20,18 +20,30 @@
 @section('content')
     <div class="space-y-6 max-w-6xl">
         
-        <!-- HEADER / IDENTITAS DOKUMEN -->
-        <div class="bg-slate-900 text-white rounded-xl shadow-sm border border-slate-800 overflow-hidden p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-                <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">Lost Wax Assembly Work Order</span>
-                <div class="text-xl font-extrabold flex items-center gap-2 mt-0.5">
-                    <i class="fas fa-file-invoice text-amber-400"></i>
-                    No. WO: <span class="text-amber-400">{{ $workOrder->rangkai_order_number }}</span>
+        <!-- HEADER / IDENTITAS DOKUMEN (BAGIAN B) -->
+        <div class="bg-slate-900 text-white rounded-xl shadow-sm border border-slate-800 overflow-hidden p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1.5">
+                <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">LOST WAX ASSEMBLY WORK ORDER</span>
+                <!-- NAMA PRODUK UTAMA (LEBIH BESAR DARI NO WO) -->
+                <h1 class="text-2xl md:text-3xl font-black text-white tracking-tight leading-tight">
+                    {{ $productName ?? $line->item_name ?? 'PRODUK RANGKAI' }}
+                </h1>
+                <div class="flex flex-wrap items-center gap-2 md:gap-3 text-xs text-slate-300 pt-1 font-mono">
+                    <span class="flex items-center gap-1.5">
+                        <i class="fas fa-file-invoice text-amber-400"></i>
+                        No. WO: <strong class="text-amber-300 font-bold">{{ $workOrder->rangkai_order_number }}</strong>
+                    </span>
+                    <span>&bull;</span>
+                    <span>Kode: <strong class="text-white">{{ $line->code ?? '-' }}</strong></span>
+                    @if($line->customer)
+                        <span>&bull;</span>
+                        <span>Customer: <strong class="text-white">{{ $line->customer }}</strong></span>
+                    @endif
                 </div>
             </div>
-            <div>
-                <span class="px-3 py-1 rounded-full text-xs font-black uppercase border
-                    {{ $workOrder->status === 'COMPLETED' ? 'bg-emerald-950 text-emerald-350 border-emerald-800' : ($workOrder->status === 'IN_PROGRESS' ? 'bg-amber-950 text-amber-355 border-amber-800' : 'bg-slate-850 text-slate-300 border-slate-700') }}">
+            <div class="shrink-0">
+                <span class="px-4 py-1.5 rounded-full text-xs font-black uppercase border tracking-wider
+                    {{ $workOrder->status === 'COMPLETED' ? 'bg-emerald-950 text-emerald-300 border-emerald-700' : ($workOrder->status === 'IN_PROGRESS' ? 'bg-amber-950 text-amber-300 border-amber-700' : 'bg-slate-800 text-slate-300 border-slate-700') }}">
                     STATUS: {{ $workOrder->status }}
                 </span>
             </div>
@@ -46,7 +58,7 @@
                 </div>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                <div class="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Sudah Dirangkai</div>
+                <div class="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Sudah Dirangkai (Aktif)</div>
                 <div class="font-extrabold text-lg text-emerald-600 mt-1">
                     {{ number_format($workOrder->qty_executed_pcs) }} <span class="text-xs font-normal text-emerald-500">pcs</span>
                 </div>
@@ -167,28 +179,72 @@
                     </div>
                 @endif
 
-                <!-- RIWAYAT EKSEKUSI -->
+                <!-- RIWAYAT EKSEKUSI (BAGIAN E & K) -->
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
-                    <h2 class="font-bold text-slate-800 text-xs uppercase tracking-wide border-b border-slate-100 pb-2">
-                        Riwayat Eksekusi Rangkai (Chronological)
-                    </h2>
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h2 class="font-bold text-slate-800 text-xs uppercase tracking-wide">
+                            Riwayat Eksekusi Rangkai (Chronological)
+                        </h2>
+                        <span class="text-[10px] text-slate-400">Total: {{ $workOrder->executions->count() }} Eksekusi</span>
+                    </div>
 
                     <div class="space-y-4">
                         @forelse($workOrder->executions->sortBy('created_at') as $exec)
-                            <div class="p-4 rounded-lg border border-slate-200 bg-slate-50 flex flex-col gap-3">
-                                <div class="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 pb-2">
-                                    <span class="font-bold text-slate-700">Eksekusi Rangkai #{{ $loop->iteration }}</span>
-                                    <span>Tanggal Rangkai: <strong class="text-slate-700">{{ $exec->execution_date->format('d-m-Y') }}</strong></span>
+                            <div class="p-4 rounded-xl border {{ $exec->is_cancelled ? 'border-red-200 bg-red-50/40 opacity-80' : 'border-slate-200 bg-slate-50' }} flex flex-col gap-3 transition-all">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 border-b {{ $exec->is_cancelled ? 'border-red-100' : 'border-slate-200' }} pb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold {{ $exec->is_cancelled ? 'text-red-800' : 'text-slate-800' }}">Eksekusi Rangkai #{{ $loop->iteration }}</span>
+                                        <span>&bull;</span>
+                                        <span>Tanggal: <strong class="text-slate-700">{{ $exec->execution_date->format('d-m-Y') }}</strong></span>
+                                    </div>
+                                    
+                                    <!-- UI STATUS BADGES & CANCEL ACTION (BAGIAN K) -->
+                                    <div class="flex items-center gap-2">
+                                        @if($exec->is_cancelled)
+                                            <span class="px-2.5 py-1 rounded text-[10px] font-extrabold bg-red-100 text-red-700 border border-red-300 uppercase tracking-wide flex items-center gap-1 shadow-2xs">
+                                                <i class="fas fa-ban"></i> Traveler Dibatalkan
+                                            </span>
+                                        @elseif($exec->is_scanned)
+                                            <span class="px-2.5 py-1 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase tracking-wide flex items-center gap-1 shadow-2xs">
+                                                <i class="fas fa-check-double"></i> Traveler Sudah Diproses (Layer 1)
+                                            </span>
+                                        @else
+                                            <span class="px-2.5 py-1 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300 uppercase tracking-wide flex items-center gap-1 shadow-2xs">
+                                                <i class="fas fa-file-invoice"></i> Traveler Sudah Terbit
+                                            </span>
+                                            <button type="button" 
+                                                onclick="openCancelModal({{ $exec->id }}, '{{ $exec->execution_date->format('d-m-Y') }}', {{ $exec->trees_created }}, {{ $exec->trees->sum('quantity') }})"
+                                                class="bg-white hover:bg-red-50 text-red-600 hover:text-red-700 border border-red-200 text-[10px] font-bold px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 shadow-2xs">
+                                                <i class="fas fa-times-circle"></i> Batalkan Traveler
+                                            </button>
+                                        @endif
+                                    </div>
                                 </div>
+
+                                @if($exec->is_cancelled)
+                                    <!-- AUDIT INFO DIBATALKAN -->
+                                    <div class="p-2.5 rounded-lg bg-red-100/70 border border-red-200 text-xs text-red-800 space-y-1">
+                                        <div class="flex items-center gap-1.5 font-bold">
+                                            <i class="fas fa-info-circle"></i> Informasi Pembatalan:
+                                        </div>
+                                        <div class="text-[11px] leading-relaxed">
+                                            Dibatalkan oleh: <strong>{{ $exec->canceller?->name ?? 'User' }}</strong> 
+                                            pada <strong>{{ $exec->cancelled_at ? $exec->cancelled_at->format('d-m-Y H:i') : '-' }}</strong>
+                                        </div>
+                                        <div class="text-[11px] italic bg-white/70 p-1.5 rounded border border-red-200/50">
+                                            "{{ $exec->cancellation_reason }}"
+                                        </div>
+                                    </div>
+                                @endif
 
                                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                                     <div>
                                         <span class="text-slate-400 block mb-0.5">Pohon Dibuat</span>
-                                        <strong class="text-slate-700 text-sm">{{ $exec->trees_created }} Tree</strong>
+                                        <strong class="{{ $exec->is_cancelled ? 'text-slate-400 line-through' : 'text-slate-700' }} text-sm">{{ $exec->trees_created }} Tree</strong>
                                     </div>
                                     <div>
                                         <span class="text-slate-400 block mb-0.5">Total Pcs Good</span>
-                                        <strong class="text-slate-700 text-sm">{{ number_format($exec->trees->sum('quantity')) }} pcs</strong>
+                                        <strong class="{{ $exec->is_cancelled ? 'text-slate-400 line-through' : 'text-slate-700' }} text-sm">{{ number_format($exec->trees->sum('quantity')) }} pcs</strong>
                                     </div>
                                     <div>
                                         <span class="text-slate-400 block mb-0.5">Dicatat Oleh</span>
@@ -200,14 +256,23 @@
                                     </div>
                                 </div>
 
-                                <div class="mt-2 border-t border-slate-200 pt-2.5">
-                                    <div class="text-[9px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">Pohon Fisik (LostWaxTree) Terbentuk:</div>
+                                <div class="mt-2 border-t {{ $exec->is_cancelled ? 'border-red-100' : 'border-slate-200' }} pt-2.5">
+                                    <div class="text-[9px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                                        Pohon Fisik (LostWaxTree) {{ $exec->is_cancelled ? 'Non-Aktif / Dibatalkan' : 'Terbentuk' }}:
+                                    </div>
                                     <div class="flex flex-wrap gap-2">
                                         @foreach($exec->trees as $tree)
-                                            <a href="{{ route('lost-wax.trees.show', $tree) }}" class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:border-amber-400 text-slate-700 hover:text-amber-800 text-[10px] font-bold px-2 py-1 rounded transition-all shadow-sm">
-                                                <i class="fas fa-barcode text-slate-400"></i>
-                                                {{ $tree->barcode }} ({{ $tree->quantity }} pcs)
-                                            </a>
+                                            @if($exec->is_cancelled)
+                                                <span class="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-400 line-through text-[10px] font-medium px-2 py-1 rounded">
+                                                    <i class="fas fa-barcode"></i>
+                                                    {{ $tree->barcode }} ({{ $tree->quantity }} pcs)
+                                                </span>
+                                            @else
+                                                <a href="{{ route('lost-wax.trees.show', $tree) }}" class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:border-amber-400 text-slate-700 hover:text-amber-800 text-[10px] font-bold px-2 py-1 rounded transition-all shadow-sm">
+                                                    <i class="fas fa-barcode text-slate-400"></i>
+                                                    {{ $tree->barcode }} ({{ $tree->quantity }} pcs)
+                                                </a>
+                                            @endif
                                         @endforeach
                                     </div>
                                 </div>
@@ -234,7 +299,7 @@
                     <div class="space-y-3 text-xs">
                         <div class="flex justify-between border-b border-slate-50 pb-1.5">
                             <span class="text-slate-500">No WO Rangkai:</span>
-                            <span class="font-bold text-slate-800">{{ $workOrder->rangkai_order_number }}</span>
+                            <span class="font-bold text-slate-800 font-mono">{{ $workOrder->rangkai_order_number }}</span>
                         </div>
                         <div class="flex justify-between border-b border-slate-50 pb-1.5">
                             <span class="text-slate-500">Kode Produksi:</span>
@@ -242,7 +307,7 @@
                         </div>
                         <div class="flex justify-between border-b border-slate-50 pb-1.5">
                             <span class="text-slate-500">No Perintah Cetak:</span>
-                            <a href="{{ route('lost-wax.print-orders.show', $line->lost_wax_print_order_id) }}" class="font-bold text-amber-600 hover:underline">
+                            <a href="{{ route('lost-wax.print-orders.show', $line->lost_wax_print_order_id) }}" class="font-bold text-amber-600 hover:underline font-mono">
                                 {{ $line->printOrder->print_order_number }}
                             </a>
                         </div>
@@ -281,21 +346,54 @@
                     </div>
                 </div>
 
-                <!-- REFERENSI VISUAL RANGKAI -->
+                <!-- REFERENSI VISUAL RANGKAI (AUTO PHOTO ON TRAVELER & WO DETAIL) -->
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
-                    <h2 class="font-bold text-slate-800 text-xs uppercase tracking-wide border-b border-slate-100 pb-2">
-                        Referensi Visual Rangkai (A5)
-                    </h2>
-                    <div class="space-y-3">
-                        <div class="border-2 border-dashed border-slate-200 rounded-lg p-4 bg-slate-50/50 flex flex-col items-center justify-center text-center">
-                            <i class="fas fa-camera text-slate-300 text-lg mb-1.5"></i>
-                            <div class="text-[10px] font-semibold text-slate-500">Foto Referensi Tampak Depan</div>
-                            <div class="text-[8px] text-slate-400 mt-0.5">Placeholder</div>
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h2 class="font-bold text-slate-800 text-xs uppercase tracking-wide">
+                            Referensi Visual Rangkai
+                        </h2>
+                        @if($assemblyPhoto)
+                            <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">Master Foto Aktif</span>
+                        @else
+                            <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-500">Placeholder</span>
+                        @endif
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <!-- Foto Depan -->
+                        <div>
+                            <div class="text-[10px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+                                <i class="fas fa-camera text-slate-400"></i> Foto Tampak Depan
+                            </div>
+                            @if($assemblyPhoto && $assemblyPhoto->front_photo_url)
+                                <div class="rounded-lg border border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center">
+                                    <img src="{{ $assemblyPhoto->front_photo_url }}" alt="Foto Tampak Depan" class="w-full h-44 object-contain">
+                                </div>
+                            @else
+                                <div class="border-2 border-dashed border-slate-200 rounded-lg p-6 bg-slate-50/50 flex flex-col items-center justify-center text-center">
+                                    <i class="fas fa-camera text-slate-300 text-xl mb-1.5"></i>
+                                    <div class="text-[10px] font-semibold text-slate-500">Belum Ada Foto Depan</div>
+                                    <div class="text-[8px] text-slate-400 mt-0.5">Kelola di Setting &rarr; Foto Rangkai</div>
+                                </div>
+                            @endif
                         </div>
-                        <div class="border-2 border-dashed border-slate-200 rounded-lg p-4 bg-slate-50/50 flex flex-col items-center justify-center text-center">
-                            <i class="fas fa-camera text-slate-300 text-lg mb-1.5"></i>
-                            <div class="text-[10px] font-semibold text-slate-500">Foto Referensi Tampak Samping</div>
-                            <div class="text-[8px] text-slate-400 mt-0.5">Placeholder</div>
+
+                        <!-- Foto Samping -->
+                        <div>
+                            <div class="text-[10px] font-bold text-slate-600 mb-1 flex items-center gap-1">
+                                <i class="fas fa-camera text-slate-400"></i> Foto Tampak Samping
+                            </div>
+                            @if($assemblyPhoto && $assemblyPhoto->side_photo_url)
+                                <div class="rounded-lg border border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center">
+                                    <img src="{{ $assemblyPhoto->side_photo_url }}" alt="Foto Tampak Samping" class="w-full h-44 object-contain">
+                                </div>
+                            @else
+                                <div class="border-2 border-dashed border-slate-200 rounded-lg p-6 bg-slate-50/50 flex flex-col items-center justify-center text-center">
+                                    <i class="fas fa-camera text-slate-300 text-xl mb-1.5"></i>
+                                    <div class="text-[10px] font-semibold text-slate-500">Belum Ada Foto Samping</div>
+                                    <div class="text-[8px] text-slate-400 mt-0.5">Kelola di Setting &rarr; Foto Rangkai</div>
+                                </div>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -304,40 +402,159 @@
     </div>
 
     @if($workOrder->qty_outstanding > 0)
-        <!-- CONFIRMATION MODAL -->
+        <!-- CONFIRMATION MODAL TERBITKAN TRAVELER (BAGIAN C) -->
         <div id="confirmTravelerModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 transform transition-all">
+            <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 transform transition-all">
                 <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                        <i class="fas fa-exclamation-triangle text-lg"></i>
+                    <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                        <i class="fas fa-clipboard-check text-xl"></i>
                     </div>
-                    <div class="flex-1">
-                        <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wide" id="modal-title">
-                            Konfirmasi Terbitkan Traveler
+                    <div class="flex-1 min-w-0">
+                        <span class="text-[10px] font-extrabold uppercase text-amber-700 tracking-wider block">Konfirmasi Perangkaian</span>
+                        <h3 class="text-base font-black text-slate-900 leading-snug" id="modal-title">
+                            KONFIRMASI TERBITKAN TRAVELER
                         </h3>
-                        <p class="text-xs font-semibold text-slate-800 mt-1">
-                            Apakah data eksekusi sudah benar?
+                        <p class="text-xs font-bold text-slate-700 mt-0.5 truncate">
+                            {{ $productName ?? $line->item_name }}
                         </p>
-                        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                            Setelah Traveler diterbitkan, data akan diproses sebagai hasil eksekusi dan tidak boleh diterbitkan secara tidak sengaja.
+                        <p class="text-[11px] font-mono text-amber-600 font-bold">
+                            {{ $workOrder->rangkai_order_number }}
                         </p>
                     </div>
                 </div>
 
+                <!-- DETAIL AKTUAL EKSEKUSI (MENCEGAH HUMAN ERROR TERTUKAR TREE vs PCS) -->
+                <div class="mt-5 bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div class="grid grid-cols-2 gap-3 text-center">
+                        <div class="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs">
+                            <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider block mb-1">JUMLAH RANGKAIAN</span>
+                            <div class="text-xl font-black text-slate-900">
+                                <span id="modalTreesCount">0</span> <span class="text-xs font-semibold text-slate-500">tree</span>
+                            </div>
+                        </div>
+                        <div class="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs">
+                            <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider block mb-1">ISI SETIAP RANGKAIAN</span>
+                            <div class="text-xl font-black text-slate-900">
+                                <span id="modalTreeCapacity">0</span> <span class="text-xs font-semibold text-slate-500">pcs/tree</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-amber-50/80 border border-amber-200/80 rounded-lg p-3 text-center">
+                        <span class="text-[9px] uppercase font-bold text-amber-800 tracking-wider block mb-0.5">TOTAL HASIL RANGKAI</span>
+                        <div class="text-2xl font-black text-amber-700">
+                            <span id="modalTotalPcs">0</span> <span class="text-sm font-bold text-amber-800">pcs</span>
+                        </div>
+                        <div id="modalBreakdownNote" class="text-[10px] text-amber-700/90 font-medium mt-1"></div>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 space-y-1">
+                    <p class="font-bold text-slate-800 text-xs">Apakah data eksekusi di atas sudah benar?</p>
+                    <p class="text-[11px] text-red-700 leading-relaxed">
+                        <strong>Warning:</strong> Setelah Traveler diterbitkan, dokumen akan menjadi hasil eksekusi fisik dan tidak dapat diterbitkan secara tidak sengaja.
+                    </p>
+                </div>
+
                 <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-                    <button type="button" id="cancelConfirmBtn" class="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-slate-300">
+                    <button type="button" id="cancelConfirmBtn" class="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-slate-300">
                         Batal
                     </button>
-                    <button type="button" id="proceedConfirmBtn" class="px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors shadow-sm flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <button type="button" id="proceedConfirmBtn" class="px-5 py-2.5 text-xs font-black text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors shadow-sm flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500">
                         <i class="fas fa-check"></i> Ya, Terbitkan Traveler
                     </button>
                 </div>
             </div>
         </div>
+    @endif
 
-        <!-- Real-time calculation and confirmation script -->
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
+    <!-- MODAL BATALKAN TRAVELER (BAGIAN E) -->
+    <div id="cancelTravelerModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" aria-labelledby="cancel-modal-title" role="dialog" aria-modal="true">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 transform transition-all">
+            <form id="cancelTravelerForm" method="POST" action="">
+                @csrf
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                        <i class="fas fa-exclamation-circle text-xl"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <span class="text-[10px] font-extrabold uppercase text-red-700 tracking-wider block">Pembatalan Traveler</span>
+                        <h3 class="text-base font-black text-slate-900 leading-snug" id="cancel-modal-title">
+                            BATALKAN TRAVELER?
+                        </h3>
+                        <p class="text-xs font-bold text-slate-700 mt-0.5 truncate">
+                            {{ $productName ?? $line->item_name }}
+                        </p>
+                        <p class="text-[11px] font-mono text-amber-600 font-bold">
+                            {{ $workOrder->rangkai_order_number }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                    <div class="font-bold flex items-center gap-1.5 mb-1 text-amber-900">
+                        <i class="fas fa-info-circle"></i> Info Boundary:
+                    </div>
+                    <p class="text-[11px] leading-relaxed">
+                        Traveler ini <strong>belum melakukan Scan Layer 1</strong> dan masih dapat dibatalkan. Seluruh rangkaian (tree) terkait akan dinonaktifkan dan kuantitas akan dikembalikan ke outstanding.
+                    </p>
+                </div>
+
+                <div class="mt-4 space-y-2">
+                    <label class="block text-xs font-bold text-slate-800">
+                        Alasan Pembatalan <span class="text-red-500">*</span>
+                    </label>
+                    <textarea name="cancellation_reason" id="cancellationReasonInput" rows="3" required
+                        placeholder="Contoh: Salah jumlah rangkaian / Salah isi per rangkaian / Salah setting..."
+                        class="w-full rounded-lg border-slate-300 text-xs focus:border-red-500 focus:ring-red-500 shadow-sm leading-relaxed"></textarea>
+                    <span class="text-[10px] text-slate-400 block">Alasan pembatalan wajib diisi sebagai audit trail.</span>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeCancelModal()" class="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                        Kembali
+                    </button>
+                    <button type="submit" id="submitCancelBtn" class="px-5 py-2.5 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm flex items-center gap-1.5">
+                        <i class="fas fa-trash-alt"></i> Ya, Batalkan Traveler
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT REAL-TIME CALCULATION, CONFIRMATION MODAL & CANCELLATION MODAL -->
+    <script>
+        // Global helper for opening cancellation modal
+        function openCancelModal(executionId, executionDate, treesCount, totalPcs) {
+            const modal = document.getElementById('cancelTravelerModal');
+            const form = document.getElementById('cancelTravelerForm');
+            const reasonInput = document.getElementById('cancellationReasonInput');
+            
+            form.action = `/lost-wax/assemblies/executions/${executionId}/cancel`;
+            reasonInput.value = '';
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => reasonInput.focus(), 50);
+        }
+
+        function closeCancelModal() {
+            const modal = document.getElementById('cancelTravelerModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const cancelModal = document.getElementById('cancelTravelerModal');
+            if (cancelModal) {
+                cancelModal.addEventListener('click', function (e) {
+                    if (e.target === cancelModal) {
+                        closeCancelModal();
+                    }
+                });
+            }
+
+            @if($workOrder->qty_outstanding > 0)
                 const qtyInput = document.getElementById('qtyExecutionInput');
                 const capacityInput = document.getElementById('capacityGuideInput');
                 const treesCountInput = document.getElementById('treesCreatedInput');
@@ -349,6 +566,11 @@
                 const modal = document.getElementById('confirmTravelerModal');
                 const cancelBtn = document.getElementById('cancelConfirmBtn');
                 const proceedBtn = document.getElementById('proceedConfirmBtn');
+
+                const modalTreesCount = document.getElementById('modalTreesCount');
+                const modalTreeCapacity = document.getElementById('modalTreeCapacity');
+                const modalTotalPcs = document.getElementById('modalTotalPcs');
+                const modalBreakdownNote = document.getElementById('modalBreakdownNote');
 
                 let confirmedSubmit = false;
                 
@@ -449,6 +671,31 @@
                 }
 
                 function openConfirmationModal() {
+                    // Populate modal with actual values
+                    const qtyRows = document.querySelectorAll('.tree-qty');
+                    const numTrees = qtyRows.length;
+                    let total = 0;
+                    const values = [];
+                    qtyRows.forEach(input => {
+                        const val = parseInt(input.value) || 0;
+                        total += val;
+                        values.push(val);
+                    });
+
+                    modalTreesCount.textContent = numTrees;
+                    modalTotalPcs.textContent = new Intl.NumberFormat().format(total);
+
+                    // Check if uniform
+                    const allEqual = values.every(v => v === values[0]);
+                    if (allEqual && numTrees > 0) {
+                        modalTreeCapacity.textContent = values[0];
+                        modalBreakdownNote.textContent = `${numTrees} tree × ${values[0]} pcs = ${total} pcs`;
+                    } else {
+                        const avg = numTrees > 0 ? (total / numTrees).toFixed(1) : 0;
+                        modalTreeCapacity.textContent = avg;
+                        modalBreakdownNote.textContent = `Distribusi bervariasi (${values.join(', ')} pcs)`;
+                    }
+
                     modal.classList.remove('hidden');
                     modal.classList.add('flex');
                     if (proceedBtn) {
@@ -517,6 +764,9 @@
                     if (modal && !modal.classList.contains('hidden') && e.key === 'Escape') {
                         closeConfirmationModal();
                     }
+                    if (cancelModal && !cancelModal.classList.contains('hidden') && e.key === 'Escape') {
+                        closeCancelModal();
+                    }
                 });
 
                 if (proceedBtn) {
@@ -538,7 +788,7 @@
                         form.submit();
                     });
                 }
-            });
-        </script>
-    @endif
+            @endif
+        });
+    </script>
 @endsection

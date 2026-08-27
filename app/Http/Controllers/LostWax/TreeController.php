@@ -21,7 +21,7 @@ class TreeController extends Controller
             'printOrderLine.printOrder',
             'printOrderLine.productionPlan',
             'coatingRack',
-        ]);
+        ])->where('status', '!=', 'cancelled');
 
         $scope = auth()->user()->product_scope;
         $isPpic = auth()->user()->hasRole('ppic');
@@ -237,6 +237,7 @@ class TreeController extends Controller
             'coatingRack',
         ])
             ->whereIn('id', $ids)
+            ->where('status', '!=', 'cancelled')
             ->get();
 
         $validTrees = [];
@@ -284,6 +285,10 @@ class TreeController extends Controller
 
             if (! $tree) {
                 return response()->json(['success' => false, 'message' => "Rangkaian dengan ID {$id} tidak ditemukan."], 404);
+            }
+
+            if ($tree->status === 'cancelled') {
+                return response()->json(['success' => false, 'message' => "Rangkaian {$tree->barcode} sudah dibatalkan."], 422);
             }
 
             $this->authorizeTree($tree);

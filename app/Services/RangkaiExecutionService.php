@@ -156,4 +156,65 @@ class RangkaiExecutionService
             return $execution;
         });
     }
+
+    /**
+     * Cancel an existing Rangkai Execution and its associated physical trees before Layer 1 scan.
+     */
+    public function cancelExecution(LostWaxRangkaiExecution $execution, string $reason, ?\App\Models\User $user = null): LostWaxRangkaiExecution
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \InvalidArgumentException('Alasan pembatalan wajib diisi.');
+        }
+
+        return DB::transaction(function () use ($execution, $reason, $user) {
+            $lockedExecution = LostWaxRangkaiExecution::with('trees.scanEvents')->lockForUpdate()->findOrFail($execution->id);
+            $lockedWo = LostWaxRangkaiWorkOrder::lockForUpdate()->findOrFail($lockedExecution->rangkai_work_order_id);
+
+            // Guard 1: Cannot cancel if already cancelled
+            if ($lockedExecution->status === 'CANCELLED') {
+                throw new \InvalidArgumentException('Traveler ini sudah dalam status dibatalkan.');
+            }
+
+            // Guard 2: Strict Scan Boundary Check (Cannot cancel if ANY tree has been scanned)
+            $scannedTrees = $lockedExecution->trees->filter(function ($tree) {
+                return $tree->current_stage !== null || $tree->scanEvents()->where('result', 'success')->exists();
+            });
+
+            if ($scannedTrees->isNotEmpty()) {
+                throw new \InvalidArgumentException('Traveler tidak dapat dibatalkan karena satu atau lebih rangkaian (tree) sudah melalui Scan Layer 1.');
+            }
+
+            // 1. Mark execution as CANCELLED
+            $lockedExecution->update([
+                'status' => 'CANCELLED',
+                'cancelled_at' => now(),
+                'cancelled_by' => $user?->id ?? auth()->id() ?? 1,
+                'cancellation_reason' => $reason,
+            ]);
+
+            // 2. Mark all linked trees as cancelled
+            foreach ($lockedExecution->trees as $tree) {
+                $tree->update([
+                    'status' => 'cancelled',
+                ]);
+            }
+
+            // 3. Recalculate Work Order Status
+            $lockedWo->load('executions.trees');
+            $newOutstanding = $lockedWo->qty_outstanding;
+            $executedPcs = $lockedWo->qty_executed_pcs;
+
+            if ($executedPcs === 0) {
+                $lockedWo->status = 'OPEN';
+            } elseif ($newOutstanding === 0) {
+                $lockedWo->status = 'COMPLETED';
+            } else {
+                $lockedWo->status = 'IN_PROGRESS';
+            }
+            $lockedWo->save();
+
+            return $lockedExecution;
+        });
+    }
 }

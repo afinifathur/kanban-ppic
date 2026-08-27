@@ -79,7 +79,7 @@ class LostWaxPrintOrderLine extends Model
             ? (int) $this->qty_executed_good
             : (int) ($this->qty_actual_good ?? 0);
 
-        $allocated = (int) $this->trees()->sum('quantity');
+        $allocated = (int) $this->trees()->where('status', '!=', 'cancelled')->sum('quantity');
 
         return max(0, $good - $allocated);
     }

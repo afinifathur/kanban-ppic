@@ -21,6 +21,10 @@ class ScanService
                 return $this->reject('Barcode tidak ditemukan.', $barcode, null, $operatorId);
             }
 
+            if ($tree->status === 'cancelled') {
+                return $this->reject('Barcode berasal dari Traveler yang sudah dibatalkan.', $barcode, $tree->id, $operatorId);
+            }
+
             $nextStage = $tree->nextStage();
 
             if (! $nextStage) {

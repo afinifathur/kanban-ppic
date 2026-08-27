@@ -219,9 +219,8 @@ class HasilRangkaiNavigationTest extends TestCase
 
         // Check for confirmation modal elements
         $response->assertSee('confirmTravelerModal');
-        $response->assertSee('Konfirmasi Terbitkan Traveler');
-        $response->assertSee('Apakah data eksekusi sudah benar?');
-        $response->assertSee('Setelah Traveler diterbitkan, data akan diproses sebagai hasil eksekusi dan tidak boleh diterbitkan secara tidak sengaja.');
+        $response->assertSee('KONFIRMASI TERBITKAN TRAVELER');
+        $response->assertSee('Apakah data eksekusi di atas sudah benar?');
         $response->assertSee('cancelConfirmBtn');
         $response->assertSee('proceedConfirmBtn');
         $response->assertSee('Ya, Terbitkan Traveler');

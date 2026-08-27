@@ -170,8 +170,10 @@ class AssemblyController extends Controller
         $this->authorizeWorkOrder($workOrder);
         $workOrder->load([
             'printOrderLine.printOrder',
+            'printOrderLine.productionPlan',
             'executions.recorder',
-            'executions.trees',
+            'executions.canceller',
+            'executions.trees.scanEvents',
         ]);
 
         $line = $workOrder->printOrderLine;
@@ -191,13 +193,22 @@ class AssemblyController extends Controller
         $families = config('lost_wax.families', []);
         $familyCode = $this->guessFamilyCode($line->aisi ?? '', $line->item_name);
 
+        $productCode = $line->productionPlan?->item_code ?? $line->code;
+        $productName = $line->item_name ?? $line->productionPlan?->item_name;
+
+        $photoService = app(\App\Services\AssemblyPhotoService::class);
+        $assemblyPhoto = $photoService->getCurrentPhoto($productCode, $productName);
+
         return view('lost-wax.assemblies.show_wo', compact(
             'workOrder',
             'line',
             'proposed',
             'families',
             'familyCode',
-            'capacity'
+            'capacity',
+            'productName',
+            'productCode',
+            'assemblyPhoto'
         ));
     }
 
@@ -247,9 +258,30 @@ class AssemblyController extends Controller
             ]);
 
             return redirect()->route('lost-wax.assemblies.work-orders.show', $workOrder)
-                ->with('success', 'Hasil eksekusi rangkai berhasil dicatat.');
+                ->with('success', 'Hasil eksekusi rangkai berhasil dicatat dan Traveler berhasil diterbitkan.');
         } catch (\Exception $e) {
             return back()->withInput()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Cancel an issued Rangkai Execution (Traveler) before Layer 1 scan.
+     */
+    public function cancelExecution(Request $request, \App\Models\LostWaxRangkaiExecution $execution)
+    {
+        $this->authorizeWorkOrder($execution->workOrder);
+        $request->validate([
+            'cancellation_reason' => 'required|string|max:500',
+        ]);
+
+        try {
+            $service = app(\App\Services\RangkaiExecutionService::class);
+            $service->cancelExecution($execution, $request->cancellation_reason, auth()->user());
+
+            return redirect()->route('lost-wax.assemblies.work-orders.show', $execution->workOrder)
+                ->with('success', 'Traveler eksekusi tanggal '.$execution->execution_date->format('d-m-Y').' berhasil dibatalkan.');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
         }
     }
 

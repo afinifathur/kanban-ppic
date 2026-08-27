@@ -70,16 +70,16 @@ class LostWaxRangkaiWorkOrder extends Model
     // Accessor: Qty Executed (Good) in pcs
     public function getQtyExecutedPcsAttribute(): int
     {
-        // Rangkai execution sum of trees * capacity
-        return $this->executions->sum(function ($exec) {
-            return $exec->trees->sum('quantity');
+        // Rangkai execution sum of active trees
+        return $this->executions->where('status', '!=', 'CANCELLED')->sum(function ($exec) {
+            return $exec->trees->where('status', '!=', 'cancelled')->sum('quantity');
         });
     }
 
     // Accessor: Total Trees Completed
     public function getTreesCompletedAttribute(): int
     {
-        return $this->executions->sum('trees_created');
+        return $this->executions->where('status', '!=', 'CANCELLED')->sum('trees_created');
     }
 
     // Accessor: Outstanding in pcs
