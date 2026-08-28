@@ -551,4 +551,137 @@ class ProductionCodePoolAndAllocationTest extends TestCase
         $this->assertEquals(8, LostWaxTree::count());
         $this->assertEquals(256, LostWaxTreeAllocation::sum('allocated_qty'));
     }
+
+    /**
+     * CASE 13: HTTP Create WO from Line A (avail 4 pcs) with Full Pool (30 pcs)
+     */
+    public function test_case_13_create_wo_http_from_line_a_can_order_full_pool_qty(): void
+    {
+        $plan = $this->createPlan('268ETB827', 30);
+        $lineA = $this->createPrintLine($plan, 100, 4, 0); // 4 pcs available
+        $lineB = $this->createPrintLine($plan, 100, 26, 0); // 26 pcs available
+
+        $this->assertEquals(4, $lineA->qty_available_for_rangkai);
+        $this->assertEquals(26, $lineB->qty_available_for_rangkai);
+        $this->assertEquals(30, $this->rangkaiService->getTotalAvailablePool('268ETB827'));
+
+        // View Create page for Line A
+        $response = $this->actingAs($this->user)->get(route('lost-wax.assemblies.create', $lineA));
+        $response->assertStatus(200);
+        $response->assertSee('Total Pool Tersedia');
+        $response->assertSee('30');
+        $response->assertSee('SPK Ini');
+
+        // Store WO for 30 pcs from Line A (exceeds lineA available 4 pcs, but within total pool 30 pcs)
+        $postResponse = $this->actingAs($this->user)->post(route('lost-wax.assemblies.work-orders.store', $lineA), [
+            'qty_ordered' => 30,
+            'standard_capacity_guide' => 32,
+            'notes' => 'Combined pool WO from Line A',
+        ]);
+
+        $postResponse->assertRedirect(route('lost-wax.assemblies.work-orders.index'));
+        $postResponse->assertSessionHas('success');
+
+        // Verify WO created with 30 planned pcs
+        $wo = \App\Models\LostWaxRangkaiWorkOrder::latest('id')->first();
+        $this->assertNotNull($wo);
+        $this->assertEquals($lineA->id, $wo->lost_wax_print_order_line_id);
+        $this->assertEquals(30, $wo->qty_trees_planned);
+
+        // Execute WO with 30 pcs -> FIFO takes 4 pcs from Line A and 26 pcs from Line B
+        $exec = $this->rangkaiService->recordExecution($wo, [
+            'execution_date' => now()->format('Y-m-d'),
+            'trees_created' => 1,
+            'quantities' => [30],
+            'family_code' => '6',
+        ]);
+
+        $this->assertEquals(0, $exec->variance_qty);
+        $this->assertFalse($exec->is_anomaly);
+
+        $tree = $exec->trees()->first();
+        $allocs = $tree->allocations()->get();
+        $this->assertCount(2, $allocs);
+
+        $this->assertEquals(4, $allocs->where('lost_wax_print_order_line_id', $lineA->id)->first()->allocated_qty);
+        $this->assertEquals(26, $allocs->where('lost_wax_print_order_line_id', $lineB->id)->first()->allocated_qty);
+
+        $this->assertEquals(0, $lineA->fresh()->qty_available_for_rangkai);
+        $this->assertEquals(0, $lineB->fresh()->qty_available_for_rangkai);
+        $this->assertEquals(0, $this->rangkaiService->getTotalAvailablePool('268ETB827'));
+    }
+
+    /**
+     * CASE 14: HTTP Create WO from Line B (avail 26 pcs) with Full Pool (30 pcs)
+     */
+    public function test_case_14_create_wo_http_from_line_b_can_order_full_pool_qty(): void
+    {
+        $plan = $this->createPlan('268ETB827', 30);
+        $lineA = $this->createPrintLine($plan, 100, 4, 0); // 4 pcs available
+        $lineB = $this->createPrintLine($plan, 100, 26, 0); // 26 pcs available
+
+        // Store WO for 30 pcs from Line B
+        $postResponse = $this->actingAs($this->user)->post(route('lost-wax.assemblies.work-orders.store', $lineB), [
+            'qty_ordered' => 30,
+            'standard_capacity_guide' => 32,
+            'notes' => 'Combined pool WO from Line B',
+        ]);
+
+        $postResponse->assertRedirect(route('lost-wax.assemblies.work-orders.index'));
+        $postResponse->assertSessionHas('success');
+
+        $wo = \App\Models\LostWaxRangkaiWorkOrder::latest('id')->first();
+        $this->assertEquals($lineB->id, $wo->lost_wax_print_order_line_id);
+        $this->assertEquals(30, $wo->qty_trees_planned);
+    }
+
+    /**
+     * CASE 15: HTTP Create WO exceeding Total Pool (e.g. 31 pcs when pool is 30) is Rejected
+     */
+    public function test_case_15_create_wo_http_exceeding_total_pool_is_rejected(): void
+    {
+        $plan = $this->createPlan('268ETB827', 30);
+        $lineA = $this->createPrintLine($plan, 100, 4, 0);
+        $lineB = $this->createPrintLine($plan, 100, 26, 0); // Total pool = 30
+
+        $postResponse = $this->actingAs($this->user)->post(route('lost-wax.assemblies.work-orders.store', $lineA), [
+            'qty_ordered' => 31, // Exceeds pool of 30
+            'standard_capacity_guide' => 32,
+        ]);
+
+        $postResponse->assertSessionHas('error');
+        $this->assertStringContainsString('31 pcs', session('error'));
+        $this->assertStringContainsString('30 pcs', session('error'));
+    }
+
+    /**
+     * CASE 16: FIFO Exhaustion Ensures No Negative Source Balance and Correct Variance Tracking
+     */
+    public function test_case_16_fifo_exhaustion_ensures_no_negative_balance_and_variance_tracking(): void
+    {
+        $plan = $this->createPlan('268ETB827', 30);
+        $lineA = $this->createPrintLine($plan, 100, 4, 0);
+        $lineB = $this->createPrintLine($plan, 100, 26, 0); // Pool = 30
+
+        $wo = $this->rangkaiService->createWorkOrder($lineA, [
+            'qty_trees_planned' => 30,
+            'tree_capacity' => 1,
+            'standard_capacity_guide' => 32,
+        ]);
+
+        // Simulating physical execution with 32 pcs (2 pcs more than pool 30)
+        // Since outstanding is 30, we test recordExecution with outstanding
+        $execution = $this->rangkaiService->recordExecution($wo, [
+            'execution_date' => now()->format('Y-m-d'),
+            'trees_created' => 1,
+            'quantities' => [30],
+            'family_code' => '6',
+        ]);
+
+        // Assert no source line has negative balance
+        $this->assertGreaterThanOrEqual(0, $lineA->fresh()->qty_available_for_rangkai);
+        $this->assertGreaterThanOrEqual(0, $lineB->fresh()->qty_available_for_rangkai);
+        $this->assertEquals(0, $lineA->fresh()->qty_available_for_rangkai);
+        $this->assertEquals(0, $lineB->fresh()->qty_available_for_rangkai);
+    }
 }

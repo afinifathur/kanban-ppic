@@ -140,13 +140,13 @@ class AssemblyController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $available = $line->qty_available_for_rangkai;
-        if ($request->qty_ordered > $available) {
-            return back()->withInput()->with('error', "Total rencana rangkai ({$request->qty_ordered} pcs) tidak boleh melebihi hasil cetak tersedia ({$available} pcs).");
+        $service = app(\App\Services\RangkaiExecutionService::class);
+        $totalPoolAvailable = $service->getTotalAvailablePool($line->code);
+        if ($request->qty_ordered > $totalPoolAvailable) {
+            return back()->withInput()->with('error', "Total rencana rangkai ({$request->qty_ordered} pcs) tidak boleh melebihi hasil cetak tersedia untuk Kode Produksi {$line->code} ({$totalPoolAvailable} pcs).");
         }
 
         try {
-            $service = app(\App\Services\RangkaiExecutionService::class);
             $service->createWorkOrder($line, [
                 'qty_trees_planned' => $request->qty_ordered,
                 'tree_capacity' => 1, // Store 1 as compatibility bridge
@@ -343,19 +343,24 @@ class AssemblyController extends Controller
                 ->with('error', 'Hasil cetak belum dicatat untuk item ini.');
         }
 
-        $availableQty = $line->qty_available_for_rangkai;
-        if ($availableQty <= 0) {
+        $service = app(\App\Services\RangkaiExecutionService::class);
+        $totalPoolAvailable = $service->getTotalAvailablePool($line->code);
+        if ($totalPoolAvailable <= 0) {
             return redirect()->route('lost-wax.assemblies.index')
-                ->with('error', 'Seluruh hasil cetak item ini sudah dirangkai.');
+                ->with('error', 'Seluruh hasil cetak untuk kode produksi ini sudah dirangkai.');
         }
+
+        $poolLines = $service->getAvailableLinesByProductionCode($line->code)->filter(function ($l) {
+            return $l->qty_available_for_rangkai > 0;
+        });
 
         $capacity = (int) $request->input('standard_tree_capacity', $line->standard_tree_capacity);
         if ($capacity < 1) {
             $capacity = 20;
         }
 
-        // Distribute mathematically: remaining quantity sequentially split
-        $remaining = $availableQty;
+        // Distribute mathematically: pool available quantity sequentially split
+        $remaining = $totalPoolAvailable;
         $proposed = [];
         while ($remaining > 0) {
             $qty = min($capacity, $remaining);
@@ -368,7 +373,8 @@ class AssemblyController extends Controller
 
         return view('lost-wax.assemblies.create', compact(
             'line',
-            'availableQty',
+            'totalPoolAvailable',
+            'poolLines',
             'capacity',
             'proposed',
             'families',

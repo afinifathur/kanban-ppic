@@ -60,22 +60,43 @@
                         </div>
 
                         <!-- Divider -->
-                        <div class="border-t border-slate-100 pt-4">
-                            <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-3">Hasil Cetak & Ketersediaan Material</span>
+                        <div class="border-t border-slate-100 pt-4 space-y-3">
+                            <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Ketersediaan Material Pool (Kode Produksi: {{ $line->code ?? '-' }})</span>
                             
-                            <div class="grid grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                                    <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-wider mb-0.5">Hasil Cetak Good</span>
+                                    <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-wider mb-0.5">Hasil SPK Ini</span>
                                     <strong class="text-slate-800 text-base font-bold">{{ number_format($line->qty_executed_good ?: ($line->qty_actual_good ?? 0)) }} <span class="text-[10px] font-normal text-slate-500">pcs</span></strong>
                                 </div>
                                 <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                                    <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-wider mb-0.5">Sudah Dirangkai</span>
-                                    <strong class="text-emerald-700 text-base font-bold">{{ number_format($line->trees()->sum('quantity')) }} <span class="text-[10px] font-normal text-slate-500">pcs</span></strong>
+                                    <span class="text-[9px] uppercase font-bold text-slate-400 block tracking-wider mb-0.5">Sisa SPK Ini</span>
+                                    <strong class="text-slate-700 text-base font-bold">{{ number_format($line->qty_available_for_rangkai) }} <span class="text-[10px] font-normal text-slate-500">pcs</span></strong>
                                 </div>
                                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-                                    <span class="text-[9px] uppercase font-bold text-amber-600 block tracking-wider mb-0.5">Tersedia untuk Rangkai</span>
-                                    <strong class="text-amber-800 text-base font-extrabold">{{ number_format($availableQty) }} <span class="text-[10px] font-bold text-amber-700">pcs</span></strong>
+                                    <span class="text-[9px] uppercase font-bold text-amber-600 block tracking-wider mb-0.5">Total Pool Tersedia</span>
+                                    <strong class="text-amber-800 text-base font-extrabold">{{ number_format($totalPoolAvailable) }} <span class="text-[10px] font-bold text-amber-700">pcs</span></strong>
                                 </div>
+                            </div>
+
+                            <!-- Pool Breakdown -->
+                            <div class="bg-slate-50 rounded-lg p-3 border border-slate-200 text-xs space-y-2">
+                                <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Rincian Sumber Material Pool (FIFO):</span>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    @foreach($poolLines as $pLine)
+                                        <div class="flex items-center justify-between p-2 rounded bg-white border border-slate-200 text-xs">
+                                            <span class="font-medium text-slate-700">
+                                                {{ $pLine->printOrder?->print_order_number ?? 'SPK #' . $pLine->id }}
+                                                @if($pLine->id === $line->id)
+                                                    <span class="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded ml-1 font-semibold">SPK Ini</span>
+                                                @endif
+                                            </span>
+                                            <span class="font-bold text-amber-700">{{ number_format($pLine->qty_available_for_rangkai) }} pcs</span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                                <p class="text-[10px] text-slate-500 italic pt-1">
+                                    <i class="fas fa-info-circle text-amber-600"></i> Material dari SPK cetak dengan Production Code yang sama dapat digabungkan otomatis berdasarkan FIFO.
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -91,9 +112,9 @@
                         <div>
                             <label class="block text-xs font-semibold text-slate-800 mb-1.5">Quantity Diperintahkan (Pcs) <span class="text-red-500">*</span></label>
                             <input type="number" name="qty_ordered" id="qtyOrdered" 
-                                value="{{ old('qty_ordered', $availableQty) }}" min="1" max="{{ $availableQty }}" required 
+                                value="{{ old('qty_ordered', $totalPoolAvailable) }}" min="1" max="{{ $totalPoolAvailable }}" required 
                                 class="w-full rounded-lg border-slate-300 text-sm focus:border-amber-500 focus:ring-amber-500 shadow-sm">
-                            <span class="text-[9px] text-slate-400 block mt-1.5">Tentukan jumlah pcs hasil cetak yang diperintahkan untuk dirangkai.</span>
+                            <span class="text-[9px] text-slate-400 block mt-1.5">Tentukan jumlah pcs hasil cetak yang diperintahkan untuk dirangkai (Maks. {{ number_format($totalPoolAvailable) }} pcs).</span>
                         </div>
 
                         <div>
@@ -180,7 +201,7 @@
         document.addEventListener('DOMContentLoaded', function () {
             const qtyInput = document.getElementById('qtyOrdered');
             const submitBtn = document.getElementById('submitBtn');
-            const maxAvailable = {{ $availableQty }};
+            const maxAvailable = {{ $totalPoolAvailable }};
 
             qtyInput.addEventListener('input', function() {
                 const val = parseInt(qtyInput.value) || 0;
