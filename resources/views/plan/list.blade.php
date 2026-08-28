@@ -100,14 +100,23 @@
                                     <a href="{{ route('plan.edit', $plan->id) }}" class="text-blue-500 hover:text-blue-700" title="Edit Rencana">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <form action="{{ route('plan.destroy', $plan->id) }}" method="POST"
-                                        onsubmit="return confirm('Apakah yakin ingin data {{ $plan->item_name }} dihapus?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="text-red-500 hover:text-red-700" title="Hapus Rencana">
+                                    @php
+                                        $isFrozen = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists();
+                                    @endphp
+                                    @if($isFrozen)
+                                        <span class="text-gray-300 cursor-not-allowed" title="{{ $plan->is_closed ? 'Rencana sudah ditutup dan tidak dapat dihapus.' : ($plan->printOrderLines()->exists() ? 'Rencana sudah memiliki SPK cetak dan tidak dapat dihapus.' : 'Rencana sudah memiliki data produksi dan tidak dapat dihapus.') }}">
                                             <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
+                                        </span>
+                                    @else
+                                        <form action="{{ route('plan.destroy', $plan->id) }}" method="POST"
+                                            onsubmit="return confirm('Apakah yakin ingin data {{ $plan->item_name }} dihapus?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="text-red-500 hover:text-red-700" title="Hapus Rencana">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    @endif
                                 </div>
                             </td>
                         </tr>

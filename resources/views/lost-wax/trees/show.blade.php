@@ -64,9 +64,13 @@
                         <span class="block text-[9px] uppercase font-bold text-slate-400">Tree #</span>
                         <span class="text-sm font-black text-slate-800 font-mono">{{ str_pad((string) $tree->tree_number, 3, '0', STR_PAD_LEFT) }}</span>
                     </div>
-                    <div class="bg-amber-50 border border-amber-100 rounded-lg p-2.5">
-                        <span class="block text-[9px] uppercase font-bold text-amber-700">Quantity</span>
-                        <span class="text-sm font-black text-amber-800">{{ number_format($tree->quantity) }} pcs</span>
+                    <div class="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
+                        <span class="block text-[9px] uppercase font-bold text-slate-400">Gross Qty</span>
+                        <span class="text-sm font-black text-slate-800">{{ number_format($tree->quantity) }} pcs</span>
+                    </div>
+                    <div class="{{ $tree->usable_quantity > 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800' }} border rounded-lg p-2.5">
+                        <span class="block text-[9px] uppercase font-bold {{ $tree->usable_quantity > 0 ? 'text-emerald-700' : 'text-rose-700' }}">Usable Qty</span>
+                        <span class="text-sm font-black">{{ number_format($tree->usable_quantity) }} pcs</span>
                     </div>
                     <div class="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
                         <span class="block text-[9px] uppercase font-bold text-slate-400">Tgl Produksi</span>
@@ -75,10 +79,6 @@
                     <div class="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
                         <span class="block text-[9px] uppercase font-bold text-slate-400">Family Code</span>
                         <span class="text-xs font-bold text-slate-800">{{ $tree->family_code }}</span>
-                    </div>
-                    <div class="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-                        <span class="block text-[9px] uppercase font-bold text-slate-400">Daily Sequence</span>
-                        <span class="text-xs font-bold text-slate-800 font-mono">{{ str_pad((string) $tree->daily_sequence, 3, '0', STR_PAD_LEFT) }}</span>
                     </div>
                     <div class="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
                         <span class="block text-[9px] uppercase font-bold text-slate-400">Posisi Rack</span>
@@ -91,26 +91,39 @@
 
             <!-- Reference Order Metadata -->
             <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 flex flex-wrap items-center justify-between gap-2">
-                @if($tree->work_order_id && $tree->workOrder)
-                    <div>
-                        <span class="text-slate-400 font-semibold">Work Order:</span>
-                        <a href="{{ route('lost-wax.work-orders.show', $tree->workOrder) }}" class="text-amber-600 hover:text-amber-700 font-bold ml-1">
-                            {{ $tree->getSourceCode() }}
-                        </a>
-                        @if($tree->plan)
-                            <span class="text-slate-400 ml-1.5">(Wave {{ str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) }})</span>
-                        @endif
-                    </div>
-                @elseif($tree->lost_wax_print_order_line_id && $tree->printOrderLine)
-                    <div>
-                        <span class="text-slate-400 font-semibold">Perintah Cetak:</span>
-                        <a href="{{ route('lost-wax.print-orders.show', $tree->printOrderLine->lost_wax_print_order_id) }}" class="text-amber-600 hover:text-amber-700 font-bold ml-1 font-mono">
-                            {{ $tree->getSourcePrintOrderNumber() }}
-                        </a>
-                    </div>
-                @else
-                    <div class="text-slate-400 italic">Dokumen referensi tidak terhubung</div>
-                @endif
+                <div class="flex flex-wrap items-center gap-3">
+                    @if($tree->work_order_id && $tree->workOrder)
+                        <div>
+                            <span class="text-slate-400 font-semibold">Work Order:</span>
+                            <a href="{{ route('lost-wax.work-orders.show', $tree->workOrder) }}" class="text-amber-600 hover:text-amber-700 font-bold ml-1">
+                                {{ $tree->getSourceCode() }}
+                            </a>
+                            @if($tree->plan)
+                                <span class="text-slate-400 ml-1.5">(Wave {{ str_pad((string) $tree->plan->wave_number, 3, '0', STR_PAD_LEFT) }})</span>
+                            @endif
+                        </div>
+                    @elseif($tree->lost_wax_print_order_line_id && $tree->printOrderLine)
+                        <div>
+                            <span class="text-slate-400 font-semibold">Perintah Cetak:</span>
+                            <a href="{{ route('lost-wax.print-orders.show', $tree->printOrderLine->lost_wax_print_order_id) }}" class="text-amber-600 hover:text-amber-700 font-bold ml-1 font-mono">
+                                {{ $tree->getSourcePrintOrderNumber() }}
+                            </a>
+                        </div>
+                    @else
+                        <div class="text-slate-400 italic">Dokumen referensi tidak terhubung</div>
+                    @endif
+
+                    @if($tree->allocations && $tree->allocations->isNotEmpty())
+                        <div class="text-[11px] text-slate-500 bg-white border border-slate-200 rounded px-2 py-0.5">
+                            <span class="text-slate-400 font-semibold">Alokasi FIFO:</span>
+                            @foreach($tree->allocations as $alloc)
+                                <span class="font-mono font-bold text-slate-800 ml-1">
+                                    {{ optional($alloc->printOrderLine->printOrder)->print_order_number ?? $alloc->printOrderLine->code }} ({{ $alloc->allocated_qty }} pcs)
+                                </span>{{ !$loop->last ? ',' : '' }}
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
 
                 <div class="flex items-center gap-3 text-slate-500">
                     <span>Size: <strong class="text-slate-800">{{ $tree->getSourceSize() ?? '-' }}</strong></span>
@@ -141,7 +154,113 @@
             </div>
         @endif
 
-        <!-- 3. SECTION RIWAYAT SCAN (INLINE TIMELINE) -->
+        <!-- 3. SECTION QUALITY & DEFECT LOG -->
+        @php
+            $treeDefectsList = isset($defects) ? $defects : $tree->defects;
+            $totalDefectsCount = $tree->total_defect_quantity;
+            $isCancelled = $tree->status === 'cancelled';
+        @endphp
+
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-5 space-y-4">
+            <!-- Section Header & Actions -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+                        <i class="fas fa-shield-alt text-amber-600"></i> LOG KUALITAS & DEFECT
+                    </h3>
+                    <p class="text-[11px] text-slate-400">Pencatatan cacat produk pada tahapan Rangkai, Lapisan 1–7, atau Oven</p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- KPI Chips -->
+                    <div class="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 text-center">
+                        <span class="text-[9px] uppercase font-bold text-slate-500 block">Gross Qty</span>
+                        <span class="text-xs font-black text-slate-800">{{ number_format($tree->quantity) }} pcs</span>
+                    </div>
+                    <div class="{{ $totalDefectsCount > 0 ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-100 border-slate-200 text-slate-600' }} border rounded-lg px-2.5 py-1 text-center">
+                        <span class="text-[9px] uppercase font-bold block">Total Rusak</span>
+                        <span class="text-xs font-black">{{ number_format($totalDefectsCount) }} pcs</span>
+                    </div>
+                    <div class="{{ $tree->usable_quantity > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800' }} border rounded-lg px-2.5 py-1 text-center">
+                        <span class="text-[9px] uppercase font-bold block">Sisa Usable</span>
+                        <span class="text-xs font-black">{{ number_format($tree->usable_quantity) }} pcs</span>
+                    </div>
+
+                    <!-- Action Button -->
+                    @if(!$isCancelled && $tree->usable_quantity > 0)
+                        <button type="button" onclick="openDefectModal()"
+                            class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-2xs transition-colors inline-flex items-center gap-1.5 ml-1">
+                            <i class="fas fa-plus text-[10px]"></i> Catat Defect
+                        </button>
+                    @elseif($isCancelled)
+                        <span class="text-[10px] bg-slate-200 text-slate-600 font-bold px-2.5 py-1.5 rounded-lg uppercase">
+                            Tree Dibatalkan
+                        </span>
+                    @else
+                        <span class="text-[10px] bg-rose-100 text-rose-800 border border-rose-200 font-bold px-2.5 py-1.5 rounded-lg uppercase">
+                            Usable Habis (0 pcs)
+                        </span>
+                    @endif
+                </div>
+            </div>
+
+            <!-- Defects Table / List -->
+            @if($treeDefectsList->isNotEmpty())
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-slate-50 text-slate-600 text-[10px] uppercase font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="py-2.5 px-3">Tahapan (Stage)</th>
+                                <th class="py-2.5 px-3 text-right">Kuantitas</th>
+                                <th class="py-2.5 px-3">Alasan Cacat</th>
+                                <th class="py-2.5 px-3">Waktu Kejadian Fisik</th>
+                                <th class="py-2.5 px-3">Dicatat Oleh & Waktu</th>
+                                <th class="py-2.5 px-3">Catatan</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @foreach($treeDefectsList as $defect)
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="py-2.5 px-3 font-extrabold text-slate-800">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                            {{ strtoupper($defect->stage_label) }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2.5 px-3 text-right font-black text-rose-700 font-mono">
+                                        {{ number_format($defect->defect_qty) }} pcs
+                                    </td>
+                                    <td class="py-2.5 px-3 font-semibold text-slate-800">
+                                        {{ ucwords(str_replace('_', ' ', $defect->defect_reason)) }}
+                                    </td>
+                                    <td class="py-2.5 px-3 text-slate-600 font-mono">
+                                        @if($defect->occurred_at)
+                                            {{ $defect->occurred_at->format('d-m-Y H:i') }}
+                                        @else
+                                            <span class="text-slate-400">-</span>
+                                        @endif
+                                    </td>
+                                    <td class="py-2.5 px-3 text-slate-600">
+                                        <div class="font-bold text-slate-800">{{ optional($defect->recordedBy)->name ?? 'System' }}</div>
+                                        <div class="text-[10px] text-slate-400 font-mono">{{ $defect->created_at->format('d-m-Y H:i') }}</div>
+                                    </td>
+                                    <td class="py-2.5 px-3 text-slate-600 italic">
+                                        {{ $defect->notes ?: '-' }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="py-6 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-xl">
+                    <i class="fas fa-check-circle text-2xl mb-1 text-emerald-500 block"></i>
+                    <div class="font-bold text-slate-700 text-xs">Belum ada defect tercatat pada Tree ini</div>
+                    <div class="text-[11px] text-slate-400 mt-0.5">Seluruh quantity ({{ $tree->quantity }} pcs) berstatus usable dan siap diproses ke tahapan selanjutnya.</div>
+                </div>
+            @endif
+        </div>
+
+        <!-- 4. SECTION RIWAYAT SCAN (INLINE TIMELINE) -->
         @php
             $successScansCount = $events->where('result', 'success')->reject(fn($e) => $e->void !== null)->count();
             $rejectedScansCount = $events->where('result', 'rejected')->count();
@@ -267,4 +386,147 @@
         </div>
 
     </div>
+
+    <!-- MODAL CATAT DEFECT -->
+    <div id="defectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden transform transition-all">
+            <div class="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+                <h3 class="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-rose-600"></i> Catat Defect Tree
+                </h3>
+                <button type="button" onclick="closeDefectModal()" class="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <form id="defectForm" method="POST" action="{{ route('lost-wax.trees.defects.store', $tree) }}" class="p-5 space-y-4">
+                @csrf
+
+                <!-- Balance Preview Card -->
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs flex justify-between items-center text-amber-900">
+                    <div>
+                        <span class="text-[10px] uppercase font-bold text-amber-700 block">Kuantitas Pohon</span>
+                        <span class="font-extrabold font-mono text-slate-800">{{ $tree->quantity }} pcs</span>
+                    </div>
+                    <div>
+                        <span class="text-[10px] uppercase font-bold text-amber-700 block">Cacat Terdaftar</span>
+                        <span class="font-extrabold font-mono text-rose-700">{{ $tree->total_defect_quantity }} pcs</span>
+                    </div>
+                    <div>
+                        <span class="text-[10px] uppercase font-bold text-amber-700 block">Maksimal Defect</span>
+                        <span id="maxRemainingQty" class="font-black font-mono text-emerald-800 text-sm">{{ $tree->usable_quantity }} pcs</span>
+                    </div>
+                </div>
+
+                <!-- Stage Selection -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Tahapan Kejadian Cacat <span class="text-rose-500">*</span>
+                    </label>
+                    <select name="stage" id="defectStageInput" required
+                        class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                        <option value="assembly" {{ $tree->current_stage === null ? 'selected' : '' }}>Rangkai (Assembly)</option>
+                        <option value="layer_1" {{ $tree->current_stage === 'layer_1' ? 'selected' : '' }}>Lapisan 1 (Layer 1)</option>
+                        <option value="layer_2" {{ $tree->current_stage === 'layer_2' ? 'selected' : '' }}>Lapisan 2 (Layer 2)</option>
+                        <option value="layer_3" {{ $tree->current_stage === 'layer_3' ? 'selected' : '' }}>Lapisan 3 (Layer 3)</option>
+                        <option value="layer_4" {{ $tree->current_stage === 'layer_4' ? 'selected' : '' }}>Lapisan 4 (Layer 4)</option>
+                        <option value="layer_5" {{ $tree->current_stage === 'layer_5' ? 'selected' : '' }}>Lapisan 5 (Layer 5)</option>
+                        <option value="layer_6" {{ $tree->current_stage === 'layer_6' ? 'selected' : '' }}>Lapisan 6 (Layer 6)</option>
+                        <option value="layer_7" {{ $tree->current_stage === 'layer_7' ? 'selected' : '' }}>Lapisan 7 (Layer 7)</option>
+                        <option value="oven" {{ $tree->current_stage === 'oven' ? 'selected' : '' }}>Oven (Dewaxing)</option>
+                    </select>
+                    <p class="text-[10px] text-slate-400 mt-1">Pilih tahapan aktual tempat cacat fisik terjadi.</p>
+                </div>
+
+                <!-- Defect Quantity -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Jumlah Rusak / Cacat (pcs) <span class="text-rose-500">*</span>
+                    </label>
+                    <input type="number" name="defect_qty" id="defectQtyInput" min="1" max="{{ $tree->usable_quantity }}" value="1" required
+                        class="w-full rounded-lg border-slate-300 text-xs font-bold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                    <p id="defectQtyWarning" class="text-[10px] text-rose-600 font-bold mt-1 hidden">
+                        <i class="fas fa-exclamation-circle mr-0.5"></i> Jumlah cacat melebihi sisa usable pohon ({{ $tree->usable_quantity }} pcs).
+                    </p>
+                </div>
+
+                <!-- Defect Reason -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Alasan / Kategori Cacat <span class="text-rose-500">*</span>
+                    </label>
+                    <select name="defect_reason" id="defectReasonInput" required
+                        class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                        <option value="retak_lapisan">Retak Lapisan / Slurry</option>
+                        <option value="lapisan_rontok">Lapisan Slurry Rontok / Mengelupas</option>
+                        <option value="lapisan_tipis">Ketebalan Coating Tidak Merata</option>
+                        <option value="pola_patah">Pola Lilin Patah / Rusak</option>
+                        <option value="lilin_bocor_dini">Lilin Meleleh / Bocor Dini</option>
+                        <option value="oven_pecah">Cangkang Keramik Pecah di Oven</option>
+                        <option value="lainnya">Alasan Lainnya</option>
+                    </select>
+                </div>
+
+                <!-- Occurred At -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Waktu Kejadian Fisik <span class="text-slate-400 font-normal lowercase">(opsional)</span>
+                    </label>
+                    <input type="datetime-local" name="occurred_at" id="defectOccurredAtInput"
+                        class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                    <p class="text-[10px] text-slate-400 mt-1">Kosongkan jika ingin menggunakan waktu saat ini.</p>
+                </div>
+
+                <!-- Notes -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Catatan Tambahan <span class="text-slate-400 font-normal lowercase">(opsional)</span>
+                    </label>
+                    <textarea name="notes" rows="2" placeholder="Contoh: Retak pada sambungan gate bawah saat pengeringan..."
+                        class="w-full rounded-lg border-slate-300 text-xs py-2 px-3 focus:ring-amber-500 focus:border-amber-500"></textarea>
+                </div>
+
+                <!-- Footer Buttons -->
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeDefectModal()"
+                        class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" id="submitDefectBtn"
+                        class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-5 rounded-lg shadow-2xs transition-colors">
+                        Simpan Defect
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openDefectModal() {
+            document.getElementById('defectModal').classList.remove('hidden');
+            document.getElementById('defectQtyInput').focus();
+        }
+
+        function closeDefectModal() {
+            document.getElementById('defectModal').classList.add('hidden');
+        }
+
+        // Live validation on quantity input
+        document.getElementById('defectQtyInput')?.addEventListener('input', function(e) {
+            const maxQty = {{ (int) $tree->usable_quantity }};
+            const currentVal = parseInt(e.target.value, 10);
+            const warningEl = document.getElementById('defectQtyWarning');
+            const submitBtn = document.getElementById('submitDefectBtn');
+
+            if (currentVal > maxQty) {
+                warningEl.classList.remove('hidden');
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                warningEl.classList.add('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+    </script>
 @endsection

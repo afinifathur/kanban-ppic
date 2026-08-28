@@ -95,6 +95,7 @@ class PlanController extends Controller
             'plans.*.size' => 'nullable|string',
             'plans.*.weight' => 'nullable|numeric',
             'plans.*.po_number' => 'required|string',
+            'plans.*.po_quantity' => 'nullable|integer|min:0',
             'plans.*.qty_planned' => 'required|integer',
             'plans.*.line_number' => 'required',
             'plans.*.customer' => 'nullable|string',
@@ -145,6 +146,7 @@ class PlanController extends Controller
                 'size' => $plan['size'] ?? null,
                 'weight' => $plan['weight'] ?? null,
                 'po_number' => $poNumber,
+                'po_quantity' => $plan['po_quantity'] ?? null,
                 'qty_planned' => $plan['qty_planned'],
                 'qty_remaining' => $plan['qty_planned'],
                 'line_number' => $lineNumber,
@@ -158,40 +160,7 @@ class PlanController extends Controller
                 $newPlan['updated_at'] = $customDate.' '.now()->format('H:i:s');
             }
 
-            $createdPlan = ProductionPlan::create($newPlan);
-
-            // Auto-detect and link any existing unassigned "Cor" items
-            $query = \App\Models\ProductionItem::whereNull('plan_id')
-                ->where('item_code', $itemCode);
-
-            if ($lineNumber !== null) {
-                $query->where('line_number', $lineNumber);
-            }
-
-            $unassignedItems = $query->orderBy('created_at', 'asc')->get();
-
-            foreach ($unassignedItems as $item) {
-                // Only fill until plan is satisfied
-                if ($createdPlan->qty_remaining <= 0) {
-                    break;
-                }
-
-                // Map to plan and enrich metadata
-                /** @var \App\Models\ProductionItem $item */
-                $item->update([
-                    'plan_id' => $createdPlan->id,
-                    'po_number' => $item->po_number ?? $createdPlan->po_number,
-                    'customer' => $item->customer ?? $createdPlan->customer,
-                ]);
-
-                // Reduce remaining allocation on the plan
-                $createdPlan->decrement('qty_remaining', $item->qty_pcs);
-            }
-
-            // Ensure plan status accurately reflects early completions
-            if ($createdPlan->qty_remaining <= 0) {
-                $createdPlan->update(['status' => 'completed']);
-            }
+            ProductionPlan::create($newPlan);
         }
 
         $processedCount = count($data['plans']) - $skippedCount;
@@ -228,6 +197,7 @@ class PlanController extends Controller
             'line_number' => 'required|integer',
             'customer' => 'nullable|string',
             'po_number' => 'required|string',
+            'po_quantity' => 'nullable|integer|min:0',
             'item_code' => 'required|string',
             'item_name' => 'required|string',
             'aisi' => 'nullable|string',
@@ -261,7 +231,17 @@ class PlanController extends Controller
             abort(403, 'Unauthorized.');
         }
 
-        // Check if there are items associated with this plan
+        // Guard B: Closed Plan
+        if ($plan->is_closed) {
+            return back()->with('error', 'Tidak bisa menghapus rencana yang sudah ditutup.');
+        }
+
+        // Guard A: Lost Wax Print Order Line exists (Freeze Point)
+        if ($plan->printOrderLines()->exists()) {
+            return back()->with('error', 'Tidak bisa menghapus rencana yang sudah memiliki SPK cetak.');
+        }
+
+        // Guard C: Legacy Cor ProductionItem exists
         if ($plan->items()->exists()) {
             return back()->with('error', 'Tidak bisa menghapus rencana yang sudah memiliki data produksi.');
         }

@@ -315,7 +315,12 @@ class PrintOrderTest extends TestCase
             'size' => '2"',
             'aisi' => '316L',
         ]);
-        $plan2->delete(); // Simulated delete
+        $plan2->update([
+            'code' => 'AB88',
+            'item_name' => 'Produk B Modified',
+            'size' => '3"',
+            'aisi' => '304L',
+        ]);
 
         // Reload the lines and verify historical integrity remains intact!
         $line1 = $line1->fresh();
@@ -328,7 +333,8 @@ class PrintOrderTest extends TestCase
 
         $this->assertSame('AB02', $line2->code);
         $this->assertSame('Produk B', $line2->item_name);
-        $this->assertNull($line2->production_plan_id); // Deleted plan set to null
+        $this->assertSame('1"', $line2->size);
+        $this->assertSame('316', $line2->aisi);
     }
 
     /**

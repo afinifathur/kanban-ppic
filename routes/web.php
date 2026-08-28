@@ -110,6 +110,9 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/print-orders/{printOrder}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroy'])->name('print-orders.destroy');
             Route::post('/print-orders/{printOrder}/lines', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'storeLine'])->name('print-orders.lines.store');
             Route::delete('/print-orders/{printOrder}/lines/{line}', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'destroyLine'])->name('print-orders.lines.destroy');
+            Route::post('/print-orders/reprint', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'storeReprint'])->name('print-orders.reprint.store');
+            Route::post('/production-plans/{plan}/close-recovery', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'closeWithoutReprint'])->name('production-plans.close-recovery');
+            Route::put('/production-plans/{plan}/update-po', [\App\Http\Controllers\LostWax\PrintOrderController::class, 'updatePoQuantity'])->name('production-plans.update-po');
 
             // Actual Hasil Cetak
             Route::get('/outcomes', [\App\Http\Controllers\LostWax\OutcomeController::class, 'index'])->name('outcomes.index');
@@ -154,6 +157,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/trees/{tree}/history', [ScanController::class, 'history'])->name('trees.history');
             Route::get('/trees/{tree}', [TreeController::class, 'show'])->name('trees.show');
             Route::patch('/trees/{tree}', [TreeController::class, 'update'])->name('trees.update');
+            Route::post('/trees/{tree}/defects', [TreeController::class, 'storeDefect'])->name('trees.defects.store');
             Route::get('/trees/{tree}/traveler', [TreeController::class, 'traveler'])->name('trees.traveler');
             Route::get('/trees/{tree}/barcode', [TreeController::class, 'barcode'])->name('trees.barcode');
             Route::post('/trees/print-thermal', [TreeController::class, 'printThermal'])->name('trees.print-thermal');

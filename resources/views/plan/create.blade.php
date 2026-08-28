@@ -5,13 +5,13 @@
         <div class="flex justify-between items-center mb-4">
             <div class="flex items-center gap-6">
                 <div>
-                    <h1 class="text-xl font-bold text-gray-800">Rencana Cor (Input PPIC)</h1>
-                    <p class="text-sm text-gray-500">Masukkan data P.O. dari Customer untuk antrian Cor.</p>
+                    <h1 class="text-xl font-bold text-gray-800">Rencana Produksi Lost Wax (Input PPIC)</h1>
+                    <p class="text-sm text-gray-500">Masukkan data P.O. dari Customer untuk perencanaan produksi Lost Wax.</p>
                 </div>
                 <div class="bg-slate-100 p-2 rounded flex items-center gap-4 border border-slate-200">
                     <div class="flex items-center gap-2">
                         <label class="text-xs font-bold text-slate-600 uppercase">Judul Rencana <span class="text-red-500">*</span>:</label>
-                        <input type="text" id="planTitle" placeholder="Misal: Pengecoran Lokal" required
+                        <input type="text" id="planTitle" placeholder="Misal: Produksi Lost Wax Flange" required
                             class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 w-48">
                     </div>
                     <div class="hidden sm:block h-6 w-px bg-slate-300"></div>
@@ -31,7 +31,7 @@
         <div class="mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 text-xs text-blue-700">
             <p><strong>Tips:</strong> Anda bisa Copy (Ctrl+C) data dari Excel dan Paste (Ctrl+V) langsung ke tabel di bawah.
             </p>
-            <p>Format Kolom: Code | Item Code | Item Name | AISI | Size | Weight | P.O. Number | Qty Plan | Line | Customer
+            <p>Format Kolom: Code | Item Code | Item Name | AISI | Size | Weight | P.O. Number | P.O. Quantity | Qty Plan | Line | Customer
             </p>
         </div>
 
@@ -44,13 +44,13 @@
         const customerList = @json($customers->pluck('name'));
 
         // Initial data: 30 empty rows
-        const initialData = Array.from({ length: 30 }, () => [null, null, null, null, null, null, null, null, null, null]);
+        const initialData = Array.from({ length: 30 }, () => [null, null, null, null, null, null, null, null, null, null, null]);
 
         hot = new Handsontable(container, {
             data: initialData,
             rowHeaders: true,
             colHeaders: [
-                'Code', 'Item Code', 'Item Name', 'AISI', 'Size', 'Weight', 'P.O. Number', 'Qty Plan', 'Line', 'Customer'
+                'Code', 'Item Code', 'Item Name', 'AISI', 'Size', 'Weight', 'P.O. Number', 'P.O. Quantity', 'Qty Plan', 'Line', 'Customer'
             ],
             columns: [
                 { type: 'text' },
@@ -60,6 +60,7 @@
                 { type: 'text' },
                 { type: 'numeric' },
                 { type: 'text' },
+                { type: 'numeric' },
                 { type: 'numeric' },
                 { type: 'text' },
                 {
@@ -92,8 +93,8 @@
             }
 
             rawData.forEach(row => {
-                // Check if Item Code, Item Name, PO, Qty, and Line are filled
-                if (row[1] && row[2] && row[6] && row[7] && row[8]) {
+                // Check if Item Code, Item Name, PO Number, Qty Plan, and Line are filled
+                if (row[1] && row[2] && row[6] && row[8] && row[9]) {
                     plans.push({
                         code: row[0],
                         item_code: row[1],
@@ -102,9 +103,10 @@
                         size: row[4],
                         weight: row[5],
                         po_number: row[6],
-                        qty_planned: row[7],
-                        line_number: row[8],
-                        customer: row[9]
+                        po_quantity: row[7] !== null && row[7] !== '' && !isNaN(row[7]) ? Number(row[7]) : null,
+                        qty_planned: row[8],
+                        line_number: row[9],
+                        customer: row[10]
                     });
                 }
             });

@@ -93,11 +93,101 @@ class PrintOrderController extends Controller
             ->withQueryString();
 
         $activeTab = $request->query('tab');
-        if (! in_array($activeTab, ['plans', 'orders'])) {
-            $activeTab = $request->query('orders_page') ? 'orders' : 'plans';
+        if (! in_array($activeTab, ['plans', 'orders', 'recovery'])) {
+            $activeTab = $request->query('orders_page') ? 'orders' : ($request->query('recovery_page') ? 'recovery' : 'plans');
         }
 
-        return view('lost-wax.print-orders.plans', compact('plans', 'printOrders', 'activeTab', 'uniqueCodes', 'uniqueCustomers'));
+        // 4. Recovery Pool Data Preparation
+        $qualityService = app(\App\Services\LostWaxQualityService::class);
+
+        $recoveryBaseQuery = \App\Models\ProductionPlan::query()
+            ->whereHas('printOrderLines')
+            ->with([
+                'printOrderLines.executions',
+                'printOrderLines.printOrder',
+                'printOrderLines.trees.defects',
+                'printOrderLines.treeAllocations.tree.defects',
+            ]);
+
+        if ($isPpic && $scope) {
+            $recoveryBaseQuery->where('product_scope', $scope);
+        }
+
+        if ($request->filled('recovery_code')) {
+            $recoveryBaseQuery->where('code', 'like', '%'.$request->recovery_code.'%');
+        }
+
+        if ($request->filled('recovery_customer')) {
+            $recoveryBaseQuery->where('customer', 'like', '%'.$request->recovery_customer.'%');
+        }
+
+        $recoveryStatusFilter = $request->input('recovery_status', 'active');
+        if ($recoveryStatusFilter === 'closed') {
+            $recoveryBaseQuery->where('is_closed', true);
+        } elseif ($recoveryStatusFilter === 'all') {
+            // No filter on is_closed
+        } else {
+            // 'active' (Perlu Tindakan)
+            $recoveryBaseQuery->where('is_closed', false);
+        }
+
+        $candidatePlans = $recoveryBaseQuery->orderBy('id', 'desc')->get();
+
+        $recoveryItems = collect();
+        $totalActiveRecoveryCount = 0;
+
+        foreach ($candidatePlans as $plan) {
+            $breakdown = $qualityService->getProductionPlanQuantityBreakdown($plan);
+
+            $activeReprint = $plan->printOrderLines
+                ->map->printOrder
+                ->filter(function ($po) {
+                    return $po && $po->order_type === 'REPRINT' && in_array($po->status, ['DRAFT', 'ISSUED']);
+                })
+                ->first();
+
+            $hasDeficit = $breakdown['deficit_vs_plan'] > 0;
+            $isNotNormal = $breakdown['status'] !== 'NORMAL';
+            $needsRecovery = $hasDeficit || $isNotNormal || $activeReprint !== null;
+
+            if (! $plan->is_closed && $needsRecovery) {
+                $totalActiveRecoveryCount++;
+            }
+
+            if ($recoveryStatusFilter === 'active') {
+                if (! $needsRecovery) {
+                    continue;
+                }
+            }
+
+            $recoveryItems->push((object) [
+                'plan' => $plan,
+                'breakdown' => $breakdown,
+                'active_reprint' => $activeReprint,
+            ]);
+        }
+
+        $perPage = 25;
+        $currentPage = \Illuminate\Pagination\LengthAwarePaginator::resolveCurrentPage('recovery_page');
+        $currentItems = $recoveryItems->slice(($currentPage - 1) * $perPage, $perPage)->values();
+        $recoveryPlans = new \Illuminate\Pagination\LengthAwarePaginator(
+            $currentItems,
+            $recoveryItems->count(),
+            $perPage,
+            $currentPage,
+            ['path' => \Illuminate\Pagination\LengthAwarePaginator::resolveCurrentPath(), 'pageName' => 'recovery_page']
+        );
+        $recoveryPlans->withQueryString();
+
+        return view('lost-wax.print-orders.plans', compact(
+            'plans',
+            'printOrders',
+            'recoveryPlans',
+            'totalActiveRecoveryCount',
+            'activeTab',
+            'uniqueCodes',
+            'uniqueCustomers'
+        ));
     }
 
     /**
@@ -575,6 +665,111 @@ class PrintOrderController extends Controller
 
             return 'PC-'.$dateStr.'-'.str_pad($sequence, 4, '0', STR_PAD_LEFT);
         });
+    }
+
+    /**
+     * Store a newly created reprint print order.
+     */
+    public function storeReprint(Request $request, \App\Services\LostWaxRecoveryService $recoveryService)
+    {
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if (! ($isPpic && $scope)) {
+            abort(403, 'Hanya PPIC owner yang dapat membuat Perintah Cetak Ulang.');
+        }
+
+        $request->validate([
+            'production_plan_id' => 'required|integer|exists:production_plans,id',
+            'quantity' => 'required|integer|min:1',
+            'reprint_reason' => 'required|string|max:255',
+            'scheduled_date' => 'nullable|date',
+        ]);
+
+        $plan = \App\Models\ProductionPlan::findOrFail($request->production_plan_id);
+        if ($plan->product_scope !== $scope) {
+            abort(403, 'Unauthorized.');
+        }
+
+        try {
+            $printOrder = $recoveryService->createReprint(
+                $plan,
+                (int) $request->quantity,
+                $request->reprint_reason,
+                auth()->id(),
+                $request->scheduled_date
+            );
+
+            return redirect()->route('lost-wax.print-orders.show', $printOrder)
+                ->with('success', 'Dokumen Perintah Cetak Ulang (Cycle #'.$printOrder->reprint_cycle.') berhasil dibuat.');
+        } catch (\DomainException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Close a production plan without issuing a reprint.
+     */
+    public function closeWithoutReprint(Request $request, \App\Models\ProductionPlan $plan, \App\Services\LostWaxRecoveryService $recoveryService)
+    {
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if (! ($isPpic && $scope)) {
+            abort(403, 'Hanya PPIC owner yang dapat menutup rencana produksi.');
+        }
+
+        if ($plan->product_scope !== $scope) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $request->validate([
+            'closure_reason' => 'required|string|min:3|max:255',
+        ]);
+
+        try {
+            $recoveryService->closeWithoutReprint($plan, $request->closure_reason, auth()->id());
+
+            return redirect()->back()->with('success', 'Rencana produksi '.$plan->code.' berhasil ditutup tanpa cetak ulang.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Update PO quantity and PO number for a production plan.
+     */
+    public function updatePoQuantity(Request $request, \App\Models\ProductionPlan $plan, \App\Services\LostWaxRecoveryService $recoveryService)
+    {
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if (! ($isPpic && $scope)) {
+            abort(403, 'Hanya PPIC owner yang dapat mengubah kuantitas PO.');
+        }
+
+        if ($plan->product_scope !== $scope) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $request->validate([
+            'po_quantity' => 'nullable|integer|min:0',
+            'po_number' => 'nullable|string|max:100',
+        ]);
+
+        try {
+            $recoveryService->updatePoQuantity(
+                $plan,
+                $request->filled('po_quantity') ? (int) $request->po_quantity : null,
+                $request->po_number
+            );
+
+            return redirect()->back()->with('success', 'Data PO untuk rencana '.$plan->code.' berhasil diperbarui.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
     }
 
     protected function authorizePrintOrder(\App\Models\LostWaxPrintOrder $printOrder)

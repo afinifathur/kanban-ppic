@@ -352,9 +352,33 @@
                                 
                                 <td class="compact-td text-center font-mono {{ $row['oven_qty']>0?'cell-oven':'text-slate-400' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
                                 <td class="compact-td text-center">
-                                    <span class="inline-block px-1.5 py-0.5 rounded-full font-bold text-[9px] {{ $row['status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
-                                        {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}
-                                    </span>
+                                    @if(isset($row['quality_status']))
+                                        @if($row['status'] === 'COMPLETED')
+                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                SELESAI
+                                            </span>
+                                        @elseif($row['quality_status'] === 'NORMAL')
+                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300" title="Usable: {{ number_format($row['q_usable']) }} pcs &ge; Plan">
+                                                NORMAL
+                                            </span>
+                                        @elseif($row['quality_status'] === 'WARNING')
+                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-amber-100 text-amber-800 border border-amber-300" title="Defisit ke Plan: {{ number_format($row['deficit_vs_plan']) }} pcs{{ $row['po_quantity'] ? ' (PO Aman: ' . number_format($row['po_quantity']) . ' pcs)' : '' }}">
+                                                WARNING
+                                            </span>
+                                        @elseif($row['quality_status'] === 'CRITICAL')
+                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-rose-100 text-rose-800 border border-rose-300" title="PO Terancam! Defisit ke PO: {{ number_format($row['deficit_vs_po']) }} pcs">
+                                                CRITICAL
+                                            </span>
+                                        @else
+                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-bold text-[9px] bg-slate-100 text-slate-700 border border-slate-300">
+                                                ACTIVE
+                                            </span>
+                                        @endif
+                                    @else
+                                        <span class="inline-block px-1.5 py-0.5 rounded-full font-bold text-[9px] {{ $row['status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
+                                            {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}
+                                        </span>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
@@ -476,8 +500,13 @@
                             <td>-</td>
                         @endforeach
                         
-                        <td class="{{ $row['oven_qty']>0?'ps-cell-oven':'' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
-                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}</td>
+                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            @if(isset($row['quality_status']) && $row['status'] !== 'COMPLETED')
+                                {{ $row['quality_status'] }}
+                            @else
+                                {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}
+                            @endif
+                        </td>
                     </tr>
                 @empty
                     <tr><td colspan="27" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>

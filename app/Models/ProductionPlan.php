@@ -15,6 +15,7 @@ class ProductionPlan extends Model
         'size',
         'weight',
         'po_number',
+        'po_quantity',
         'qty_planned',
         'qty_remaining',
         'line_number',
@@ -22,16 +23,21 @@ class ProductionPlan extends Model
         'product_scope',
         'status',
         'is_closed',
+        'closure_reason',
+        'closed_by',
+        'closed_at',
         'created_at',
         'updated_at',
     ];
 
     protected $casts = [
+        'po_quantity' => 'integer',
         'qty_planned' => 'integer',
         'qty_remaining' => 'integer',
         'line_number' => 'integer',
         'weight' => 'decimal:2',
         'is_closed' => 'boolean',
+        'closed_at' => 'datetime',
     ];
 
     public static function determineProductScopeFromItem(string $itemName, ?string $aisi = null): ?string
@@ -92,6 +98,24 @@ class ProductionPlan extends Model
                 $query->where('status', '!=', 'CANCELLED');
             })
             ->sum('qty_executed_good');
+    }
+
+    public function closedBy()
+    {
+        return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    public function evaluateProductionStatus(int $usableQuantity): string
+    {
+        if ($usableQuantity >= $this->qty_planned) {
+            return 'NORMAL';
+        }
+
+        if ($this->po_quantity !== null) {
+            return $usableQuantity >= $this->po_quantity ? 'WARNING' : 'CRITICAL';
+        }
+
+        return 'WARNING';
     }
 
     public function getQtyRemainingToProduceAttribute(): int

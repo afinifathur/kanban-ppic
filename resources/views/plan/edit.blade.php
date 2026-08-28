@@ -59,6 +59,13 @@
                             class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             required>
                     </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">P.O. Quantity (Commitment)</label>
+                        <input type="number" name="po_quantity" value="{{ old('po_quantity', $plan->po_quantity) }}" min="0"
+                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="Optional">
+                    </div>
                 </div>
 
                 <!-- Item Details -->

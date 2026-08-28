@@ -83,6 +83,25 @@ class LostWaxTree extends Model
         return $this->hasMany(LostWaxScanEvent::class, 'tree_id');
     }
 
+    public function defects()
+    {
+        return $this->hasMany(LostWaxTreeDefect::class, 'lost_wax_tree_id');
+    }
+
+    public function getTotalDefectQuantityAttribute(): int
+    {
+        if ($this->relationLoaded('defects')) {
+            return (int) $this->defects->sum('defect_qty');
+        }
+
+        return (int) $this->defects()->sum('defect_qty');
+    }
+
+    public function getUsableQuantityAttribute(): int
+    {
+        return max(0, $this->quantity - $this->total_defect_quantity);
+    }
+
     public function allocations()
     {
         return $this->hasMany(LostWaxTreeAllocation::class, 'lost_wax_tree_id');

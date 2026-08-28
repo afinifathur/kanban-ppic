@@ -43,13 +43,20 @@
     <div class="space-y-6">
         <!-- Tabs Header -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-1 flex gap-2">
-            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'plans'] + request()->except(['tab', 'plans_page', 'orders_page'])) }}"
+            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'plans'] + request()->except(['tab', 'plans_page', 'orders_page', 'recovery_page'])) }}"
                 class="flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition-all {{ ($activeTab ?? 'plans') === 'plans' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50' }}">
                 <i class="fas fa-clipboard-list mr-2"></i> Rencana Cetak (Plan Items)
             </a>
-            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'orders'] + request()->except(['tab', 'plans_page', 'orders_page'])) }}" data-clear-selection-on-click="true"
+            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'orders'] + request()->except(['tab', 'plans_page', 'orders_page', 'recovery_page'])) }}" data-clear-selection-on-click="true"
                 class="flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition-all {{ ($activeTab ?? 'plans') === 'orders' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50' }}">
                 <i class="fas fa-file-invoice mr-2"></i> Dokumen Perintah Cetak (Print Orders)
+            </a>
+            <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'recovery'] + request()->except(['tab', 'plans_page', 'orders_page', 'recovery_page'])) }}" data-clear-selection-on-click="true"
+                class="flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition-all {{ ($activeTab ?? 'plans') === 'recovery' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50' }}">
+                <i class="fas fa-tools mr-2 text-rose-500"></i> Recovery Pool
+                @if(($totalActiveRecoveryCount ?? 0) > 0)
+                    <span class="ml-1.5 px-2 py-0.5 text-xs bg-rose-100 text-rose-700 rounded-full font-bold">{{ $totalActiveRecoveryCount }}</span>
+                @endif
             </a>
         </div>
 
@@ -336,6 +343,193 @@
                     </div>
                     <div>
                         {{ $printOrders->links() }}
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if(($activeTab ?? 'plans') === 'recovery')
+            <!-- Tab 3: Recovery Pool -->
+            <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-4">
+                <!-- Recovery Pool Filters -->
+                <form method="GET" action="{{ route('lost-wax.print-orders.plans') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-100">
+                    <input type="hidden" name="tab" value="recovery">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kode Cust</label>
+                        <input type="text" name="recovery_code" list="code-list" value="{{ request('recovery_code') }}" placeholder="Cari Kode..." class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Customer</label>
+                        <input type="text" name="recovery_customer" list="customer-list" value="{{ request('recovery_customer') }}" placeholder="Cari Customer..." class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Status Recovery</label>
+                        <select name="recovery_status" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                            <option value="active" {{ request('recovery_status', 'active') === 'active' ? 'selected' : '' }}>Perlu Tindakan (Defisit / Terancam)</option>
+                            <option value="closed" {{ request('recovery_status') === 'closed' ? 'selected' : '' }}>Selesai / Ditutup</option>
+                            <option value="all" {{ request('recovery_status') === 'all' ? 'selected' : '' }}>Semua Rencana</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center gap-1.5">
+                            <i class="fas fa-filter"></i> Filter
+                        </button>
+                        <a href="{{ route('lost-wax.print-orders.plans', ['tab' => 'recovery']) }}" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center">
+                            Reset
+                        </a>
+                    </div>
+                </form>
+
+                <!-- Recovery Pool Table -->
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="border border-slate-200 p-3 text-left">Kode Cust & Produk</th>
+                                <th class="border border-slate-200 p-3 text-center">Target Plan</th>
+                                <th class="border border-slate-200 p-3 text-center">Target PO</th>
+                                <th class="border border-slate-200 p-3 text-center">Ctk Bagus</th>
+                                <th class="border border-slate-200 p-3 text-center">Standby</th>
+                                <th class="border border-slate-200 p-3 text-center">WIP Net</th>
+                                <th class="border border-slate-200 p-3 text-center">Oven</th>
+                                <th class="border border-slate-200 p-3 text-center">Rusak</th>
+                                <th class="border border-slate-200 p-3 text-center bg-slate-100 font-bold">Total Usable</th>
+                                <th class="border border-slate-200 p-3 text-center">Defisit Plan</th>
+                                <th class="border border-slate-200 p-3 text-center">Defisit PO</th>
+                                <th class="border border-slate-200 p-3 text-center">Status</th>
+                                <th class="border border-slate-200 p-3 text-center">Alur Recovery</th>
+                                <th class="border border-slate-200 p-3 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($recoveryPlans as $item)
+                                @php
+                                    $plan = $item->plan;
+                                    $bd = $item->breakdown;
+                                    $activeReprint = $item->active_reprint;
+                                    $isScopeOwner = auth()->user()->hasRole('ppic') && auth()->user()->product_scope === $plan->product_scope;
+                                @endphp
+                                <tr class="hover:bg-slate-50/50 transition-colors {{ $bd['status'] === 'CRITICAL' ? 'bg-rose-50/30' : '' }}">
+                                    <td class="border border-slate-200 p-3">
+                                        <div class="font-mono font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                            {{ $plan->code }}
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold {{ $plan->product_scope === 'SS' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700' }}">{{ $plan->product_scope }}</span>
+                                        </div>
+                                        <div class="text-xs text-slate-600 font-semibold">{{ $plan->item_name }}</div>
+                                        <div class="text-[11px] text-slate-400">Cust: <span class="font-bold text-slate-600">{{ $plan->customer }}</span> | {{ $plan->size }} | {{ $plan->aisi }}</div>
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold text-slate-700">
+                                        {{ number_format($plan->qty_planned) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center">
+                                        @if($plan->po_quantity !== null)
+                                            <div class="font-bold text-slate-800">{{ number_format($plan->po_quantity) }}</div>
+                                            <div class="text-[10px] text-slate-400 font-mono">{{ $plan->po_number ?? 'PO' }}</div>
+                                        @else
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                                PO BELUM DIISI
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center text-slate-700 font-semibold">
+                                        {{ number_format($bd['q_print_good']) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center text-slate-600">
+                                        {{ number_format($bd['q_standby']) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center text-slate-600">
+                                        {{ number_format($bd['q_wip_net']) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center text-slate-600">
+                                        {{ number_format($bd['q_final_usable']) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold {{ $bd['q_tree_defect'] > 0 ? 'text-red-600' : 'text-slate-400' }}">
+                                        {{ number_format($bd['q_tree_defect']) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold bg-slate-50 text-slate-900 text-sm">
+                                        {{ number_format($bd['q_usable']) }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold {{ $bd['deficit_vs_plan'] > 0 ? 'text-amber-700' : 'text-slate-400' }}">
+                                        {{ $bd['deficit_vs_plan'] > 0 ? number_format($bd['deficit_vs_plan']).' pcs' : '0' }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold {{ ($bd['deficit_vs_po'] ?? 0) > 0 ? 'text-rose-700' : 'text-slate-400' }}">
+                                        @if($bd['deficit_vs_po'] !== null)
+                                            {{ $bd['deficit_vs_po'] > 0 ? number_format($bd['deficit_vs_po']).' pcs' : '0' }}
+                                        @else
+                                            <span class="text-slate-300 font-normal">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center">
+                                        @if($bd['status'] === 'CRITICAL')
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-rose-100 text-rose-800 border border-rose-200 tracking-wider animate-pulse">
+                                                CRITICAL
+                                            </span>
+                                        @elseif($bd['status'] === 'WARNING')
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200 tracking-wider">
+                                                WARNING
+                                            </span>
+                                        @else
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200 tracking-wider">
+                                                NORMAL
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center text-xs">
+                                        @if($activeReprint)
+                                            <a href="{{ route('lost-wax.print-orders.show', $activeReprint) }}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-colors shadow-xs" title="Buka Detail SPK Cetak Ulang">
+                                                <i class="fas fa-file-invoice"></i> SPK #{{ $activeReprint->reprint_cycle }}: {{ $activeReprint->print_order_number }}
+                                                <span class="px-1.5 py-0.2 rounded text-[9px] uppercase bg-amber-200 text-amber-900">{{ $activeReprint->status }}</span>
+                                            </a>
+                                        @elseif($plan->is_closed)
+                                            <div class="inline-flex flex-col items-center">
+                                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                                                    <i class="fas fa-lock mr-1"></i> DITUTUP
+                                                </span>
+                                                <span class="text-[10px] text-slate-400 truncate max-w-[130px]" title="{{ $plan->closure_reason }}">{{ $plan->closure_reason }}</span>
+                                            </div>
+                                        @else
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200">
+                                                <i class="fas fa-clock mr-1"></i> PERLU KEPUTUSAN
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center">
+                                        <div class="flex items-center justify-center gap-1.5">
+                                            @if($isScopeOwner)
+                                                @if(! $plan->is_closed && ! $activeReprint)
+                                                    <button type="button" onclick="openReprintModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', {{ $plan->qty_planned }}, '{{ $plan->po_quantity ?? '-' }}', {{ $bd['q_usable'] }}, {{ $bd['deficit_vs_plan'] }}, '{{ $bd['deficit_vs_po'] ?? '-' }}', '{{ $bd['status'] }}')" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2.5 rounded text-xs transition-colors flex items-center gap-1 shadow-xs" title="Terbitkan SPK Cetak Ulang">
+                                                        <i class="fas fa-redo"></i> + SPK Reprint
+                                                    </button>
+                                                    <button type="button" onclick="openCloseModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', {{ $plan->qty_planned }}, '{{ $plan->po_quantity ?? '-' }}', {{ $bd['q_usable'] }}, {{ $bd['deficit_vs_plan'] }}, '{{ route('lost-wax.production-plans.close-recovery', $plan) }}')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1 px-2 rounded text-xs transition-colors flex items-center gap-1" title="Tutup Rencana Tanpa Reprint">
+                                                        <i class="fas fa-ban"></i> Tutup
+                                                    </button>
+                                                @endif
+                                                <button type="button" onclick="openPoModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', '{{ $plan->po_number }}', '{{ $plan->po_quantity }}', '{{ route('lost-wax.production-plans.update-po', $plan) }}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold px-1.5 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1" title="Perbarui Nomor & Kuantitas PO">
+                                                    <i class="fas fa-edit"></i> Isi PO
+                                                </button>
+                                            @else
+                                                <span class="text-xs text-slate-400 italic">Read-only</span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="14" class="border border-slate-200 p-8 text-center text-slate-400 italic">
+                                        Tidak ada item pada Recovery Pool untuk kriteria ini.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between">
+                    <div class="text-xs text-slate-400">
+                        Menampilkan {{ $recoveryPlans->firstItem() ?? 0 }} - {{ $recoveryPlans->lastItem() ?? 0 }} dari {{ $recoveryPlans->total() }} Rencana
+                    </div>
+                    <div>
+                        {{ $recoveryPlans->links() }}
                     </div>
                 </div>
             </div>
@@ -649,5 +843,230 @@
 
             persistAndRender();
         });
+
+        function openReprintModal(planId, code, item, planQty, poQty, usableQty, deficitPlan, deficitPo, status) {
+            document.getElementById('reprint-plan-id').value = planId;
+            document.getElementById('reprint-code').textContent = code;
+            document.getElementById('reprint-item').textContent = item;
+            document.getElementById('reprint-plan-qty').textContent = Number(planQty).toLocaleString() + ' pcs';
+            document.getElementById('reprint-usable-qty').textContent = Number(usableQty).toLocaleString() + ' pcs';
+            document.getElementById('reprint-deficit-qty').textContent = Number(deficitPlan).toLocaleString() + ' pcs';
+            document.getElementById('reprint-qty-input').value = Math.max(1, deficitPlan);
+            document.getElementById('reprint-reason-input').value = '';
+            document.getElementById('reprint-modal').classList.remove('hidden');
+        }
+
+        function openCloseModal(planId, code, item, planQty, poQty, usableQty, deficitPlan, closeUrl) {
+            document.getElementById('close-code').textContent = code;
+            document.getElementById('close-item').textContent = item;
+            document.getElementById('close-usable-plan').textContent = Number(usableQty).toLocaleString() + ' / ' + Number(planQty).toLocaleString() + ' pcs';
+            document.getElementById('close-form').action = closeUrl;
+            document.getElementById('close-reason-input').value = '';
+            document.getElementById('close-modal').classList.remove('hidden');
+        }
+
+        function openPoModal(planId, code, item, poNumber, poQty, updateUrl) {
+            document.getElementById('po-code').textContent = code;
+            document.getElementById('po-item').textContent = item;
+            document.getElementById('po-number-input').value = poNumber && poNumber !== 'null' ? poNumber : '';
+            document.getElementById('po-qty-input').value = poQty && poQty !== 'null' ? poQty : '';
+            document.getElementById('po-form').action = updateUrl;
+            document.getElementById('po-modal').classList.remove('hidden');
+        }
+
+        function closeRecoveryModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        // Attach double submission prevention
+        ['reprint-form', 'close-form', 'po-form'].forEach(function (formId) {
+            const form = document.getElementById(formId);
+            if (form) {
+                form.addEventListener('submit', function () {
+                    const btn = form.querySelector('button[type="submit"]');
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...';
+                    }
+                });
+            }
+        });
     </script>
+
+    <!-- Modal: Buat SPK Reprint -->
+    <div id="reprint-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 m-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
+                        <i class="fas fa-redo"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800">Terbitkan SPK Cetak Ulang (Reprint)</h3>
+                </div>
+                <button type="button" onclick="closeRecoveryModal('reprint-modal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Summary Box -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1.5">
+                <div class="flex justify-between"><span class="text-slate-500">Kode Cust:</span> <span id="reprint-code" class="font-mono font-bold text-slate-800"></span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Nama Produk:</span> <span id="reprint-item" class="font-semibold text-slate-700"></span></div>
+                <div class="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200 text-center font-bold">
+                    <div class="bg-white p-1 rounded border border-slate-100">
+                        <div class="text-[9px] text-slate-400 uppercase">Target Plan</div>
+                        <div id="reprint-plan-qty" class="text-slate-800"></div>
+                    </div>
+                    <div class="bg-white p-1 rounded border border-slate-100">
+                        <div class="text-[9px] text-slate-400 uppercase">Total Usable</div>
+                        <div id="reprint-usable-qty" class="text-emerald-700"></div>
+                    </div>
+                    <div class="bg-amber-50 p-1 rounded border border-amber-200">
+                        <div class="text-[9px] text-amber-700 uppercase">Defisit Plan</div>
+                        <div id="reprint-deficit-qty" class="text-amber-800 font-extrabold"></div>
+                    </div>
+                </div>
+            </div>
+
+            <form id="reprint-form" method="POST" action="{{ route('lost-wax.print-orders.reprint.store') }}" class="space-y-4">
+                @csrf
+                <input type="hidden" name="production_plan_id" id="reprint-plan-id" value="">
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Kuantitas Cetak Ulang (PCS) <span class="text-red-500">*</span>
+                    </label>
+                    <input type="number" name="quantity" id="reprint-qty-input" min="1" required class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500">
+                    <p class="text-[11px] text-slate-500 mt-1 italic">
+                        Kuantitas default adalah defisit terhadap rencana internal. PPIC dapat menyesuaikan angka sesuai kebutuhan produksi.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Alasan Cetak Ulang <span class="text-red-500">*</span>
+                    </label>
+                    <textarea name="reprint_reason" id="reprint-reason-input" rows="2" required placeholder="Contoh: Kompensasi 50 pcs retak di Layer 3..." class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Tanggal Rencana Cetak
+                    </label>
+                    <input type="date" name="scheduled_date" id="reprint-date-input" value="{{ date('Y-m-d') }}" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeRecoveryModal('reprint-modal')" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" id="reprint-submit-btn" class="px-4 py-2 rounded-lg text-sm font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all shadow-sm flex items-center gap-1.5">
+                        <i class="fas fa-check"></i> Terbitkan SPK Reprint
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Tutup Rencana Tanpa Reprint -->
+    <div id="close-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 m-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800">Tutup Rencana Tanpa Reprint</h3>
+                </div>
+                <button type="button" onclick="closeRecoveryModal('close-modal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2 items-start">
+                <i class="fas fa-exclamation-triangle text-amber-600 mt-0.5"></i>
+                <div>
+                    Setelah ditutup, rencana ini akan dikeluarkan dari antrean Recovery Pool aktif dan ditandai sebagai <strong>CLOSED WITHOUT REPRINT</strong>.
+                </div>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
+                <div class="flex justify-between"><span class="text-slate-500">Kode Cust:</span> <span id="close-code" class="font-mono font-bold text-slate-800"></span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Produk:</span> <span id="close-item" class="font-semibold text-slate-700"></span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Total Usable / Target:</span> <span id="close-usable-plan" class="font-bold text-slate-800"></span></div>
+            </div>
+
+            <form id="close-form" method="POST" action="" class="space-y-4">
+                @csrf
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Alasan Penutupan Rencana <span class="text-red-500">*</span>
+                    </label>
+                    <textarea name="closure_reason" id="close-reason-input" rows="2" required minlength="3" placeholder="Contoh: Disetujui kirim 1150 pcs sesuai toleransi customer..." class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeRecoveryModal('close-modal')" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" id="close-submit-btn" class="px-4 py-2 rounded-lg text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-sm flex items-center gap-1.5">
+                        <i class="fas fa-check"></i> Konfirmasi Tutup
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Isi / Update PO -->
+    <div id="po-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 m-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                        <i class="fas fa-file-contract"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800">Perbarui Data PO Customer</h3>
+                </div>
+                <button type="button" onclick="closeRecoveryModal('po-modal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
+                <div class="flex justify-between"><span class="text-slate-500">Kode Cust:</span> <span id="po-code" class="font-mono font-bold text-slate-800"></span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Produk:</span> <span id="po-item" class="font-semibold text-slate-700"></span></div>
+            </div>
+
+            <form id="po-form" method="POST" action="" class="space-y-4">
+                @csrf
+                @method('PUT')
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Nomor PO Customer
+                    </label>
+                    <input type="text" name="po_number" id="po-number-input" placeholder="Contoh: PO-2026-001" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Kuantitas PO (PCS)
+                    </label>
+                    <input type="number" name="po_quantity" id="po-qty-input" min="0" placeholder="Kosongkan jika belum ada..." class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                    <p class="text-[11px] text-slate-500 mt-1 italic">
+                        Perubahan kuantitas PO akan langsung memperbarui kalkulasi status (NORMAL / WARNING / CRITICAL).
+                    </p>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeRecoveryModal('po-modal')" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" id="po-submit-btn" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-sm flex items-center gap-1.5">
+                        <i class="fas fa-save"></i> Simpan Data PO
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection

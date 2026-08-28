@@ -200,14 +200,62 @@ class TreeController extends Controller
     public function show(LostWaxTree $tree)
     {
         $this->authorizeTree($tree);
-        $tree->load(['workOrder.itemReference', 'plan', 'printOrderLine.printOrder', 'printOrderLine.productionPlan', 'coatingRack']);
+        $tree->load([
+            'workOrder.itemReference',
+            'plan',
+            'printOrderLine.printOrder',
+            'printOrderLine.productionPlan',
+            'coatingRack',
+            'allocations.printOrderLine.printOrder',
+            'defects.recordedBy',
+        ]);
 
         $events = \App\Models\LostWaxScanEvent::with(['operator', 'void.voidedByUser'])
             ->where('tree_id', $tree->id)
             ->orderBy('scanned_at', 'asc')
             ->get();
 
-        return view('lost-wax.trees.show', compact('tree', 'events'));
+        $defects = $tree->defects()
+            ->with('recordedBy')
+            ->orderByRaw('COALESCE(occurred_at, created_at) DESC')
+            ->orderByDesc('id')
+            ->get();
+
+        return view('lost-wax.trees.show', compact('tree', 'events', 'defects'));
+    }
+
+    public function storeDefect(Request $request, LostWaxTree $tree)
+    {
+        $this->authorizeTree($tree);
+
+        $validated = $request->validate([
+            'stage' => 'required|string|in:assembly,layer_1,layer_2,layer_3,layer_4,layer_5,layer_6,layer_7,oven',
+            'defect_qty' => 'required|integer|min:1',
+            'defect_reason' => 'required|string|max:100',
+            'notes' => 'nullable|string|max:500',
+            'occurred_at' => 'nullable|date',
+        ]);
+
+        try {
+            $occurredAt = ! empty($validated['occurred_at'])
+                ? \Carbon\Carbon::parse($validated['occurred_at'])
+                : null;
+
+            $qualityService = app(\App\Services\LostWaxQualityService::class);
+            $qualityService->recordDefect(
+                tree: $tree,
+                stage: $validated['stage'],
+                defectQty: (int) $validated['defect_qty'],
+                defectReason: $validated['defect_reason'],
+                notes: $validated['notes'] ?? null,
+                occurredAt: $occurredAt,
+                userId: auth()->id()
+            );
+
+            return back()->with('success', "Defect sebanyak {$validated['defect_qty']} pcs berhasil dicatat.");
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
     }
 
     public function update(Request $request, LostWaxTree $tree)

@@ -478,8 +478,12 @@ class ProductionStatusController extends Controller
         }
 
         // 2. Fetch Production Plans with print order lines (New Flow)
-        $planQuery = ProductionPlan::with(['printOrderLines.printOrder', 'printOrderLines.trees'])
-            ->has('printOrderLines');
+        $planQuery = ProductionPlan::with([
+            'printOrderLines.printOrder',
+            'printOrderLines.executions',
+            'printOrderLines.trees.defects',
+            'printOrderLines.treeAllocations.tree.defects',
+        ])->has('printOrderLines');
 
         if ($search !== '') {
             $planQuery->where(function ($q) use ($search) {
@@ -511,24 +515,26 @@ class ProductionStatusController extends Controller
         }
 
         $plans = $planQuery->get();
+        $qualityService = app(\App\Services\LostWaxQualityService::class);
 
         foreach ($plans as $plan) {
-            $lines = $plan->printOrderLines;
-            $scheduledQty = 0;
-            $cetak_good = 0;
-            $cetak_defect = 0;
+            $breakdown = $qualityService->getProductionPlanQuantityBreakdown($plan);
+            $lines = $plan->printOrderLines->filter(fn ($l) => ! $l->printOrder || $l->printOrder->status !== 'CANCELLED');
 
+            $allTrees = collect();
             foreach ($lines as $line) {
-                // Exclude cancelled print orders
-                if ($line->printOrder && $line->printOrder->status !== 'CANCELLED') {
-                    $scheduledQty += $line->qty_ordered;
-                    $cetak_good += $line->qty_actual_good ?? 0;
-                    $cetak_defect += $line->qty_actual_defect ?? 0;
+                foreach ($line->trees as $t) {
+                    if ($t->status !== 'cancelled') {
+                        $allTrees->put($t->id, $t);
+                    }
+                }
+                foreach ($line->treeAllocations as $alloc) {
+                    if ($alloc->tree && $alloc->tree->status !== 'cancelled') {
+                        $allTrees->put($alloc->tree->id, $alloc->tree);
+                    }
                 }
             }
-
-            // In-memory collection from eager-loaded trees relationship (Prevents N+1)
-            $planTrees = $lines->flatMap(fn ($line) => $line->trees);
+            $activeTrees = $allTrees->values();
 
             $stageMap = [
                 'sebelum_scan' => 0,
@@ -542,9 +548,9 @@ class ProductionStatusController extends Controller
                 'oven' => 0,
             ];
 
-            foreach ($planTrees as $tree) {
+            foreach ($activeTrees as $tree) {
                 $stageKey = $tree->current_stage ?: 'sebelum_scan';
-                $stageMap[$stageKey] = ($stageMap[$stageKey] ?? 0) + $tree->quantity;
+                $stageMap[$stageKey] = ($stageMap[$stageKey] ?? 0) + $tree->usable_quantity;
             }
 
             $layerQtys = [];
@@ -554,41 +560,19 @@ class ProductionStatusController extends Controller
 
             $ovenQty = $stageMap['oven'] ?? 0;
             $totalLap = array_sum($layerQtys);
-            $totalTreeQty = $totalLap + $ovenQty + $stageMap['sebelum_scan'];
 
-            $rangkai_good = $totalTreeQty;
-            $rangkai_defect = ($rangkai_good > 0) ? max(0, $cetak_good - $rangkai_good) : 0;
+            $qScheduled = $breakdown['q_scheduled'];
+            $qPrintGood = $breakdown['q_print_good'];
+            $qPrintDefect = $breakdown['q_print_defect'];
+            $qStandby = $breakdown['q_standby'];
+            $qTreeDefect = $breakdown['q_tree_defect'];
+            $qWipNet = $breakdown['q_wip_net'];
+            $qFinalUsable = $breakdown['q_final_usable'];
+            $qUsable = $breakdown['q_usable'];
+            $qualityStatus = $breakdown['status'];
 
-            // Display values:
-            $ctk_display = 0;
-            $r_ctk_display = 0;
-            if ($rangkai_good > 0) {
-                if ($rangkai_good < $cetak_good) {
-                    $ctk_display = $cetak_good;
-                    $r_ctk_display = $cetak_defect;
-                }
-            } else {
-                $ctk_display = $cetak_good;
-                $r_ctk_display = $cetak_defect;
-            }
-
-            $total_scanned = $totalLap + $ovenQty;
-            $rgki_display = 0;
-            $r_rgki_display = 0;
-            if ($total_scanned > 0) {
-                if ($total_scanned < $rangkai_good) {
-                    $rgki_display = $rangkai_good;
-                    $r_rgki_display = $rangkai_defect;
-                }
-            } else {
-                if ($rangkai_good > 0) {
-                    $rgki_display = $rangkai_good;
-                    $r_rgki_display = $rangkai_defect;
-                }
-            }
-
-            if ($totalTreeQty > 0) {
-                $prodStatus = ($ovenQty > 0 && $ovenQty === $totalTreeQty) ? 'COMPLETED' : 'ACTIVE';
+            if ($qUsable >= $plan->qty_planned && $ovenQty > 0 && $ovenQty === $qUsable) {
+                $prodStatus = 'COMPLETED';
             } else {
                 $prodStatus = 'ACTIVE';
             }
@@ -605,19 +589,20 @@ class ProductionStatusController extends Controller
                 'product_name' => $plan->item_name ?? '-',
                 'aisi' => $plan->aisi ?? '-',
                 'size' => $plan->size ?? '-',
+                'po_quantity' => $plan->po_quantity,
                 'planned_qty' => $plan->qty_planned,
-                'scheduled_qty' => $scheduledQty,
-                'actual_good' => $cetak_good,
-                'actual_defect' => $cetak_defect,
-                'assembly_qty' => $totalTreeQty,
+                'scheduled_qty' => $qScheduled,
+                'actual_good' => $qPrintGood,
+                'actual_defect' => $qPrintDefect,
+                'assembly_qty' => $breakdown['q_active_trees_gross'],
                 'before_scan_qty' => $stageMap['sebelum_scan'],
-                'ctk_display' => $ctk_display,
-                'r_ctk_display' => $r_ctk_display,
-                'rgki_display' => $rgki_display,
-                'r_rgki_display' => $r_rgki_display,
-                'overall_defect' => $cetak_defect + $rangkai_defect,
+                'ctk_display' => $qStandby,
+                'r_ctk_display' => $qPrintDefect,
+                'rgki_display' => $stageMap['sebelum_scan'],
+                'r_rgki_display' => $breakdown['q_assembly_defect'],
+                'overall_defect' => $qTreeDefect,
                 'total_lap' => $totalLap,
-                'tree_count' => $planTrees->count(),
+                'tree_count' => $activeTrees->count(),
                 'layer_1' => $layerQtys['layer_1'],
                 'layer_2' => $layerQtys['layer_2'],
                 'layer_3' => $layerQtys['layer_3'],
@@ -628,6 +613,13 @@ class ProductionStatusController extends Controller
                 'oven_qty' => $ovenQty,
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
+                'q_standby' => $qStandby,
+                'q_wip_net' => $qWipNet,
+                'q_final_usable' => $qFinalUsable,
+                'q_usable' => $qUsable,
+                'quality_status' => $qualityStatus,
+                'deficit_vs_plan' => $breakdown['deficit_vs_plan'],
+                'deficit_vs_po' => $breakdown['deficit_vs_po'],
             ];
         }
 
