@@ -70,6 +70,7 @@ return [
         ],
         'min_hours' => (float) env('LOST_WAX_AGING_MIN_HOURS', 4),
         'max_hours' => (float) env('LOST_WAX_AGING_MAX_HOURS', 6),
+        'min_scan_interval_minutes' => (int) env('LOST_WAX_MIN_SCAN_INTERVAL_MINUTES', 20),
     ],
 
     'printer_name' => env('THERMAL_PRINTER_NAME', 'TSC TE200'),

@@ -593,4 +593,112 @@ class ScanOvenTest extends TestCase
 
         Carbon::setTestNow(null);
     }
+
+    public function test_oven_scan_within_20_minutes_of_last_layer_is_rejected(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode('1110826001', '1', false);
+
+        $this->advanceTreeToStage($tree, $user->id, 6);
+        $tree->refresh();
+        $this->assertSame('layer_6', $tree->current_stage);
+
+        // Attempt oven scan 15 minutes after layer 6 scan
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 14, 15, 0)); // last layer 6 was at 14:00:00
+
+        $result = $this->scanService->processOvenScan($tree->barcode, $user->id);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Scan Oven ditolak: Interval scan terlalu singkat', $result['reason']);
+        $this->assertStringContainsString('15 menit', $result['reason']);
+        $this->assertStringContainsString('20 menit', $result['reason']);
+
+        // Tree stage must remain layer_6
+        $tree->refresh();
+        $this->assertSame('layer_6', $tree->current_stage);
+
+        // Check rejected event in database
+        $this->assertDatabaseHas('lost_wax_scan_events', [
+            'tree_id' => $tree->id,
+            'stage' => 'oven',
+            'result' => 'rejected',
+            'aging_minutes' => 15,
+            'aging_status' => 'too_fast',
+            'operator_id' => $user->id,
+        ]);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_oven_scan_at_19_minutes_59_seconds_is_rejected(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode('1110826001', '1', false);
+
+        $this->advanceTreeToStage($tree, $user->id, 6);
+        $tree->refresh();
+        $this->assertSame('layer_6', $tree->current_stage);
+
+        // Attempt oven scan at 19:59 after layer 6 scan (14:00:00 -> 14:19:59)
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 14, 19, 59));
+
+        $result = $this->scanService->processOvenScan($tree->barcode, $user->id);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Scan Oven ditolak: Interval scan terlalu singkat', $result['reason']);
+        $this->assertStringContainsString('19 menit', $result['reason']);
+
+        $tree->refresh();
+        $this->assertSame('layer_6', $tree->current_stage);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_oven_scan_at_exact_20_minutes_is_allowed(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode('1110826001', '1', false);
+
+        $this->advanceTreeToStage($tree, $user->id, 6);
+        $tree->refresh();
+        $this->assertSame('layer_6', $tree->current_stage);
+
+        // Attempt oven scan at exact 20:00 after layer 6 scan (14:00:00 -> 14:20:00)
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 14, 20, 0));
+
+        $result = $this->scanService->processOvenScan($tree->barcode, $user->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('oven', $result['tree']->current_stage);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_oven_scan_at_20_minutes_01_second_is_allowed(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode('1110826001', '1', false);
+
+        $this->advanceTreeToStage($tree, $user->id, 6);
+        $tree->refresh();
+        $this->assertSame('layer_6', $tree->current_stage);
+
+        // Attempt oven scan at 20:01 after layer 6 scan (14:00:00 -> 14:20:01)
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 14, 20, 1));
+
+        $result = $this->scanService->processOvenScan($tree->barcode, $user->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('oven', $result['tree']->current_stage);
+
+        Carbon::setTestNow(null);
+    }
 }

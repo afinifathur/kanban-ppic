@@ -135,7 +135,9 @@ class DemoDataAndManualScanTest extends TestCase
 
         $this->assertSame('layer_1', $freshTree->fresh()->current_stage);
 
-        // Advance to layer_2
+        // Advance past 20-minute safety threshold to layer_2
+        \Carbon\Carbon::setTestNow(now()->addMinutes(30));
+
         $response2 = $this->actingAs($user)
             ->postJson(route('lost-wax.scan.process'), [
                 'barcode' => $freshTree->barcode,

@@ -225,7 +225,7 @@
                 </li>
 
                 <!-- 2. PLANNING -->
-                @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic')))
+                @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Planning</span>
                 </li>
@@ -306,7 +306,7 @@
                     </button>
                     <ul id="lostWaxMenu"
                         class="{{ $isLostWaxSidebarOpen ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
-                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic')))
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
                             <a href="{{ route('lost-wax.print-orders.plans') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.print-orders.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
@@ -316,7 +316,7 @@
                             </a>
                         </li>
                         @endif
-                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'spv')))
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'spv') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
                             <a href="{{ route('lost-wax.outcomes.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.outcomes.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
@@ -440,6 +440,19 @@
                             </li>
                         @endforeach
                     </ul>
+                </li>
+
+                <!-- QUALITY CONTROL -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">Quality Control</span>
+                </li>
+                <li>
+                    <a href="{{ route('lost-wax.quality.defects.index') }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.quality.defects.*') ? 'bg-blue-600 text-white border-l-4 border-rose-400 font-medium' : 'text-slate-300' }}"
+                        title="Rekap Kerusakan">
+                        <i class="fas fa-shield-alt w-6 shrink-0 text-center text-rose-400"></i>
+                        <span class="text-sm sidebar-text ml-2">Rekap Kerusakan</span>
+                    </a>
                 </li>
 
                 <!-- 6. REPORT -->

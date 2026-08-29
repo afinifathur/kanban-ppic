@@ -86,6 +86,8 @@ class ScanController extends Controller
             $result['next_stage_label'] = $result['next_stage']
                 ? (config('lost_wax.stages.'.$result['next_stage'], $result['next_stage']))
                 : null;
+        } elseif (isset($result['tree']) && $result['tree'] instanceof LostWaxTree) {
+            $result['tree_info'] = $this->treeInfo($result['tree']);
         }
 
         return response()->json($result);
@@ -157,7 +159,7 @@ class ScanController extends Controller
 
         $result = $this->scanService->processOvenScan($barcode, auth()->id() ?? 1);
 
-        if ($result['success']) {
+        if (isset($result['tree']) && $result['tree'] instanceof LostWaxTree) {
             $result['tree_info'] = $this->treeInfo($result['tree']);
         }
 

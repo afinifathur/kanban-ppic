@@ -12,8 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [
+            \App\Http\Middleware\PreventQcMutation::class,
+        ]);
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'prevent.qc.mutation' => \App\Http\Middleware\PreventQcMutation::class,
         ]);
         $middleware->trustProxies(at: '*');
     })

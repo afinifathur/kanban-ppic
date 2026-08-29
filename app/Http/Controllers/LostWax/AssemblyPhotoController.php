@@ -17,7 +17,7 @@ class AssemblyPhotoController extends Controller
         $currentPhoto = null;
         $history = collect();
 
-        if ($selectedCode) {
+        if ($selectedCode && ! AssemblyPhotoService::isInvalidProductCode($selectedCode)) {
             $currentPhoto = $this->photoService->getCurrentPhoto($selectedCode);
             $history = $this->photoService->getHistory($selectedCode);
         }
@@ -27,6 +27,25 @@ class AssemblyPhotoController extends Controller
             'selectedName',
             'currentPhoto',
             'history'
+        ));
+    }
+
+    public function auditIndex(Request $request)
+    {
+        $search = (string) $request->input('q', '');
+        $statusFilter = (string) $request->input('status', 'all');
+        $page = (int) $request->input('page', 1);
+
+        $auditData = $this->photoService->getAuditList($search, $statusFilter, 50, $page);
+
+        $items = $auditData['items'];
+        $counts = $auditData['counts'];
+
+        return view('settings.assembly-photos.audit', compact(
+            'items',
+            'counts',
+            'search',
+            'statusFilter'
         ));
     }
 
@@ -44,10 +63,10 @@ class AssemblyPhotoController extends Controller
     public function detail(Request $request)
     {
         $code = (string) $request->input('product_code', '');
-        if ($code === '') {
+        if ($code === '' || AssemblyPhotoService::isInvalidProductCode($code)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Product code diperlukan.',
+                'message' => 'Product code tidak valid atau kosong.',
             ], 422);
         }
 
@@ -95,6 +114,15 @@ class AssemblyPhotoController extends Controller
         $frontFile = $request->file('front_photo');
         $sideFile = $request->file('side_photo');
         $notes = $request->input('notes');
+
+        if (AssemblyPhotoService::isInvalidProductCode($productCode)) {
+            $msg = 'Product Code tidak valid (placeholder seperti XX tidak diperbolehkan).';
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return back()->withInput()->with('error', $msg);
+        }
 
         try {
             $photo = $this->photoService->storePhoto(

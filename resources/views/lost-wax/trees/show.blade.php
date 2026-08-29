@@ -134,7 +134,7 @@
         </div>
 
         <!-- 2. KOREKSI QUANTITY (JIKA CORRECTABLE) -->
-        @if($tree->is_correctable)
+        @if($tree->is_correctable && !auth()->user()->hasRole('admin_qc_fitting'))
             <div class="bg-white rounded-xl shadow-xs border border-slate-200 p-4">
                 <h3 class="font-bold text-xs uppercase text-slate-700 tracking-wider mb-2.5 flex items-center gap-1.5">
                     <i class="fas fa-pen text-amber-600"></i> Koreksi Quantity Rangkaian
@@ -187,7 +187,7 @@
                     </div>
 
                     <!-- Action Button -->
-                    @if(!$isCancelled && $tree->usable_quantity > 0)
+                    @if(!$isCancelled && $tree->usable_quantity > 0 && !auth()->user()->hasRole('admin_qc_fitting'))
                         <button type="button" onclick="openDefectModal()"
                             class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-2xs transition-colors inline-flex items-center gap-1.5 ml-1">
                             <i class="fas fa-plus text-[10px]"></i> Catat Defect

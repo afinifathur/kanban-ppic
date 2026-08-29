@@ -34,10 +34,22 @@ class ScanService
             $scannedAt = Carbon::now(config('app.timezone'));
             $agingMinutes = null;
             $agingStatus = null;
+            $minScanInterval = (int) config('lost_wax.aging.min_scan_interval_minutes', 20);
 
             if ($tree->last_scan_at) {
-                $agingMinutes = (int) round($tree->last_scan_at->diffInMinutes($scannedAt));
+                $diffInSeconds = (int) $tree->last_scan_at->diffInSeconds($scannedAt);
+                $agingMinutes = (int) floor($diffInSeconds / 60);
                 $agingStatus = $this->classifyAging($agingMinutes, $tree->current_stage);
+
+                if ($diffInSeconds < ($minScanInterval * 60)) {
+                    $reason = sprintf(
+                        'Scan ditolak: Interval scan terlalu singkat (%d menit dari scan sebelumnya). Minimum interval adalah %d menit untuk mencegah double scan.',
+                        $agingMinutes,
+                        $minScanInterval
+                    );
+
+                    return $this->rejectInterlockScan($tree, $operatorId, $nextStage, $reason, $agingMinutes);
+                }
             }
 
             $event = LostWaxScanEvent::create([
@@ -218,10 +230,22 @@ class ScanService
             $scannedAt = Carbon::now(config('app.timezone'));
             $agingMinutes = null;
             $agingStatus = null;
+            $minScanInterval = (int) config('lost_wax.aging.min_scan_interval_minutes', 20);
 
             if ($tree->last_scan_at) {
-                $agingMinutes = (int) round($tree->last_scan_at->diffInMinutes($scannedAt));
+                $diffInSeconds = (int) $tree->last_scan_at->diffInSeconds($scannedAt);
+                $agingMinutes = (int) floor($diffInSeconds / 60);
                 $agingStatus = $this->classifyAging($agingMinutes, $tree->current_stage);
+
+                if ($diffInSeconds < ($minScanInterval * 60)) {
+                    $reason = sprintf(
+                        'Scan Oven ditolak: Interval scan terlalu singkat (%d menit dari scan sebelumnya). Minimum interval adalah %d menit untuk mencegah double scan.',
+                        $agingMinutes,
+                        $minScanInterval
+                    );
+
+                    return $this->rejectInterlockScan($tree, $operatorId, 'oven', $reason, $agingMinutes);
+                }
             }
 
             $event = LostWaxScanEvent::create([
@@ -251,6 +275,31 @@ class ScanService
                 'aging_status' => $agingStatus,
             ];
         });
+    }
+
+    public function rejectInterlockScan(LostWaxTree $tree, int $operatorId, string $stage, string $reason, int $agingMinutes): array
+    {
+        LostWaxScanEvent::create([
+            'tree_id' => $tree->id,
+            'barcode' => $tree->barcode,
+            'stage' => $stage,
+            'scanned_at' => Carbon::now(config('app.timezone')),
+            'operator_id' => $operatorId,
+            'result' => 'rejected',
+            'anomaly_reason' => $reason,
+            'aging_minutes' => $agingMinutes,
+            'aging_status' => 'too_fast',
+        ]);
+
+        $tree->load(['workOrder.itemReference', 'printOrderLine.printOrder', 'printOrderLine.productionPlan']);
+
+        return [
+            'success' => false,
+            'tree' => $tree,
+            'reason' => $reason,
+            'current_stage' => $tree->current_stage,
+            'current_stage_label' => $tree->current_stage_label,
+        ];
     }
 
     private function rejectOvenScan(LostWaxTree $tree, int $operatorId, string $stage, string $reason): array

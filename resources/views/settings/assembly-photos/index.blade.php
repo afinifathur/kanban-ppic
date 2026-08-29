@@ -6,6 +6,12 @@
             <h1 class="text-lg font-bold text-slate-800 leading-tight">MASTER FOTO RANGKAI</h1>
             <p class="text-gray-500 text-[10px]">Kelola foto referensi visual perakitan (tampak depan & tampak samping) per produk</p>
         </div>
+        <div class="flex items-center gap-2">
+            <a href="{{ route('settings.assembly-photos.audit') }}" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center gap-2">
+                <i class="fas fa-list-check text-blue-400"></i>
+                <span>Daftar Master Foto</span>
+            </a>
+        </div>
     </div>
 @endsection
 
@@ -84,13 +90,20 @@
             </div>
         </div>
 
-        {{-- Upload & Manage Form --}}
-        <form action="{{ route('settings.assembly-photos.store') }}" method="POST" enctype="multipart/form-data" id="photoUploadForm" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+        {{-- Upload & Edit Section --}}
+        @if(!auth()->user()->hasRole('admin_qc_fitting'))
+        <form
+            id="photoUploadForm"
+            action="{{ route('settings.assembly-photos.store') }}"
+            method="POST"
+            enctype="multipart/form-data"
+            class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6"
+        >
             @csrf
             <input type="hidden" name="product_code" id="formProductCode" value="{{ $selectedCode }}">
-            <input type="hidden" name="product_name" id="formProductName" value="{{ $selectedName }}">
+            <input type="hidden" name="product_name" id="formProductName" value="{{ $selectedName ?? ($currentPhoto?->product_name ?? '') }}">
 
-            <div class="border-b border-slate-200 pb-3 flex items-center justify-between">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
                     <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Unggah / Perbarui Foto Referensi</h3>
                     <p class="text-xs text-slate-500">Foto akan otomatis dikompres dan disimpan sebagai versi baru tanpa menghapus riwayat sebelumnya.</p>
@@ -132,18 +145,20 @@
 
                     {{-- File Input --}}
                     <div>
-                        <label for="frontPhotoInput" class="block text-xs font-semibold text-slate-600 mb-1.5">
-                            Ganti / Upload Foto Depan:
+                        <label
+                            for="frontPhotoInput"
+                            class="block w-full py-2.5 px-4 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold text-center cursor-pointer shadow-2xs transition-all"
+                        >
+                            <i class="fas fa-upload mr-1 text-blue-600"></i>
+                            <span id="frontUploadLabel">Pilih Foto Tampak Depan</span>
                         </label>
                         <input
                             type="file"
                             name="front_photo"
                             id="frontPhotoInput"
-                            accept="image/*"
-                            capture="environment"
-                            class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-200 rounded-lg bg-white p-1"
+                            accept="image/jpeg,image/png,image/webp"
+                            class="hidden"
                         >
-                        <p class="text-[10px] text-slate-400 mt-1">Format: JPG, PNG, WebP (Maks. 10MB, auto-compressed).</p>
                     </div>
                 </div>
 
@@ -179,18 +194,20 @@
 
                     {{-- File Input --}}
                     <div>
-                        <label for="sidePhotoInput" class="block text-xs font-semibold text-slate-600 mb-1.5">
-                            Ganti / Upload Foto Samping:
+                        <label
+                            for="sidePhotoInput"
+                            class="block w-full py-2.5 px-4 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold text-center cursor-pointer shadow-2xs transition-all"
+                        >
+                            <i class="fas fa-upload mr-1 text-blue-600"></i>
+                            <span id="sideUploadLabel">Pilih Foto Tampak Samping</span>
                         </label>
                         <input
                             type="file"
                             name="side_photo"
                             id="sidePhotoInput"
-                            accept="image/*"
-                            capture="environment"
-                            class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-200 rounded-lg bg-white p-1"
+                            accept="image/jpeg,image/png,image/webp"
+                            class="hidden"
                         >
-                        <p class="text-[10px] text-slate-400 mt-1">Format: JPG, PNG, WebP (Maks. 10MB, auto-compressed).</p>
                     </div>
                 </div>
 
@@ -223,6 +240,12 @@
                 </div>
             </div>
         </form>
+        @else
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 flex items-center gap-2">
+            <i class="fas fa-info-circle text-blue-600 text-sm"></i>
+            <span>Mode QC: Anda sedang melihat Master Foto Perakitan dalam mode <strong>Read-Only</strong>.</span>
+        </div>
+        @endif
 
         {{-- Version History Section --}}
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">

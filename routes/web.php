@@ -70,6 +70,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/settings/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'destroy'])->name('settings.customers.destroy');
 
     // Master Foto Rangkai Settings
+    Route::get('/settings/assembly-photos/index', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'auditIndex'])->name('settings.assembly-photos.audit');
     Route::get('/settings/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'index'])->name('settings.assembly-photos.index');
     Route::get('/settings/assembly-photos/search', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'search'])->name('settings.assembly-photos.search');
     Route::get('/settings/assembly-photos/detail', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'detail'])->name('settings.assembly-photos.detail');
@@ -187,6 +188,11 @@ Route::middleware(['auth'])->group(function () {
 
             // Rack Monitoring
             Route::get('/rack-monitor', [\App\Http\Controllers\LostWax\RackMonitorController::class, 'index'])->name('rack-monitor.index');
+
+            // Quality Control - Rekap Kerusakan
+            Route::get('/quality/defects', [\App\Http\Controllers\LostWax\DefectReportController::class, 'index'])->name('quality.defects.index');
+            Route::get('/quality/defects/export/excel', [\App\Http\Controllers\LostWax\DefectReportController::class, 'exportExcel'])->name('quality.defects.export.excel');
+            Route::get('/quality/defects/export/pdf', [\App\Http\Controllers\LostWax\DefectReportController::class, 'exportPdf'])->name('quality.defects.export.pdf');
         });
     });
 });

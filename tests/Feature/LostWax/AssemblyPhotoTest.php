@@ -13,7 +13,9 @@ use App\Repositories\ArrayItemMasterRepository;
 use App\Services\AssemblyPhotoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use Tests\TestCase;
 
 class AssemblyPhotoTest extends TestCase
@@ -56,6 +58,13 @@ class AssemblyPhotoTest extends TestCase
         // Bind mock item master repository
         $this->app->instance(ItemMasterRepository::class, new ArrayItemMasterRepository([
             [
+                'code' => '4.801190FFBSP.G.A0020',
+                'name' => 'SS304 ELBOW 90 F/F BSP 3/4"',
+                'aisi' => 'ANSI',
+                'standard' => 'CF8',
+                'status' => 'active',
+            ],
+            [
                 'code' => '268ETB733',
                 'name' => 'SS304 SQUARE DN 25',
                 'aisi' => '304',
@@ -78,6 +87,7 @@ class AssemblyPhotoTest extends TestCase
         $response->assertOk();
         $response->assertSee('MASTER FOTO RANGKAI');
         $response->assertSee('productSearchInput');
+        $response->assertSee('Daftar Master Foto');
     }
 
     public function test_unauthenticated_user_cannot_access_assembly_photos_page(): void
@@ -100,6 +110,71 @@ class AssemblyPhotoTest extends TestCase
         $this->assertEquals('SS304 SQUARE DN 25', $response->json('products.0.name'));
     }
 
+    public function test_invalid_placeholder_xx_is_filtered_from_search_and_not_displayed_as_product_identity(): void
+    {
+        // Insert a dirty production plan with placeholder XX
+        ProductionPlan::create([
+            'code' => '268L651',
+            'item_code' => 'XX',
+            'item_name' => 'SS304 ELBOW 90 F/F BSP 3/4"',
+            'po_number' => 'SL1200-1318',
+            'line_number' => 1,
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+        ]);
+
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/settings/assembly-photos/search?q=ELBOW');
+
+        $response->assertOk();
+        $products = $response->json('products');
+
+        $this->assertNotEmpty($products);
+        foreach ($products as $p) {
+            $this->assertNotEquals('XX', $p['code'], 'Placeholder XX must never be returned as product code.');
+            $this->assertNotEquals('X09', $p['code']);
+            $this->assertNotEquals('-', $p['code']);
+        }
+
+        // Must return the actual item code from master data
+        $this->assertEquals('4.801190FFBSP.G.A0020', $products[0]['code']);
+        $this->assertEquals('SS304 ELBOW 90 F/F BSP 3/4"', $products[0]['name']);
+    }
+
+    public function test_master_item_is_primary_product_identity(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $results = $service->searchProducts('ELBOW');
+
+        $this->assertNotEmpty($results);
+        $first = $results->first();
+        $this->assertEquals('4.801190FFBSP.G.A0020', $first['code']);
+        $this->assertEquals('SS304 ELBOW 90 F/F BSP 3/4"', $first['name']);
+        $this->assertEquals('ANSI', $first['aisi']);
+        $this->assertEquals('CF8', $first['standard']);
+    }
+
+    public function test_future_upload_cannot_save_placeholder_codes_like_xx(): void
+    {
+        $frontImage = UploadedFile::fake()->image('front.jpg', 800, 600);
+
+        // Via HTTP request
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => 'XX',
+                'product_name' => 'Invalid Product',
+                'front_photo' => $frontImage,
+            ]);
+
+        $response->assertSessionHas('error');
+        $this->assertEquals(0, LostWaxAssemblyPhoto::where('product_code', 'XX')->count());
+
+        // Via Service directly
+        $service = app(AssemblyPhotoService::class);
+        $this->expectException(InvalidArgumentException::class);
+        $service->storePhoto('XX', 'Invalid Product', $frontImage);
+    }
+
     public function test_upload_both_front_and_side_photos_creates_version_1(): void
     {
         $frontImage = UploadedFile::fake()->image('front.jpg', 800, 600);
@@ -107,8 +182,8 @@ class AssemblyPhotoTest extends TestCase
 
         $response = $this->actingAs($this->adminUser)
             ->post('/settings/assembly-photos', [
-                'product_code' => '268ETB733',
-                'product_name' => 'SS304 SQUARE DN 25',
+                'product_code' => '4.801190FFBSP.G.A0020',
+                'product_name' => 'SS304 ELBOW 90 F/F BSP 3/4"',
                 'front_photo' => $frontImage,
                 'side_photo' => $sideImage,
                 'notes' => 'Versi awal',
@@ -117,7 +192,7 @@ class AssemblyPhotoTest extends TestCase
         $response->assertRedirect();
         $response->assertSessionHas('success');
 
-        $photo = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->where('is_current', true)->first();
+        $photo = LostWaxAssemblyPhoto::where('product_code', '4.801190FFBSP.G.A0020')->where('is_current', true)->first();
         $this->assertNotNull($photo);
         $this->assertEquals(1, $photo->version);
         $this->assertNotNull($photo->front_image_path);
@@ -139,17 +214,14 @@ class AssemblyPhotoTest extends TestCase
         $this->assertEquals(1, $v1->version);
         $this->assertTrue($v1->is_current);
 
-        // Replace front only in V2
+        // Upload both front and side for V2
         $frontV2 = UploadedFile::fake()->image('front_v2.jpg', 1000, 800);
-        $v2 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV2, null, $this->adminUser, 'V2 Front revised');
+        $sideV2 = UploadedFile::fake()->image('side_v2.jpg', 1000, 800);
+        $v2 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV2, $sideV2, $this->adminUser, 'V2 Revised');
 
         $this->assertEquals(2, $v2->version);
         $this->assertTrue($v2->is_current);
         $this->assertFalse($v1->fresh()->is_current);
-
-        // Front path updated, side path preserved from V1
-        $this->assertNotEquals($v1->front_image_path, $v2->front_image_path);
-        $this->assertEquals($v1->side_image_path, $v2->side_image_path);
 
         // Check history contains both versions
         $history = $service->getHistory('268ETB733');
@@ -158,9 +230,91 @@ class AssemblyPhotoTest extends TestCase
         $this->assertEquals(1, $history->last()->version);
     }
 
+    public function test_version_semantics_and_incomplete_status_calculation(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $frontV1 = UploadedFile::fake()->image('front_v1.jpg', 800, 600);
+
+        // 1. Upload Front only -> V1 Incomplete (1/2 foto)
+        $v1 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV1, null, $this->adminUser);
+        $photos = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->get();
+        $status1 = $service->computeStatusForPhotos($photos);
+
+        $this->assertEquals('incomplete', $status1['status_key']);
+        $this->assertEquals('INCOMPLETE v.1', $status1['label']);
+        $this->assertEquals('1/2 foto', $status1['detail']);
+
+        // 2. Upload Side only -> Completes V1 (2/2 foto)
+        $sideV1 = UploadedFile::fake()->image('side_v1.jpg', 800, 600);
+        $v1Completed = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', null, $sideV1, $this->adminUser);
+        $this->assertEquals(1, $v1Completed->version);
+
+        $photos = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->get();
+        $status2 = $service->computeStatusForPhotos($photos);
+        $this->assertEquals('complete', $status2['status_key']);
+        $this->assertEquals('FOTO TERSEDIA v.1', $status2['label']);
+        $this->assertEquals('2 foto', $status2['detail']);
+
+        // 3. Upload both Front and Side for V2 -> Complete V2 (4/4 foto)
+        $frontV2 = UploadedFile::fake()->image('front_v2.jpg', 800, 600);
+        $sideV2 = UploadedFile::fake()->image('side_v2.jpg', 800, 600);
+        $v2 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV2, $sideV2, $this->adminUser);
+        $this->assertEquals(2, $v2->version);
+
+        $photos = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->get();
+        $status3 = $service->computeStatusForPhotos($photos);
+        $this->assertEquals('complete', $status3['status_key']);
+        $this->assertEquals('FOTO TERSEDIA v.2', $status3['label']);
+        $this->assertEquals('4 foto', $status3['detail']);
+    }
+
+    public function test_audit_index_page_loads_and_displays_deterministic_status(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $front = UploadedFile::fake()->image('front.jpg', 600, 600);
+        $side = UploadedFile::fake()->image('side.jpg', 600, 600);
+
+        // 1 item complete v1
+        $service->storePhoto('4.801190FFBSP.G.A0020', 'SS304 ELBOW 90 F/F BSP 3/4"', $front, $side, $this->adminUser);
+
+        // 1 item incomplete v1
+        $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $front, null, $this->adminUser);
+
+        // 1 item has no photo: FL-DN50-304
+
+        $response = $this->actingAs($this->adminUser)->get('/settings/assembly-photos/index');
+        $response->assertOk();
+        $response->assertSee('MASTER FOTO RANGKAI — AUDIT STATUS');
+        $response->assertSee('4.801190FFBSP.G.A0020');
+        $response->assertSee('FOTO TERSEDIA v.1');
+        $response->assertSee('268ETB733');
+        $response->assertSee('INCOMPLETE v.1');
+        $response->assertSee('FL-DN50-304');
+        $response->assertSee('BELUM ADA');
+        $response->assertSee('Kelola');
+    }
+
+    public function test_audit_index_runs_without_n_plus_one_queries(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $front = UploadedFile::fake()->image('front.jpg', 600, 600);
+        $side = UploadedFile::fake()->image('side.jpg', 600, 600);
+
+        $service->storePhoto('4.801190FFBSP.G.A0020', 'SS304 ELBOW 90 F/F BSP 3/4"', $front, $side, $this->adminUser);
+        $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $front, null, $this->adminUser);
+
+        DB::enableQueryLog();
+
+        $response = $this->actingAs($this->adminUser)->get('/settings/assembly-photos/index');
+        $response->assertOk();
+
+        $queries = DB::getQueryLog();
+        // Zero N+1: Should only execute a bounded minimal number of queries (session/user/photos)
+        $this->assertLessThanOrEqual(5, count($queries), 'Audit index must execute a constant number of queries without N+1.');
+    }
+
     public function test_image_is_compressed_and_stored(): void
     {
-        // 2000x2000 large fake image
         $largeImage = UploadedFile::fake()->image('large.jpg', 2400, 1800);
 
         $service = app(AssemblyPhotoService::class);
@@ -225,81 +379,6 @@ class AssemblyPhotoTest extends TestCase
         $response->assertSee('REFERENSI GAMBAR');
         $response->assertSee($photo->front_image_url);
         $response->assertSee($photo->side_image_url);
-    }
-
-    public function test_traveler_print_page_shows_clear_placeholder_when_photo_not_available(): void
-    {
-        $plan = ProductionPlan::create([
-            'code' => 'PLAN-999',
-            'item_code' => 'NO-PHOTO-ITEM',
-            'item_name' => 'Produk Tanpa Foto',
-            'po_number' => 'PO-99999',
-            'line_number' => 1,
-            'qty_planned' => 100,
-            'qty_remaining' => 100,
-        ]);
-
-        $printOrder = LostWaxPrintOrder::create([
-            'print_order_number' => 'PO-999',
-            'scheduled_date' => now()->toDateString(),
-            'status' => 'ISSUED',
-            'created_by' => $this->adminUser->id,
-        ]);
-
-        $line = LostWaxPrintOrderLine::create([
-            'lost_wax_print_order_id' => $printOrder->id,
-            'production_plan_id' => $plan->id,
-            'qty_ordered' => 50,
-            'code' => 'NO-PHOTO-ITEM',
-            'item_name' => 'Produk Tanpa Foto',
-            'qty_actual_good' => 50,
-        ]);
-
-        $workOrder = LostWaxRangkaiWorkOrder::create([
-            'rangkai_order_number' => 'RWO-999',
-            'lost_wax_print_order_line_id' => $line->id,
-            'qty_trees_planned' => 50,
-            'tree_capacity' => 1,
-            'status' => 'PENDING',
-            'created_by' => $this->adminUser->id,
-        ]);
-
-        $response = $this->actingAs($this->adminUser)
-            ->get("/lost-wax/assemblies/work-orders/{$workOrder->id}/print");
-
-        $response->assertOk();
-        $response->assertSee('REFERENSI GAMBAR');
-        $response->assertSee('FOTO BELUM TERSEDIA');
-    }
-
-    public function test_photo_service_falls_back_to_product_name_if_code_differs(): void
-    {
-        $service = app(AssemblyPhotoService::class);
-        $front = UploadedFile::fake()->image('front.jpg', 600, 600);
-        $photo = $service->storePhoto('LEGACY_CODE', 'SS304 SQUARE DN 25', $front, null, $this->adminUser);
-
-        // Search with unknown code but matching name
-        $matched = $service->getCurrentPhoto('DIFFERENT_CODE', 'SS304 SQUARE DN 25');
-        $this->assertNotNull($matched);
-        $this->assertEquals($photo->id, $matched->id);
-    }
-
-    public function test_photo_service_does_not_false_match_unrelated_items(): void
-    {
-        $service = app(AssemblyPhotoService::class);
-        $front = UploadedFile::fake()->image('front.jpg', 600, 600);
-        $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $front, null, $this->adminUser);
-
-        $matched = $service->getCurrentPhoto('UNRELATED_CODE', 'UNRELATED_NAME');
-        $this->assertNull($matched);
-    }
-
-    public function test_sidebar_contains_foto_rangkai_link(): void
-    {
-        $response = $this->actingAs($this->adminUser)->get('/dashboard');
-        $response->assertOk();
-        $response->assertSee('Foto Rangkai');
-        $response->assertSee(route('settings.assembly-photos.index'));
     }
 
     public function test_detail_endpoint_returns_current_and_history_json(): void

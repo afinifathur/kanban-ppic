@@ -419,7 +419,7 @@ class ScanEngineTest extends TestCase
         Carbon::setTestNow(null);
     }
 
-    // ─── TEST 16: Concurrent scan safety (lockForUpdate) ───
+    // ─── TEST 16: Sequential scan safety via locking ───
     public function test_concurrent_scan_safety_via_locking(): void
     {
         Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
@@ -432,6 +432,9 @@ class ScanEngineTest extends TestCase
         $this->assertTrue($result1['success']);
         $this->assertSame('layer_1', $result1['tree']->current_stage);
 
+        // Advance past 20-minute safety threshold (e.g. 1 hour later)
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 9, 0, 0));
+
         // Second process sees updated state
         $result2 = $this->scanService->process($tree->barcode, $user->id);
         $this->assertTrue($result2['success']);
@@ -439,6 +442,137 @@ class ScanEngineTest extends TestCase
 
         // Total 2 successful scan events
         $this->assertSame(2, LostWaxScanEvent::where('tree_id', $tree->id)->where('result', 'success')->count());
+
+        Carbon::setTestNow(null);
+    }
+
+    // ─── SAFETY INTERLOCK TESTS ───
+    public function test_scan_within_20_minutes_is_rejected_by_safety_interlock(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode();
+
+        // First scan at 08:00:00 -> Lapisan 1 succeeds
+        $result1 = $this->scanService->process($tree->barcode, $user->id);
+        $this->assertTrue($result1['success']);
+        $this->assertSame('layer_1', $result1['tree']->current_stage);
+
+        // Second scan at 08:10:00 (10 minutes later) -> REJECTED by 20-minute interlock
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 10, 0));
+
+        $result2 = $this->scanService->process($tree->barcode, $user->id);
+
+        $this->assertFalse($result2['success']);
+        $this->assertStringContainsString('Interval scan terlalu singkat', $result2['reason']);
+        $this->assertStringContainsString('10 menit', $result2['reason']);
+        $this->assertStringContainsString('20 menit', $result2['reason']);
+
+        // Tree stage must NOT advance (still layer_1)
+        $tree->refresh();
+        $this->assertSame('layer_1', $tree->current_stage);
+        $this->assertSame('2026-08-11 08:00:00', $tree->last_scan_at->format('Y-m-d H:i:s'));
+
+        // Verify rejected event in database
+        $this->assertDatabaseHas('lost_wax_scan_events', [
+            'tree_id' => $tree->id,
+            'stage' => 'layer_2',
+            'result' => 'rejected',
+            'aging_minutes' => 10,
+            'aging_status' => 'too_fast',
+            'operator_id' => $user->id,
+        ]);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_scan_at_or_after_20_minutes_succeeds(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode();
+
+        // First scan at 08:00:00
+        $this->scanService->process($tree->barcode, $user->id);
+
+        // Scan at 08:20:00 (exact 20 minutes later) -> SUCCEEDS
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 20, 0));
+
+        $result = $this->scanService->process($tree->barcode, $user->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('layer_2', $result['tree']->current_stage);
+        $this->assertSame(20, $result['event']->aging_minutes);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_scan_at_19_minutes_59_seconds_is_rejected_by_safety_interlock(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode();
+
+        // First scan at 08:00:00
+        $this->scanService->process($tree->barcode, $user->id);
+
+        // Scan at 08:19:59 (19 minutes 59 seconds / 1199 seconds) -> MUST BE REJECTED
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 19, 59));
+
+        $result = $this->scanService->process($tree->barcode, $user->id);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Interval scan terlalu singkat', $result['reason']);
+        $this->assertStringContainsString('19 menit', $result['reason']);
+
+        // Tree stage must NOT advance
+        $tree->refresh();
+        $this->assertSame('layer_1', $tree->current_stage);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_scan_at_exact_20_minutes_00_seconds_is_allowed(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode();
+
+        // First scan at 08:00:00
+        $this->scanService->process($tree->barcode, $user->id);
+
+        // Scan at 08:20:00 (exact 1200 seconds) -> ALLOWED
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 20, 0));
+
+        $result = $this->scanService->process($tree->barcode, $user->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('layer_2', $result['tree']->current_stage);
+
+        Carbon::setTestNow(null);
+    }
+
+    public function test_scan_at_20_minutes_01_seconds_is_allowed(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 0, 0));
+
+        $user = User::factory()->create();
+        $tree = $this->createTreeWithBarcode();
+
+        // First scan at 08:00:00
+        $this->scanService->process($tree->barcode, $user->id);
+
+        // Scan at 08:20:01 (1201 seconds) -> ALLOWED
+        Carbon::setTestNow(Carbon::create(2026, 8, 11, 8, 20, 1));
+
+        $result = $this->scanService->process($tree->barcode, $user->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame('layer_2', $result['tree']->current_stage);
 
         Carbon::setTestNow(null);
     }
