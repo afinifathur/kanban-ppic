@@ -564,4 +564,67 @@ class QcFittingCrossScopeRbacTest extends TestCase
         $this->assertTrue($this->ppicUser->can('access_planning'));
         $this->assertTrue($this->ppicUser->can('access_execution'));
     }
+
+    /**
+     * 22. QC User can successfully log out (POST /logout) and become guest.
+     */
+    public function test_22_qc_user_can_logout_and_become_guest(): void
+    {
+        $response = $this->actingAs($this->qcUser)->post(route('logout'));
+
+        $response->assertRedirect('/login');
+        $this->assertGuest();
+    }
+
+    /**
+     * 23. PPIC User can successfully log out (POST /logout) and become guest.
+     */
+    public function test_23_ppic_user_can_logout_and_become_guest(): void
+    {
+        $response = $this->actingAs($this->ppicUser)->post(route('logout'));
+
+        $response->assertRedirect('/login');
+        $this->assertGuest();
+    }
+
+    /**
+     * 24. After QC logs out, session does not maintain QC identity.
+     */
+    public function test_24_after_qc_logout_session_does_not_retain_identity(): void
+    {
+        // 1. QC logs in
+        $this->actingAs($this->qcUser);
+        $this->assertAuthenticatedAs($this->qcUser);
+
+        // 2. QC logs out
+        $resLogout = $this->post(route('logout'));
+        $resLogout->assertRedirect('/login');
+        $this->assertGuest();
+
+        // 3. Visiting protected route redirects to login, not authenticated as QC
+        $resVisit = $this->get(route('dashboard'));
+        $resVisit->assertRedirect(route('login'));
+    }
+
+    /**
+     * 25. PPIC user retains mutation rights for their own scope while QC remains blocked.
+     */
+    public function test_25_ppic_user_retains_mutation_rights_for_own_scope(): void
+    {
+        $plan = $this->createPlan('FITTING_STAINLESS', '268PPIC_MUT');
+
+        // PPIC can create print order for their own scope
+        $resPpic = $this->actingAs($this->ppicUser)->post(route('lost-wax.print-orders.store'), [
+            'scheduled_date' => '2026-08-29',
+            'selected_plan_ids' => [$plan->id],
+        ]);
+        $resPpic->assertRedirect();
+
+        // QC is blocked with 403 on the exact same endpoint
+        $resQc = $this->actingAs($this->qcUser)->post(route('lost-wax.print-orders.store'), [
+            'scheduled_date' => '2026-08-29',
+            'selected_plan_ids' => [$plan->id],
+        ]);
+        $resQc->assertStatus(403);
+    }
 }
