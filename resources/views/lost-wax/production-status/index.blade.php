@@ -35,7 +35,7 @@
             vertical-align: middle;
         }
         .prod-name-cell {
-            max-width: 140px;
+            max-width: 190px;
             white-space: normal;
             word-wrap: break-word;
             display: -webkit-box;
@@ -48,12 +48,28 @@
         @media screen {
             .cell-layer-active { background: #d1fae5; color: #065f46; font-weight: 700; }
             .cell-oven { background: #ccfbf1; color: #0f766e; font-weight: 700; }
-            #prodStatusTable thead th { position: sticky; top: 0; z-index: 20; }
-            #prodStatusTable thead th:first-child { z-index: 30; }
+            #prodStatusTable thead {
+                position: sticky;
+                top: 0;
+                z-index: 20;
+            }
+            #prodStatusTable thead th {
+                position: sticky;
+                top: 0;
+                z-index: 20;
+                background-color: #1e293b !important;
+                box-shadow: inset 0 -1px 0 #334155;
+            }
+            #prodStatusTable thead th:first-child { z-index: 25; }
             .production-status-print { display: none; }
         }
 
         @media print {
+            .table-scroll-container {
+                overflow: visible !important;
+                max-height: none !important;
+                height: auto !important;
+            }
             .production-status-web { display: none !important; }
             .production-status-print { display: block !important; }
 
@@ -259,11 +275,11 @@
         @endif
 
         <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-            <div class="overflow-x-auto">
+            <div class="table-scroll-container overflow-y-auto overflow-x-auto" style="max-height: calc(100vh - 230px); min-height: 400px;">
                 <table class="w-full text-[10px] whitespace-nowrap border-collapse" id="prodStatusTable">
-                    <thead>
+                    <thead class="sticky top-0 z-20 bg-slate-800 text-white shadow-xs">
                         <tr class="bg-slate-800 text-white">
-                            <th class="compact-th text-left min-w-[110px] relative">
+                            <th class="compact-th text-left min-w-[58px] relative">
                                 <div class="flex items-center justify-between">
                                     <span>Kode Cust</span>
                                     <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="codes">
@@ -271,8 +287,8 @@
                                     </button>
                                 </div>
                             </th>
-                            <th class="compact-th text-left min-w-[130px] max-w-[140px]">Product Name</th>
-                            <th class="compact-th text-left min-w-[65px] relative">
+                            <th class="compact-th text-left min-w-[170px] max-w-[190px]">Product Name</th>
+                            <th class="compact-th text-left min-w-[45px] relative">
                                 <div class="flex items-center justify-between">
                                     <span>AISI</span>
                                     <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="aisis">
@@ -280,7 +296,7 @@
                                     </button>
                                 </div>
                             </th>
-                            <th class="compact-th text-right min-w-[65px] relative">
+                            <th class="compact-th text-right min-w-[42px] relative">
                                 <div class="flex items-center justify-between">
                                     <span>PO</span>
                                     <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="po_numbers">
@@ -314,6 +330,7 @@
                             <th class="compact-th text-center min-w-[30px]">L7</th>
                             <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
                             <th class="compact-th text-center min-w-[38px]">Oven</th>
+                            <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
                             <th class="compact-th text-center min-w-[60px]">Status</th>
                         </tr>
                     </thead>
@@ -338,19 +355,22 @@
                                 
                                 <!-- CTK & R after CTK -->
                                 <td class="compact-td text-center font-mono {{ $row['ctk_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['ctk_display'] > 0 ? $row['ctk_display'] : '-' }}</td>
-                                <td class="compact-td text-center font-mono {{ $row['r_ctk_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['r_ctk_display'] > 0 ? $row['r_ctk_display'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['r_ctk_display']>0?'font-bold text-red-600 bg-red-50/50':'text-slate-400' }}">{{ $row['r_ctk_display'] > 0 ? $row['r_ctk_display'] : '-' }}</td>
                                 
                                 <!-- RGKI & R after RGKI -->
                                 <td class="compact-td text-center font-mono {{ $row['rgki_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['rgki_display'] > 0 ? $row['rgki_display'] : '-' }}</td>
-                                <td class="compact-td text-center font-mono {{ $row['r_rgki_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['r_rgki_display'] > 0 ? $row['r_rgki_display'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['r_rgki_display']>0?'font-bold text-red-600 bg-red-50/50':'text-slate-400' }}">{{ $row['r_rgki_display'] > 0 ? $row['r_rgki_display'] : '-' }}</td>
                                 
-                                <!-- L1 - L7 with R spacers -->
+                                <!-- L1 - L7 with R defect indicators -->
                                 @foreach(['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7'] as $s)
                                     <td class="compact-td text-center font-mono {{ $row[$s]>0?'cell-layer-active':'text-slate-400' }}">{{ $row[$s] > 0 ? $row[$s] : '-' }}</td>
-                                    <td class="compact-td text-center text-slate-400">-</td>
+                                    @php $rVal = $row['r_' . $s] ?? 0; @endphp
+                                    <td class="compact-td text-center font-mono {{ $rVal > 0 ? 'font-bold text-red-600 bg-red-50/50' : 'text-slate-400' }}">{{ $rVal > 0 ? $rVal : '-' }}</td>
                                 @endforeach
                                 
                                 <td class="compact-td text-center font-mono {{ $row['oven_qty']>0?'cell-oven':'text-slate-400' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
+                                @php $rOven = $row['r_oven'] ?? 0; @endphp
+                                <td class="compact-td text-center font-mono {{ $rOven > 0 ? 'font-bold text-red-600 bg-red-50/50' : 'text-slate-400' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
                                 <td class="compact-td text-center">
                                     @if(isset($row['quality_status']))
                                         @if($row['status'] === 'COMPLETED')
@@ -382,7 +402,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="27" class="px-6 py-12 text-center text-slate-500"><i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>Tidak ada data.</td></tr>
+                            <tr><td colspan="28" class="px-6 py-12 text-center text-slate-500"><i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>Tidak ada data.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -443,6 +463,7 @@
                 <col style="width: 8mm;">  <!-- L7 -->
                 <col style="width: 5mm;">  <!-- R -->
                 <col style="width: 9mm;">  <!-- Oven -->
+                <col style="width: 5mm;">  <!-- R -->
                 <col style="width: 14mm;"> <!-- Status -->
             </colgroup>
             <thead>
@@ -467,7 +488,7 @@
                     <th>L5</th><th>R</th>
                     <th>L6</th><th>R</th>
                     <th>L7</th><th>R</th>
-                    <th>Oven</th>
+                    <th>Oven</th><th>R</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -490,15 +511,20 @@
                         
                         <!-- Cetak/Rangkai values -->
                         <td class="{{ $row['ctk_display']>0?'ps-cell-green':'' }}">{{ $row['ctk_display'] > 0 ? $row['ctk_display'] : '-' }}</td>
-                        <td class="{{ $row['r_ctk_display']>0?'ps-cell-green':'' }}">{{ $row['r_ctk_display'] > 0 ? $row['r_ctk_display'] : '-' }}</td>
+                        <td class="{{ $row['r_ctk_display']>0?'ps-cell-red':'' }}">{{ $row['r_ctk_display'] > 0 ? $row['r_ctk_display'] : '-' }}</td>
                         <td class="{{ $row['rgki_display']>0?'ps-cell-green':'' }}">{{ $row['rgki_display'] > 0 ? $row['rgki_display'] : '-' }}</td>
-                        <td class="{{ $row['r_rgki_display']>0?'ps-cell-green':'' }}">{{ $row['r_rgki_display'] > 0 ? $row['r_rgki_display'] : '-' }}</td>
+                        <td class="{{ $row['r_rgki_display']>0?'ps-cell-red':'' }}">{{ $row['r_rgki_display'] > 0 ? $row['r_rgki_display'] : '-' }}</td>
                         
                         <!-- Coating values -->
                         @foreach(['layer_1','layer_2','layer_3','layer_4','layer_5','layer_6','layer_7'] as $s)
                             <td class="{{ $row[$s]>0?'ps-cell-green':'' }}">{{ $row[$s] > 0 ? $row[$s] : '-' }}</td>
-                            <td>-</td>
+                            @php $rVal = $row['r_' . $s] ?? 0; @endphp
+                            <td class="{{ $rVal > 0 ? 'ps-cell-red' : '' }}">{{ $rVal > 0 ? $rVal : '-' }}</td>
                         @endforeach
+                        
+                        <td class="{{ $row['oven_qty']>0?'ps-cell-oven':'' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
+                        @php $rOven = $row['r_oven'] ?? 0; @endphp
+                        <td class="{{ $rOven > 0 ? 'ps-cell-red' : '' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
                         
                         <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             @if(isset($row['quality_status']) && $row['status'] !== 'COMPLETED')
@@ -509,7 +535,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="27" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
+                    <tr><td colspan="28" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -520,7 +546,7 @@
               'customers' => ['title' => 'Filter Customer', 'options' => $allCustomers, 'active' => $customers],
               'po_numbers' => ['title' => 'Filter PO Number', 'options' => $allPos, 'active' => $po_numbers],
               'aisis' => ['title' => 'Filter AISI', 'options' => $allAisi, 'active' => $aisis]] as $type => $conf)
-        <div id="{{ $type }}-filter-dropdown" class="filter-dropdown-menu absolute hidden z-50 bg-white border border-slate-300 rounded-lg shadow-xl p-3 w-60 text-slate-800 text-[11px] no-print">
+        <div id="{{ $type }}-filter-dropdown" class="filter-dropdown-menu fixed hidden z-50 bg-white border border-slate-300 rounded-lg shadow-xl p-3 w-60 text-slate-800 text-[11px] no-print">
             <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
                 <span class="font-bold text-slate-700">{{ $conf['title'] }}</span>
                 <button type="button" class="text-slate-400 hover:text-slate-600 font-bold text-sm leading-none" onclick="closeAllDropdowns()">&times;</button>
@@ -611,8 +637,8 @@
 
             const rect = button.getBoundingClientRect();
             const dropdownWidth = 240;
-            let left = rect.left + window.scrollX;
-            let top = rect.bottom + window.scrollY;
+            let left = rect.left;
+            let top = rect.bottom + 4;
 
             if (left + dropdownWidth > window.innerWidth) {
                 left = window.innerWidth - dropdownWidth - 10;

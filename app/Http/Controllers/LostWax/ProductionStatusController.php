@@ -378,14 +378,27 @@ class ProductionStatusController extends Controller
         foreach ($legacyWos as $wo) {
             $stages = $legacyTreeStats->get($wo->id, collect());
             $stageMap = [];
+            $stageDefectMap = [
+                'assembly' => 0,
+                'layer_1' => 0,
+                'layer_2' => 0,
+                'layer_3' => 0,
+                'layer_4' => 0,
+                'layer_5' => 0,
+                'layer_6' => 0,
+                'layer_7' => 0,
+                'oven' => 0,
+            ];
 
             foreach ($stages as $stat) {
                 $stageMap[$stat->stage_key] = (int) $stat->total_qty;
             }
 
             $layerQtys = [];
+            $layerDefects = [];
             for ($i = 1; $i <= 7; $i++) {
                 $layerQtys["layer_{$i}"] = $stageMap["layer_{$i}"] ?? 0;
+                $layerDefects["layer_{$i}"] = $stageDefectMap["layer_{$i}"] ?? 0;
             }
 
             $ovenQty = $stageMap['oven'] ?? 0;
@@ -465,13 +478,21 @@ class ProductionStatusController extends Controller
                 'total_lap' => $totalLap,
                 'tree_count' => $wo->trees_count, // Use trees_count eager-loaded from withCount
                 'layer_1' => $layerQtys['layer_1'],
+                'r_layer_1' => $layerDefects['layer_1'],
                 'layer_2' => $layerQtys['layer_2'],
+                'r_layer_2' => $layerDefects['layer_2'],
                 'layer_3' => $layerQtys['layer_3'],
+                'r_layer_3' => $layerDefects['layer_3'],
                 'layer_4' => $layerQtys['layer_4'],
+                'r_layer_4' => $layerDefects['layer_4'],
                 'layer_5' => $layerQtys['layer_5'],
+                'r_layer_5' => $layerDefects['layer_5'],
                 'layer_6' => $layerQtys['layer_6'],
+                'r_layer_6' => $layerDefects['layer_6'],
                 'layer_7' => $layerQtys['layer_7'],
+                'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
+                'r_oven' => $stageDefectMap['oven'],
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
             ];
@@ -548,17 +569,39 @@ class ProductionStatusController extends Controller
                 'oven' => 0,
             ];
 
+            $stageDefectMap = [
+                'assembly' => 0,
+                'layer_1' => 0,
+                'layer_2' => 0,
+                'layer_3' => 0,
+                'layer_4' => 0,
+                'layer_5' => 0,
+                'layer_6' => 0,
+                'layer_7' => 0,
+                'oven' => 0,
+            ];
+
             foreach ($activeTrees as $tree) {
                 $stageKey = $tree->current_stage ?: 'sebelum_scan';
                 $stageMap[$stageKey] = ($stageMap[$stageKey] ?? 0) + $tree->usable_quantity;
+
+                foreach ($tree->defects as $d) {
+                    if (isset($stageDefectMap[$d->stage])) {
+                        $stageDefectMap[$d->stage] += (int) $d->defect_qty;
+                    }
+                }
             }
 
             $layerQtys = [];
+            $layerDefects = [];
             for ($i = 1; $i <= 7; $i++) {
                 $layerQtys["layer_{$i}"] = $stageMap["layer_{$i}"] ?? 0;
+                $layerDefects["layer_{$i}"] = $stageDefectMap["layer_{$i}"] ?? 0;
             }
 
             $ovenQty = $stageMap['oven'] ?? 0;
+            $ovenDefect = $stageDefectMap['oven'] ?? 0;
+            $assemblyDefect = $stageDefectMap['assembly'] ?? 0;
             $totalLap = array_sum($layerQtys);
 
             $qScheduled = $breakdown['q_scheduled'];
@@ -599,18 +642,26 @@ class ProductionStatusController extends Controller
                 'ctk_display' => $qStandby,
                 'r_ctk_display' => $qPrintDefect,
                 'rgki_display' => $stageMap['sebelum_scan'],
-                'r_rgki_display' => $breakdown['q_assembly_defect'],
+                'r_rgki_display' => $assemblyDefect,
                 'overall_defect' => $qTreeDefect,
                 'total_lap' => $totalLap,
                 'tree_count' => $activeTrees->count(),
                 'layer_1' => $layerQtys['layer_1'],
+                'r_layer_1' => $layerDefects['layer_1'],
                 'layer_2' => $layerQtys['layer_2'],
+                'r_layer_2' => $layerDefects['layer_2'],
                 'layer_3' => $layerQtys['layer_3'],
+                'r_layer_3' => $layerDefects['layer_3'],
                 'layer_4' => $layerQtys['layer_4'],
+                'r_layer_4' => $layerDefects['layer_4'],
                 'layer_5' => $layerQtys['layer_5'],
+                'r_layer_5' => $layerDefects['layer_5'],
                 'layer_6' => $layerQtys['layer_6'],
+                'r_layer_6' => $layerDefects['layer_6'],
                 'layer_7' => $layerQtys['layer_7'],
+                'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
+                'r_oven' => $ovenDefect,
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
                 'q_standby' => $qStandby,

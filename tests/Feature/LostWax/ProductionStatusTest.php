@@ -1158,4 +1158,217 @@ class ProductionStatusTest extends TestCase
         $this->assertContains('ET-ACTIVE-1', $allCodesCross);
         $this->assertNotContains('ET-ACTIVE-2', $allCodesCross);
     }
+
+    public function test_production_status_table_renders_sticky_header_and_all_columns(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->get(route('lost-wax.production-status'));
+
+        $response->assertOk();
+        $content = $response->getContent();
+
+        // Verify sticky container & table ID
+        $this->assertStringContainsString('table-scroll-container', $content);
+        $this->assertStringContainsString('id="prodStatusTable"', $content);
+        $this->assertStringContainsString('sticky top-0', $content);
+
+        // Verify all 27 column headers
+        $this->assertStringContainsString('Kode Cust', $content);
+        $this->assertStringContainsString('Product Name', $content);
+        $this->assertStringContainsString('AISI', $content);
+        $this->assertStringContainsString('PO', $content);
+        $this->assertStringContainsString('Plan', $content);
+        $this->assertStringContainsString('Tot Lap', $content);
+        $this->assertStringContainsString('Tot Rsk', $content);
+        $this->assertStringContainsString('CTK', $content);
+        $this->assertStringContainsString('RGKI', $content);
+        $this->assertStringContainsString('L1', $content);
+        $this->assertStringContainsString('L2', $content);
+        $this->assertStringContainsString('L3', $content);
+        $this->assertStringContainsString('L4', $content);
+        $this->assertStringContainsString('L5', $content);
+        $this->assertStringContainsString('L6', $content);
+        $this->assertStringContainsString('L7', $content);
+        $this->assertStringContainsString('Oven', $content);
+        $this->assertStringContainsString('Status', $content);
+    }
+
+    public function test_per_stage_defect_indicators_rendered_in_production_status(): void
+    {
+        $user = User::factory()->create();
+
+        // Create Production Plan (New Flow)
+        $plan = \App\Models\ProductionPlan::create([
+            'code' => '268TEST01',
+            'customer' => 'Cust Defect',
+            'item_code' => '4.1061TEST.001',
+            'item_name' => 'Flange SS304 2 Inch',
+            'aisi' => '304',
+            'size' => '2"',
+            'weight' => 0.50,
+            'po_number' => 'PO-DEFECT-01',
+            'po_quantity' => 100,
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'status' => 'planning',
+            'is_closed' => false,
+        ]);
+
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260831-0001',
+            'scheduled_date' => '2026-08-31',
+            'status' => 'COMPLETED',
+            'created_by' => $user->id,
+        ]);
+
+        $orderLine = \App\Models\LostWaxPrintOrderLine::create([
+            'lost_wax_print_order_id' => $order->id,
+            'production_plan_id' => $plan->id,
+            'code' => '268TEST01',
+            'item_name' => 'Flange SS304 2 Inch',
+            'size' => '2"',
+            'aisi' => '304',
+            'qty_ordered' => 100,
+            'standard_tree_capacity' => 20,
+            'status' => 'COMPLETED',
+        ]);
+
+        // 1. Defect Cetak (qty_defect = 7)
+        app(\App\Services\PrintExecutionService::class)->record($orderLine, [
+            'qty_good' => 93,
+            'qty_defect' => 7,
+            'execution_date' => '2026-08-31',
+            'status' => 'FINALIZED',
+            'recorded_by' => $user->id,
+        ]);
+
+        // Create Trees with defects across Assembly, L1, L2, L3..L7, Oven
+        $t1 = \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $orderLine->id,
+            'barcode' => '1110831001',
+            'tree_number' => 1,
+            'family_code' => '1',
+            'daily_sequence' => 1,
+            'quantity' => 20,
+            'usable_quantity' => 18,
+            'current_stage' => 'layer_1',
+            'status' => 'generated',
+            'production_date' => '2026-08-31',
+        ]);
+        // 2. Defect Assembly (defect_qty = 2)
+        \App\Models\LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $t1->id,
+            'stage' => 'assembly',
+            'defect_qty' => 2,
+            'defect_reason' => 'Patah Tangkai',
+            'occurred_at' => now(),
+            'recorded_by' => $user->id,
+        ]);
+
+        $t2 = \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $orderLine->id,
+            'barcode' => '1110831002',
+            'tree_number' => 2,
+            'family_code' => '1',
+            'daily_sequence' => 2,
+            'quantity' => 20,
+            'usable_quantity' => 17,
+            'current_stage' => 'layer_2',
+            'status' => 'generated',
+            'production_date' => '2026-08-31',
+        ]);
+        // 3. Defect L1 (defect_qty = 3)
+        \App\Models\LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $t2->id,
+            'stage' => 'layer_1',
+            'defect_qty' => 3,
+            'defect_reason' => 'Slurry Rontok',
+            'occurred_at' => now(),
+            'recorded_by' => $user->id,
+        ]);
+
+        $t3 = \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $orderLine->id,
+            'barcode' => '1110831003',
+            'tree_number' => 3,
+            'family_code' => '1',
+            'daily_sequence' => 3,
+            'quantity' => 20,
+            'usable_quantity' => 16,
+            'current_stage' => 'layer_3',
+            'status' => 'generated',
+            'production_date' => '2026-08-31',
+        ]);
+        // 4. Defect L2 (defect_qty = 4)
+        \App\Models\LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $t3->id,
+            'stage' => 'layer_2',
+            'defect_qty' => 4,
+            'defect_reason' => 'Pasir Botak',
+            'occurred_at' => now(),
+            'recorded_by' => $user->id,
+        ]);
+
+        $t4 = \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $orderLine->id,
+            'barcode' => '1110831004',
+            'tree_number' => 4,
+            'family_code' => '1',
+            'daily_sequence' => 4,
+            'quantity' => 20,
+            'usable_quantity' => 15,
+            'current_stage' => 'oven',
+            'status' => 'generated',
+            'production_date' => '2026-08-31',
+        ]);
+        // 5. Defect L3 (defect_qty = 1) + Defect Oven (defect_qty = 4)
+        \App\Models\LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $t4->id,
+            'stage' => 'layer_3',
+            'defect_qty' => 1,
+            'defect_reason' => 'Retak',
+            'occurred_at' => now(),
+            'recorded_by' => $user->id,
+        ]);
+        \App\Models\LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $t4->id,
+            'stage' => 'oven',
+            'defect_qty' => 4,
+            'defect_reason' => 'Wax Bleed / Pecah Oven',
+            'occurred_at' => now(),
+            'recorded_by' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->get(route('lost-wax.production-status', ['filter' => 'all']));
+
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $targetRow = collect($rows)->firstWhere('code', '268TEST01');
+
+        $this->assertNotNull($targetRow);
+
+        // Assert per-stage defect metrics
+        $this->assertEquals(7, $targetRow['r_ctk_display'], 'R Cetak matches print execution defects');
+        $this->assertEquals(2, $targetRow['r_rgki_display'], 'R Rangkai matches assembly tree defects');
+        $this->assertEquals(3, $targetRow['r_layer_1'], 'R L1 matches layer 1 defects');
+        $this->assertEquals(4, $targetRow['r_layer_2'], 'R L2 matches layer 2 defects');
+        $this->assertEquals(1, $targetRow['r_layer_3'], 'R L3 matches layer 3 defects');
+        $this->assertEquals(0, $targetRow['r_layer_4'], 'R L4 is 0');
+        $this->assertEquals(0, $targetRow['r_layer_5'], 'R L5 is 0');
+        $this->assertEquals(0, $targetRow['r_layer_6'], 'R L6 is 0');
+        $this->assertEquals(0, $targetRow['r_layer_7'], 'R L7 is 0');
+        $this->assertEquals(4, $targetRow['r_oven'], 'R Oven matches oven defects');
+
+        // Total tree defect (overall_defect) = 2 (assembly) + 3 (L1) + 4 (L2) + 1 (L3) + 4 (Oven) = 14
+        $this->assertEquals(14, $targetRow['overall_defect'], 'Tot Rsk matches total tree defects');
+
+        // Verify HTML rendering contains red indicator classes for defects > 0
+        $content = $response->getContent();
+        $this->assertStringContainsString('text-red-600', $content);
+        $this->assertStringContainsString('268TEST01', $content);
+    }
 }
