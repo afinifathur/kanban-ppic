@@ -343,7 +343,7 @@ class ProductionPlanDetachmentTest extends TestCase
 
         $this->assertSame(1200, $bd['q_print_good']);
         $this->assertSame(1200, $bd['q_usable']);
-        $this->assertSame('NORMAL', $bd['status']);
+        $this->assertSame('WATCH', $bd['status']);
         $this->assertSame(0, $plan->items()->count()); // Zero ProductionItems required
     }
 }

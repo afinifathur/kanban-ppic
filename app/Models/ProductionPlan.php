@@ -107,15 +107,18 @@ class ProductionPlan extends Model
 
     public function evaluateProductionStatus(int $usableQuantity): string
     {
-        if ($usableQuantity >= $this->qty_planned) {
+        // 1. PO shortage priority: customer requirement not met
+        if ($this->po_quantity !== null && $usableQuantity < $this->po_quantity) {
+            return 'KURANG';
+        }
+
+        // 2. Target internal (Plan) exceeded
+        if ($usableQuantity > $this->qty_planned) {
             return 'NORMAL';
         }
 
-        if ($this->po_quantity !== null) {
-            return $usableQuantity >= $this->po_quantity ? 'WARNING' : 'CRITICAL';
-        }
-
-        return 'WARNING';
+        // 3. Customer safe (TOTAL >= PO), but internal Plan not exceeded
+        return 'WATCH';
     }
 
     public function getQtyRemainingToProduceAttribute(): int

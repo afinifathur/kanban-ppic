@@ -230,28 +230,28 @@ class RecoveryBackendOperationsTest extends TestCase
 
         $qualityService = app(LostWaxQualityService::class);
         $breakdown1 = $qualityService->getProductionPlanQuantityBreakdown($plan);
-        $this->assertSame('WARNING', $breakdown1['status']);
+        $this->assertSame('WATCH', $breakdown1['status']);
         $this->assertNull($breakdown1['po_quantity']);
 
-        // Update PO to 1000 (usable 1150 >= PO 1000 -> WARNING)
+        // Update PO to 1000 (usable 1150 >= PO 1000 -> WATCH)
         $recoveryService = app(LostWaxRecoveryService::class);
         $recoveryService->updatePoQuantity($plan, 1000);
 
         $breakdown2 = $qualityService->getProductionPlanQuantityBreakdown($plan->fresh());
-        $this->assertSame('WARNING', $breakdown2['status']);
+        $this->assertSame('WATCH', $breakdown2['status']);
         $this->assertSame(1000, $breakdown2['po_quantity']);
         $this->assertSame(0, $breakdown2['deficit_vs_po']);
 
-        // Update PO to 1200 (usable 1150 < PO 1200 -> CRITICAL)
+        // Update PO to 1200 (usable 1150 < PO 1200 -> KURANG)
         $recoveryService->updatePoQuantity($plan, 1200);
 
         $breakdown3 = $qualityService->getProductionPlanQuantityBreakdown($plan->fresh());
-        $this->assertSame('CRITICAL', $breakdown3['status']);
+        $this->assertSame('KURANG', $breakdown3['status']);
         $this->assertSame(50, $breakdown3['deficit_vs_po']);
     }
 
     /**
-     * CASE 8: PO NULL + deficit remains safe as WARNING.
+     * CASE 8: PO NULL + deficit remains safe as WATCH.
      */
     public function test_case_8_po_null_remains_safe(): void
     {
@@ -261,7 +261,7 @@ class RecoveryBackendOperationsTest extends TestCase
         $qualityService = app(LostWaxQualityService::class);
         $breakdown = $qualityService->getProductionPlanQuantityBreakdown($plan);
 
-        $this->assertSame('WARNING', $breakdown['status']);
+        $this->assertSame('WATCH', $breakdown['status']);
         $this->assertNull($breakdown['deficit_vs_po']);
         $this->assertSame(100, $breakdown['deficit_vs_plan']);
     }

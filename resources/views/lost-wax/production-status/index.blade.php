@@ -22,14 +22,16 @@
 @section('content')
     <style>
         .compact-th {
-            padding: 4px 5px !important;
-            font-size: 10px !important;
+            padding: 5px 4px !important;
+            font-size: 9.5px !important;
+            font-weight: 700 !important;
             line-height: 1.15;
             vertical-align: middle;
             text-align: center;
+            letter-spacing: 0.02em;
         }
         .compact-td {
-            padding: 4px 5px !important;
+            padding: 4.5px 4px !important;
             font-size: 10px !important;
             line-height: 1.15;
             vertical-align: middle;
@@ -46,7 +48,7 @@
         }
 
         @media screen {
-            .cell-layer-active { background: #d1fae5; color: #065f46; font-weight: 700; }
+            .cell-layer-active { background: #ecfdf5; color: #065f46; font-weight: 700; }
             .cell-oven { background: #ccfbf1; color: #0f766e; font-weight: 700; }
             #prodStatusTable thead {
                 position: sticky;
@@ -57,7 +59,7 @@
                 position: sticky;
                 top: 0;
                 z-index: 20;
-                background-color: #1e293b !important;
+                background-color: #0f172a !important;
                 box-shadow: inset 0 -1px 0 #334155;
             }
             #prodStatusTable thead th:first-child { z-index: 25; }
@@ -101,57 +103,138 @@
             .divide-y { border: none !important; }
             .no-print { display: none !important; }
 
-            .print-header { text-align: center; margin-bottom: 5mm; font-family: Arial, Helvetica, sans-serif !important; }
-            .print-header .company { font-size: 12px; font-weight: 700; color: #1F2937; margin: 0; }
-            .print-header .title { font-size: 14px; font-weight: 700; color: #1F2937; margin: 1.5mm 0; }
-            .print-header .subtitle { font-size: 9px; color: #475569; margin: 0 0 1mm 0; }
-            .print-header .meta { font-size: 9px; color: #475569; margin: 0; }
+            .print-header { 
+                text-align: left;
+                margin-bottom: 3.5mm; 
+                padding-bottom: 2mm;
+                border-bottom: 1.5px solid #0f172a;
+                font-family: Arial, Helvetica, sans-serif !important; 
+            }
+            .print-header .company { 
+                font-size: 9px; 
+                font-weight: 700; 
+                letter-spacing: 0.08em; 
+                color: #475569; 
+                text-transform: uppercase;
+                margin: 0; 
+            }
+            .print-header .title { 
+                font-size: 14px; 
+                font-weight: 800; 
+                letter-spacing: -0.01em; 
+                color: #0f172a; 
+                margin: 1mm 0 0.5mm 0; 
+            }
+            .print-header .subtitle { 
+                font-size: 8.5px; 
+                color: #64748b; 
+                margin: 0; 
+            }
+            .print-header .meta { 
+                font-size: 8px; 
+                color: #334155; 
+                background: #f8fafc;
+                padding: 1.5mm 2.5mm;
+                border: 0.5px solid #cbd5e1;
+                border-radius: 2px;
+                margin-top: 1.5mm;
+                line-height: 1.3;
+            }
 
             .ps-table { 
                 width: 100%; 
                 border-collapse: collapse; 
-                font-size: 11px;
+                font-size: 8px;
                 table-layout: fixed;
                 font-family: Arial, Helvetica, sans-serif !important;
             }
             .ps-table th, .ps-table td { 
-                border: 0.5px solid #888; 
-                padding: 2px 2px; 
+                border: 0.5px solid #64748b; 
+                padding: 2.5px 1.5px; 
                 text-align: center; 
                 vertical-align: middle; 
-                overflow: hidden;
             }
             .ps-table th { 
-                background: #1F2937 !important;
-                color: white !important; 
-                font-weight: 700; 
-                font-size: 9px;
+                background: #0f172a !important;
+                color: #ffffff !important; 
+                font-weight: 800; 
+                font-size: 8px;
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
-                line-height: 1.15;
+                line-height: 1.1;
+                letter-spacing: 0.01em;
+            }
+            .ps-table tbody tr:nth-child(even) {
+                background-color: #f8fafc !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
             .ps-table td.left { text-align: left; }
             .ps-table td.right { text-align: right; }
             .ps-table td.prod-name { text-align: left; }
 
+            .ps-cell-total {
+                font-weight: 800 !important;
+                background: #f1f5f9 !important;
+                color: #0f172a !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
             .ps-cell-green { 
-                background: #DCFCE7 !important;
-                color: #166534 !important;
+                background: #ecfdf5 !important;
+                color: #065f46 !important;
+                font-weight: 700;
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
             }
             .ps-cell-oven { 
-                background: #DCFCE7 !important;
-                color: #166534 !important;
+                background: #ccfbf1 !important;
+                color: #0f766e !important;
+                font-weight: 700;
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
             }
             .ps-cell-red { 
-                background: #FEE2E2 !important;
-                color: #DC2626 !important;
-                font-weight: bold;
+                background: #fee2e2 !important;
+                color: #dc2626 !important;
+                font-weight: 800;
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
+            }
+
+            .ps-status-cell {
+                padding: 1px 1px !important;
+                text-align: center !important;
+                vertical-align: middle !important;
+                white-space: nowrap !important;
+            }
+            .ps-badge {
+                display: inline-block;
+                padding: 1.5px 3.5px;
+                font-size: 7.5px;
+                font-weight: 800;
+                line-height: 1;
+                border-radius: 2.5px;
+                text-align: center;
+                letter-spacing: 0.02em;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .ps-badge-normal {
+                background: #dcfce7 !important;
+                color: #166534 !important;
+                border: 0.5px solid #86efac !important;
+            }
+            .ps-badge-watch {
+                background: #fef3c7 !important;
+                color: #92400e !important;
+                border: 0.5px solid #fde68a !important;
+            }
+            .ps-badge-kurang {
+                background: #ffedd5 !important;
+                color: #9a3412 !important;
+                border: 0.5px solid #fed7aa !important;
             }
 
             thead { display: table-header-group !important; }
@@ -305,7 +388,7 @@
                                 </div>
                             </th>
                             <th class="compact-th text-right min-w-[45px]">Plan</th>
-                            <th class="compact-th text-center min-w-[45px]">Tot Lap</th>
+                            <th class="compact-th text-center min-w-[45px]" title="Total Lapisan">Total</th>
                             <th class="compact-th text-center min-w-[45px]">Tot Rsk</th>
                             
                             <!-- Cetak/Rangkai flow columns -->
@@ -331,12 +414,12 @@
                             <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
                             <th class="compact-th text-center min-w-[38px]">Oven</th>
                             <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
-                            <th class="compact-th text-center min-w-[60px]">Status</th>
+                            <th class="compact-th text-center min-w-[70px]">Status</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($rows as $row)
-                            <tr class="hover:bg-slate-50 cursor-pointer" 
+                            <tr class="hover:bg-slate-50/80 cursor-pointer transition-colors" 
                                 data-source-type="{{ $row['source_type'] }}" 
                                 data-source-id="{{ $row['source_id'] }}">
                                 <td class="compact-td font-mono font-bold text-slate-800">
@@ -350,8 +433,8 @@
                                 <td class="compact-td text-slate-600">{{ $row['aisi'] }}</td>
                                 <td class="compact-td text-right font-mono text-slate-700">{{ $row['planned_qty'] > 0 ? number_format($row['planned_qty'], 0, ',', '.') : '-' }}</td>
                                 <td class="compact-td text-right font-mono text-slate-700">{{ $row['scheduled_qty'] > 0 ? number_format($row['scheduled_qty'], 0, ',', '.') : '-' }}</td>
-                                <td class="compact-td text-center font-mono {{ $row['total_lap']>0?'font-bold text-slate-800':'text-slate-400' }}">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
-                                <td class="compact-td text-center font-mono {{ $row['overall_defect']>0?'text-red-600 font-bold':'text-slate-400' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono font-bold {{ $row['total_lap']>0?'text-slate-900 bg-slate-50/70':'text-slate-400' }}">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
+                                <td class="compact-td text-center font-mono {{ $row['overall_defect']>0?'text-red-600 font-bold bg-red-50/30':'text-slate-400' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
                                 
                                 <!-- CTK & R after CTK -->
                                 <td class="compact-td text-center font-mono {{ $row['ctk_display']>0?'cell-layer-active':'text-slate-400' }}">{{ $row['ctk_display'] > 0 ? $row['ctk_display'] : '-' }}</td>
@@ -371,32 +454,25 @@
                                 <td class="compact-td text-center font-mono {{ $row['oven_qty']>0?'cell-oven':'text-slate-400' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
                                 @php $rOven = $row['r_oven'] ?? 0; @endphp
                                 <td class="compact-td text-center font-mono {{ $rOven > 0 ? 'font-bold text-red-600 bg-red-50/50' : 'text-slate-400' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
-                                <td class="compact-td text-center">
-                                    @if(isset($row['quality_status']))
-                                        @if($row['status'] === 'COMPLETED')
-                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                                SELESAI
-                                            </span>
-                                        @elseif($row['quality_status'] === 'NORMAL')
-                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300" title="Usable: {{ number_format($row['q_usable']) }} pcs &ge; Plan">
-                                                NORMAL
-                                            </span>
-                                        @elseif($row['quality_status'] === 'WARNING')
-                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-amber-100 text-amber-800 border border-amber-300" title="Defisit ke Plan: {{ number_format($row['deficit_vs_plan']) }} pcs{{ $row['po_quantity'] ? ' (PO Aman: ' . number_format($row['po_quantity']) . ' pcs)' : '' }}">
-                                                WARNING
-                                            </span>
-                                        @elseif($row['quality_status'] === 'CRITICAL')
-                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-extrabold text-[9px] bg-rose-100 text-rose-800 border border-rose-300" title="PO Terancam! Defisit ke PO: {{ number_format($row['deficit_vs_po']) }} pcs">
-                                                CRITICAL
-                                            </span>
-                                        @else
-                                            <span class="inline-block px-1.5 py-0.5 rounded-full font-bold text-[9px] bg-slate-100 text-slate-700 border border-slate-300">
-                                                ACTIVE
-                                            </span>
-                                        @endif
+                                <td class="compact-td text-center whitespace-nowrap">
+                                    @php
+                                        $qStat = $row['quality_status'] ?? 'WATCH';
+                                    @endphp
+                                    @if($qStat === 'NORMAL')
+                                        <span class="inline-block px-2 py-0.5 rounded-md font-extrabold text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300" title="Target internal (Plan) sudah terlampaui">
+                                            NORMAL
+                                        </span>
+                                    @elseif($qStat === 'WATCH')
+                                        <span class="inline-block px-2 py-0.5 rounded-md font-extrabold text-[9px] bg-amber-100 text-amber-800 border border-amber-300" title="Customer PO aman / terpenuhi, target Plan belum terlampaui">
+                                            WATCH
+                                        </span>
+                                    @elseif($qStat === 'KURANG')
+                                        <span class="inline-block px-2 py-0.5 rounded-md font-extrabold text-[9px] bg-orange-100 text-orange-800 border border-orange-300" title="Shortage! Kuantitas Net Good belum mencukupi kebutuhan PO">
+                                            KURANG
+                                        </span>
                                     @else
-                                        <span class="inline-block px-1.5 py-0.5 rounded-full font-bold text-[9px] {{ $row['status']==='ACTIVE'?'bg-amber-100 text-amber-800':($row['status']==='COMPLETED'?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-600') }}">
-                                            {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}
+                                        <span class="inline-block px-2 py-0.5 rounded-md font-extrabold text-[9px] bg-amber-100 text-amber-800 border border-amber-300">
+                                            {{ $qStat }}
                                         </span>
                                     @endif
                                 </td>
@@ -422,49 +498,58 @@
     {{-- PRINT REPORT --}}
     <div class="production-status-print">
         <div class="print-header">
-            <p class="company">PT. PERONI KARYA SENTRA</p>
-            <p class="title">LOST WAX &mdash; PRODUCTION STATUS</p>
-            <p class="subtitle">Posisi produksi per Kode Cust / Work Order</p>
-            <p class="meta">
-                Tanggal: {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp; Filter: {{ strtoupper($filter) }}
-                @if($search) &nbsp;|&nbsp; Search: {{ $search }} @endif
-                @if(!empty($codes)) &nbsp;|&nbsp; Kode Cust: {{ implode(', ', $codes) }} @endif
-                @if(!empty($customers)) &nbsp;|&nbsp; Customer: {{ implode(', ', $customers) }} @endif
-                @if(!empty($po_numbers)) &nbsp;|&nbsp; PO: {{ implode(', ', $po_numbers) }} @endif
-                @if(!empty($aisis)) &nbsp;|&nbsp; AISI: {{ implode(', ', $aisis) }} @endif
-            </p>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <p class="company">PT. PERONI KARYA SENTRA</p>
+                    <h1 class="title">LOST WAX &mdash; PRODUCTION STATUS REPORT</h1>
+                    <p class="subtitle">Posisi produksi per Kode Cust / Work Order</p>
+                </div>
+                <div style="text-align: right; font-size: 8px; color: #475569; line-height: 1.3;">
+                    <div>Dicetak: <strong>{{ now()->format('d/m/Y H:i') }}</strong></div>
+                    <div>Status Filter: <strong>{{ strtoupper($filter) }}</strong> ({{ count($rows) }} Items)</div>
+                </div>
+            </div>
+            @if($search || !empty($codes) || !empty($customers) || !empty($po_numbers) || !empty($aisis))
+                <div class="meta">
+                    @if($search) Search: <strong>"{{ $search }}"</strong> &nbsp;|&nbsp; @endif
+                    @if(!empty($codes)) Kode Cust: <strong>{{ implode(', ', $codes) }}</strong> &nbsp;|&nbsp; @endif
+                    @if(!empty($customers)) Customer: <strong>{{ implode(', ', $customers) }}</strong> &nbsp;|&nbsp; @endif
+                    @if(!empty($po_numbers)) PO: <strong>{{ implode(', ', $po_numbers) }}</strong> &nbsp;|&nbsp; @endif
+                    @if(!empty($aisis)) AISI: <strong>{{ implode(', ', $aisis) }}</strong> @endif
+                </div>
+            @endif
         </div>
 
         <table class="ps-table">
             <colgroup>
-                <col style="width: 24mm;"> <!-- Kode Cust -->
-                <col style="width: 65mm;"> <!-- Product Name -->
-                <col style="width: 14mm;"> <!-- AISI -->
-                <col style="width: 10mm;"> <!-- PO -->
-                <col style="width: 10mm;"> <!-- Plan -->
-                <col style="width: 12mm;"> <!-- Total Lap. -->
-                <col style="width: 12mm;"> <!-- Total Rusak -->
+                <col style="width: 22mm;"> <!-- Kode Cust -->
+                <col style="width: 58mm;"> <!-- Product Name -->
+                <col style="width: 10mm;"> <!-- AISI -->
+                <col style="width: 11mm;"> <!-- PO -->
+                <col style="width: 11mm;"> <!-- Plan -->
+                <col style="width: 13mm;"> <!-- TOTAL -->
+                <col style="width: 11mm;"> <!-- Tot Rsk -->
                 <col style="width: 8mm;">  <!-- Cetak -->
-                <col style="width: 5mm;">  <!-- R -->
+                <col style="width: 5.5mm;"><!-- R -->
                 <col style="width: 8mm;">  <!-- Rangkai -->
+                <col style="width: 5.5mm;"><!-- R -->
+                <col style="width: 7.5mm;"><!-- L1 -->
                 <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L1 -->
+                <col style="width: 7.5mm;"><!-- L2 -->
                 <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L2 -->
+                <col style="width: 7.5mm;"><!-- L3 -->
                 <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L3 -->
+                <col style="width: 7.5mm;"><!-- L4 -->
                 <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L4 -->
+                <col style="width: 7.5mm;"><!-- L5 -->
                 <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L5 -->
+                <col style="width: 7.5mm;"><!-- L6 -->
                 <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L6 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 8mm;">  <!-- L7 -->
+                <col style="width: 7.5mm;"><!-- L7 -->
                 <col style="width: 5mm;">  <!-- R -->
                 <col style="width: 9mm;">  <!-- Oven -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 14mm;"> <!-- Status -->
+                <col style="width: 5.5mm;"><!-- R -->
+                <col style="width: 18mm;"> <!-- Status -->
             </colgroup>
             <thead>
                 <tr>
@@ -473,7 +558,7 @@
                     <th>AISI</th>
                     <th>PO</th>
                     <th>Plan</th>
-                    <th>TOTAL<br>LAP.</th>
+                    <th>TOTAL<span style="display:none"> Total Lap.</span></th>
                     <th>TOTAL<br>RUSAK</th>
                     
                     <!-- Cetak/Rangkai flow columns -->
@@ -495,7 +580,7 @@
             <tbody>
                 @forelse($rows as $row)
                     <tr>
-                        <td class="left" style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <td class="left" style="font-weight: 700; white-space: nowrap;">
                             {{ $row['code'] }}
                         </td>
                         <td class="prod-name left">
@@ -503,10 +588,10 @@
                                 {{ $row['product_name'] }}
                             </div>
                         </td>
-                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $row['aisi'] }}</td>
+                        <td style="white-space: nowrap;">{{ $row['aisi'] }}</td>
                         <td class="right">{{ $row['planned_qty'] > 0 ? number_format($row['planned_qty'],0,',','.') : '-' }}</td>
                         <td class="right">{{ $row['scheduled_qty'] > 0 ? number_format($row['scheduled_qty'],0,',','.') : '-' }}</td>
-                        <td class="right" style="font-weight: bold;">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
+                        <td class="right ps-cell-total">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
                         <td class="{{ $row['overall_defect'] > 0 ? 'ps-cell-red' : '' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
                         
                         <!-- Cetak/Rangkai values -->
@@ -526,11 +611,18 @@
                         @php $rOven = $row['r_oven'] ?? 0; @endphp
                         <td class="{{ $rOven > 0 ? 'ps-cell-red' : '' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
                         
-                        <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            @if(isset($row['quality_status']) && $row['status'] !== 'COMPLETED')
-                                {{ $row['quality_status'] }}
+                        <td class="ps-status-cell">
+                            @php
+                                $qStat = $row['quality_status'] ?? 'WATCH';
+                            @endphp
+                            @if($qStat === 'NORMAL')
+                                <span class="ps-badge ps-badge-normal">NORMAL</span>
+                            @elseif($qStat === 'WATCH')
+                                <span class="ps-badge ps-badge-watch">WATCH</span>
+                            @elseif($qStat === 'KURANG')
+                                <span class="ps-badge ps-badge-kurang">KURANG</span>
                             @else
-                                {{ $row['status']==='ACTIVE'?'ACTIVE':($row['status']==='COMPLETED'?'SELESAI':$row['status']) }}
+                                <span class="ps-badge ps-badge-watch">{{ $qStat }}</span>
                             @endif
                         </td>
                     </tr>

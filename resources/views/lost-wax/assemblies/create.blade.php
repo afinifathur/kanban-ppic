@@ -43,7 +43,7 @@
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                             <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                                 <span class="text-slate-400 block mb-0.5">Nama Produk</span>
-                                <strong class="text-slate-800 font-bold block truncate" title="{{ $line->item_name }}">{{ $line->item_name }}</strong>
+                                <strong class="text-slate-800 font-bold block break-words leading-tight" title="{{ $line->item_name }}">{{ $line->item_name }}</strong>
                             </div>
                             <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                                 <span class="text-slate-400 block mb-0.5">Customer</span>
@@ -123,17 +123,6 @@
                                 value="{{ old('standard_capacity_guide', $line->standard_tree_capacity ?? 20) }}" min="1" required 
                                 class="w-full rounded-lg border-slate-300 text-sm focus:border-amber-500 focus:ring-amber-500 shadow-sm">
                             <span class="text-[9px] text-slate-400 block mt-1.5">Pedoman kapasitas per pohon. Pembagian aktual tree ditentukan saat operator melakukan proses rangkai.</span>
-                        </div>
-                    </div>
-
-                    <!-- Persyaratan Proses (Checkbox Layer 7) -->
-                    <div class="bg-amber-50/50 border border-amber-100 rounded-lg p-3 flex items-start gap-3">
-                        <input type="checkbox" name="require_layer_7" id="requireLayer7" value="1" 
-                            {{ old('require_layer_7', $line->require_layer_7) ? 'checked' : '' }}
-                            class="rounded border-slate-300 text-amber-600 focus:ring-amber-500 mt-0.5">
-                        <div>
-                            <label for="requireLayer7" class="text-xs font-bold text-slate-800 select-none block">Wajib Layer 7 (Melalui coating lapisan ke-7)</label>
-                            <span class="text-[10px] text-slate-500 block mt-0.5">Parameter proses kritis: menginstruksikan operator untuk melakukan coating hingga lapisan ke-7 sebelum proses oven.</span>
                         </div>
                     </div>
 

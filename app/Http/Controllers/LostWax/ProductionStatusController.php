@@ -203,7 +203,7 @@ class ProductionStatusController extends Controller
         // Table Headers (Row 6)
         $headers = [
             'Kode Cust', 'Product Name', 'AISI', 'PO Qty', 'Plan Qty',
-            'Total Lapisan (pcs)', 'Total Rusak (pcs)', 'Cetak (pcs)', 'Rangkai (pcs)',
+            'Total (pcs)', 'Total Rusak (pcs)', 'Cetak (pcs)', 'Rangkai (pcs)',
             'Lapisan 1 (pcs)', 'Lapisan 2 (pcs)', 'Lapisan 3 (pcs)', 'Lapisan 4 (pcs)',
             'Lapisan 5 (pcs)', 'Lapisan 6 (pcs)', 'Lapisan 7 (pcs)', 'Oven (pcs)', 'Status',
         ];
@@ -259,7 +259,7 @@ class ProductionStatusController extends Controller
             $sheet->setCellValue('O'.$currentRow, $row['layer_6']);
             $sheet->setCellValue('P'.$currentRow, $row['layer_7']);
             $sheet->setCellValue('Q'.$currentRow, $row['oven_qty']);
-            $sheet->setCellValue('R'.$currentRow, $row['status'] === 'COMPLETED' ? 'SELESAI' : 'ACTIVE');
+            $sheet->setCellValue('R'.$currentRow, $row['quality_status'] ?? 'WATCH');
 
             // Zebra styling
             if ($currentRow % 2 === 0) {
@@ -454,6 +454,18 @@ class ProductionStatusController extends Controller
                 $prodStatus = strtoupper($wo->status);
             }
 
+            $totalDistributed = $ctk_display + $rgki_display + $totalLap + $ovenQty;
+
+            $legacyPo = $wo->po_quantity !== null ? (int) $wo->po_quantity : null;
+            $legacyPlan = (int) ($wo->moulding_output_quantity ?: ($wo->total_target_quantity ?: $wo->po_quantity));
+            if ($legacyPo !== null && $totalDistributed < $legacyPo) {
+                $legacyQualityStatus = 'KURANG';
+            } elseif ($totalDistributed > $legacyPlan) {
+                $legacyQualityStatus = 'NORMAL';
+            } else {
+                $legacyQualityStatus = 'WATCH';
+            }
+
             $rows[] = [
                 'source_type' => 'legacy_work_order',
                 'source_id' => $wo->id,
@@ -475,7 +487,7 @@ class ProductionStatusController extends Controller
                 'rgki_display' => $rgki_display,
                 'r_rgki_display' => $r_rgki_display,
                 'overall_defect' => $cetak_defect + $rangkai_defect,
-                'total_lap' => $totalLap,
+                'total_lap' => $totalDistributed,
                 'tree_count' => $wo->trees_count, // Use trees_count eager-loaded from withCount
                 'layer_1' => $layerQtys['layer_1'],
                 'r_layer_1' => $layerDefects['layer_1'],
@@ -495,6 +507,7 @@ class ProductionStatusController extends Controller
                 'r_oven' => $stageDefectMap['oven'],
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
+                'quality_status' => $legacyQualityStatus,
             ];
         }
 
@@ -614,6 +627,8 @@ class ProductionStatusController extends Controller
             $qUsable = $breakdown['q_usable'];
             $qualityStatus = $breakdown['status'];
 
+            $totalDistributed = $qStandby + $stageMap['sebelum_scan'] + $totalLap + $ovenQty;
+
             if ($qUsable >= $plan->qty_planned && $ovenQty > 0 && $ovenQty === $qUsable) {
                 $prodStatus = 'COMPLETED';
             } else {
@@ -643,8 +658,8 @@ class ProductionStatusController extends Controller
                 'r_ctk_display' => $qPrintDefect,
                 'rgki_display' => $stageMap['sebelum_scan'],
                 'r_rgki_display' => $assemblyDefect,
-                'overall_defect' => $qTreeDefect,
-                'total_lap' => $totalLap,
+                'overall_defect' => $qPrintDefect + $qTreeDefect,
+                'total_lap' => $totalDistributed,
                 'tree_count' => $activeTrees->count(),
                 'layer_1' => $layerQtys['layer_1'],
                 'r_layer_1' => $layerDefects['layer_1'],

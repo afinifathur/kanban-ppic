@@ -188,6 +188,21 @@
                                         <span>&middot;</span>
                                         <span class="text-slate-500">{{ number_format($rack['total_quantity']) }} pcs</span>
                                     </div>
+
+                                    {{-- Items / Products on Rack --}}
+                                    @if(!empty($rack['item_names']))
+                                        <div class="text-xs text-slate-700 font-medium flex flex-wrap items-center gap-1.5 mt-1.5">
+                                            @foreach($rack['item_names'] as $itemName => $treeCount)
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 font-semibold text-xs truncate max-w-[280px]" title="{{ $itemName }}">
+                                                    <i class="fas fa-box text-slate-400 mr-1 text-[10px]"></i>
+                                                    {{ $itemName }}
+                                                    @if(count($rack['item_names']) > 1)
+                                                        <span class="ml-1 text-[10px] text-slate-500 font-normal">({{ $treeCount }} Tree)</span>
+                                                    @endif
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
 
@@ -420,10 +435,10 @@
                         </div>
                     </div>
 
-                    {{-- Section D: Production Code (Kode Produksi) --}}
+                    {{-- Section D: Item Names & Production Codes --}}
                     <div class="space-y-2 border-b border-slate-100 pb-4">
-                        <h4 class="font-bold text-xs text-slate-500 uppercase tracking-wider">Ringkasan Kode Produksi</h4>
-                        <div class="flex flex-wrap gap-1.5" id="modal-production-codes">
+                        <h4 class="font-bold text-xs text-slate-500 uppercase tracking-wider">Ringkasan Item & Kode Produksi</h4>
+                        <div class="flex flex-wrap gap-2" id="modal-item-names">
                             {{-- Populated by JS --}}
                         </div>
                     </div>
@@ -431,11 +446,12 @@
                     {{-- Section E: Trees List --}}
                     <div class="space-y-2">
                         <h4 class="font-bold text-xs text-slate-500 uppercase tracking-wider">Daftar Barcode Tree di Rak</h4>
-                        <div class="overflow-y-auto max-h-[180px] border border-slate-200 rounded-lg">
+                        <div class="overflow-y-auto max-h-[220px] border border-slate-200 rounded-lg">
                             <table class="w-full text-xs text-left">
                                 <thead class="bg-slate-50 text-slate-500 border-b border-slate-200">
                                     <tr>
                                         <th class="p-2">Barcode</th>
+                                        <th class="p-2">Nama Item</th>
                                         <th class="p-2">Kode Produksi</th>
                                         <th class="p-2 text-center">Qty Pcs</th>
                                         <th class="p-2">Stage Saat Ini</th>
@@ -667,15 +683,26 @@
                 }
             }
 
-            // 6. Populate Production Codes
-            const prodCodesDiv = document.getElementById('modal-production-codes');
-            prodCodesDiv.innerHTML = '';
-            for (let [code, count] of Object.entries(rack.production_codes)) {
-                prodCodesDiv.innerHTML += `
-                    <div class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-                        ${code}: <strong class="text-slate-900">${count} Tree</strong>
-                    </div>
-                `;
+            // 6. Populate Item Names and Production Codes
+            const itemNamesDiv = document.getElementById('modal-item-names');
+            itemNamesDiv.innerHTML = '';
+            if (rack.item_names && Object.keys(rack.item_names).length > 0) {
+                for (let [itemName, count] of Object.entries(rack.item_names)) {
+                    itemNamesDiv.innerHTML += `
+                        <div class="px-3 py-1.5 rounded-lg text-xs bg-slate-50 border border-slate-200 flex items-center gap-2">
+                            <span class="font-bold text-slate-800">${itemName}</span>
+                            <span class="text-[11px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">${count} Tree</span>
+                        </div>
+                    `;
+                }
+            } else if (rack.production_codes && Object.keys(rack.production_codes).length > 0) {
+                for (let [code, count] of Object.entries(rack.production_codes)) {
+                    itemNamesDiv.innerHTML += `
+                        <div class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                            ${code}: <strong class="text-slate-900">${count} Tree</strong>
+                        </div>
+                    `;
+                }
             }
 
             // 7. Populate Trees List
@@ -691,15 +718,16 @@
 
                 tbody.innerHTML += `
                     <tr class="border-b border-slate-100 hover:bg-slate-50">
-                        <td class="p-2 font-mono text-xs font-bold text-slate-700">${tree.human_barcode}</td>
-                        <td class="p-2 font-medium text-slate-600">${tree.production_code}</td>
+                        <td class="p-2 font-mono text-xs font-bold text-slate-700 whitespace-nowrap">${tree.human_barcode}</td>
+                        <td class="p-2 font-semibold text-slate-800">${tree.item_name || '-'}</td>
+                        <td class="p-2 font-medium text-slate-500 text-xs whitespace-nowrap">${tree.production_code}</td>
                         <td class="p-2 text-center font-bold text-slate-800">${tree.quantity}</td>
                         <td class="p-2">
-                            <span class="px-2 py-0.5 text-[10px] rounded-full font-semibold bg-slate-100 text-slate-700">
+                            <span class="px-2 py-0.5 text-[10px] rounded-full font-semibold bg-slate-100 text-slate-700 whitespace-nowrap">
                                 ${tree.current_stage_label}
                             </span>
                         </td>
-                        <td class="p-2 text-slate-500 font-mono text-[11px]">${dateStr}</td>
+                        <td class="p-2 text-slate-500 font-mono text-[11px] whitespace-nowrap">${dateStr}</td>
                     </tr>
                 `;
             });

@@ -18,17 +18,34 @@ class PrintExecutionService
             // Lock print order line
             $line->lockForUpdate();
 
-            $qtyGood = (int) $data['qty_good'];
-            $qtyDefect = (int) $data['qty_defect'];
+            $qtyDefect = (int) ($data['qty_defect'] ?? 0);
+
+            // 1. Validate negative quantities and calculate Net Good
+            if ($qtyDefect < 0) {
+                throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
+            }
+
+            if (array_key_exists('qty_gross_output', $data) && $data['qty_gross_output'] !== null) {
+                $qtyGross = (int) $data['qty_gross_output'];
+                if ($qtyGross < 0) {
+                    throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
+                }
+                if ($qtyDefect > $qtyGross) {
+                    throw new \InvalidArgumentException("Kuantitas defect ({$qtyDefect} pcs) tidak boleh melebihi hasil cetak gross/counter ({$qtyGross} pcs).");
+                }
+                $qtyGood = max(0, $qtyGross - $qtyDefect);
+            } else {
+                $qtyGood = (int) ($data['qty_good'] ?? 0);
+                if ($qtyGood < 0) {
+                    throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
+                }
+                $qtyGross = $qtyGood + $qtyDefect;
+            }
+
             $executionDate = $data['execution_date'] ?? now()->format('Y-m-d');
             $status = $data['status'] ?? 'DRAFT';
             $notes = $data['notes'] ?? null;
             $userId = $data['recorded_by'] ?? auth()->id();
-
-            // 1. Validate negative quantities
-            if ($qtyGood < 0 || $qtyDefect < 0) {
-                throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
-            }
 
             // 2. Validate tree allocation
             // If we add this, will the total good be less than allocated trees?
@@ -37,6 +54,7 @@ class PrintExecutionService
 
             $execution = $line->executions()->create([
                 'execution_date' => $executionDate,
+                'qty_gross_output' => $qtyGross,
                 'qty_good' => $qtyGood,
                 'qty_defect' => $qtyDefect,
                 'status' => $status,
@@ -71,29 +89,47 @@ class PrintExecutionService
             $line->lockForUpdate();
             $execution->lockForUpdate();
 
-            $qtyGood = (int) ($data['qty_good'] ?? $execution->qty_good);
             $qtyDefect = (int) ($data['qty_defect'] ?? $execution->qty_defect);
+
+            if ($qtyDefect < 0) {
+                throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
+            }
+
+            if (array_key_exists('qty_gross_output', $data) && $data['qty_gross_output'] !== null) {
+                $qtyGross = (int) $data['qty_gross_output'];
+                if ($qtyGross < 0) {
+                    throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
+                }
+                if ($qtyDefect > $qtyGross) {
+                    throw new \InvalidArgumentException("Kuantitas defect ({$qtyDefect} pcs) tidak boleh melebihi hasil cetak gross/counter ({$qtyGross} pcs).");
+                }
+                $qtyGood = max(0, $qtyGross - $qtyDefect);
+            } else {
+                $qtyGood = (int) ($data['qty_good'] ?? $execution->qty_good);
+                if ($qtyGood < 0) {
+                    throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
+                }
+                $qtyGross = $qtyGood + $qtyDefect;
+            }
+
             $executionDate = $data['execution_date'] ?? $execution->execution_date;
             $status = $data['status'] ?? $execution->status;
             $notes = $data['notes'] ?? $execution->notes;
             $userId = auth()->id();
 
             // Calculate outstanding without this current execution
-            $otherGood = $line->executions()->where('id', '!=', $execution->id)->sum('qty_good');
-            $otherDefect = $line->executions()->where('id', '!=', $execution->id)->sum('qty_defect');
-
-            if ($qtyGood < 0 || $qtyDefect < 0) {
-                throw new \InvalidArgumentException('Quantity tidak boleh negatif.');
-            }
+            $otherGood = $line->executions()->where('id', '!=', $execution->id)->where('status', 'FINALIZED')->sum('qty_good');
+            $otherDefect = $line->executions()->where('id', '!=', $execution->id)->where('status', 'FINALIZED')->sum('qty_defect');
 
             // Validate trees vs new good total
-            $newGoodTotal = $otherGood + $qtyGood;
-            $allocatedTreeQty = (int) $line->trees()->sum('quantity');
-            if ($newGoodTotal < $allocatedTreeQty) {
+            $newGoodTotal = $otherGood + ($status === 'FINALIZED' ? $qtyGood : 0);
+            $allocatedTreeQty = (int) $line->trees()->where('status', '!=', 'cancelled')->sum('quantity');
+            if ($status === 'FINALIZED' && $newGoodTotal < $allocatedTreeQty) {
                 throw new \InvalidArgumentException("Total Hasil Good ({$newGoodTotal} pcs) tidak boleh kurang dari quantity tree yang sudah dibuat ({$allocatedTreeQty} pcs) untuk item {$line->item_name}.");
             }
 
             $execution->update([
+                'qty_gross_output' => $qtyGross,
                 'qty_good' => $qtyGood,
                 'qty_defect' => $qtyDefect,
                 'execution_date' => $executionDate,

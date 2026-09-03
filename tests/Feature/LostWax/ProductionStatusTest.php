@@ -260,7 +260,7 @@ class ProductionStatusTest extends TestCase
 
         $completedResponse->assertOk();
         $completedResponse->assertSee('ET232');
-        $completedResponse->assertSee('SELESAI');
+        $completedResponse->assertSee('KURANG');
     }
 
     public function test_non_zero_layer_cells_have_highlight_class(): void
@@ -457,7 +457,7 @@ class ProductionStatusTest extends TestCase
 
         $this->assertEquals('Lost Wax Production Status', $sheet->getCell('A1')->getValue());
         $this->assertEquals('Kode Cust', $sheet->getCell('A6')->getValue());
-        $this->assertEquals('Total Lapisan (pcs)', $sheet->getCell('F6')->getValue());
+        $this->assertEquals('Total (pcs)', $sheet->getCell('F6')->getValue());
         $this->assertEquals('Total Rusak (pcs)', $sheet->getCell('G6')->getValue());
         $this->assertEquals('Status', $sheet->getCell('R6')->getValue());
 
@@ -591,7 +591,7 @@ class ProductionStatusTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('ET232');
-        $response->assertSee('SELESAI');
+        $response->assertSee('KURANG');
     }
 
     public function test_all_filter_returns_both(): void
@@ -662,7 +662,7 @@ class ProductionStatusTest extends TestCase
         $response->assertOk();
         $response->assertSee('CTK');
         $response->assertSee('RGKI');
-        $response->assertSee('Tot Lap');
+        $response->assertSee('Total');
         $response->assertSee('Tot Rsk');
         $response->assertSee('L1');
         $response->assertSee('Oven');
@@ -1180,7 +1180,7 @@ class ProductionStatusTest extends TestCase
         $this->assertStringContainsString('AISI', $content);
         $this->assertStringContainsString('PO', $content);
         $this->assertStringContainsString('Plan', $content);
-        $this->assertStringContainsString('Tot Lap', $content);
+        $this->assertStringContainsString('Total', $content);
         $this->assertStringContainsString('Tot Rsk', $content);
         $this->assertStringContainsString('CTK', $content);
         $this->assertStringContainsString('RGKI', $content);
@@ -1363,8 +1363,8 @@ class ProductionStatusTest extends TestCase
         $this->assertEquals(0, $targetRow['r_layer_7'], 'R L7 is 0');
         $this->assertEquals(4, $targetRow['r_oven'], 'R Oven matches oven defects');
 
-        // Total tree defect (overall_defect) = 2 (assembly) + 3 (L1) + 4 (L2) + 1 (L3) + 4 (Oven) = 14
-        $this->assertEquals(14, $targetRow['overall_defect'], 'Tot Rsk matches total tree defects');
+        // Total whole-flow defect (overall_defect) = 7 (Cetak) + 2 (assembly) + 3 (L1) + 4 (L2) + 1 (L3) + 4 (Oven) = 21
+        $this->assertEquals(21, $targetRow['overall_defect'], 'Tot Rsk matches total whole-flow defects');
 
         // Verify HTML rendering contains red indicator classes for defects > 0
         $content = $response->getContent();

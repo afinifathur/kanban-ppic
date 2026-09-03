@@ -126,7 +126,7 @@ class RecoveryPoolUiTest extends TestCase
     public function test_2_normal_plan_absent_from_active_recovery(): void
     {
         $plan = $this->createPlan(['code' => 'NORMAL-PLAN-01', 'qty_planned' => 1000, 'po_quantity' => 1000]);
-        $this->createInitialSpkWithExecution($plan, 1000, 0);
+        $this->createInitialSpkWithExecution($plan, 1001, 0);
 
         $response = $this->actingAs($this->ppicUser)->get(route('lost-wax.print-orders.plans', ['tab' => 'recovery']));
         $response->assertOk();

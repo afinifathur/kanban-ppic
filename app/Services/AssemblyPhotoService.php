@@ -476,6 +476,21 @@ class AssemblyPhotoService
         }
 
         $image = @imagecreatefromstring($sourceData);
+
+        // Fallbacks for specific formats if imagecreatefromstring fails
+        if (! $image) {
+            $mime = strtolower((string) $file->getMimeType());
+            if (str_contains($mime, 'jpeg') || str_contains($mime, 'jpg')) {
+                $image = @imagecreatefromjpeg($realPath);
+            } elseif (str_contains($mime, 'png')) {
+                $image = @imagecreatefrompng($realPath);
+            } elseif (str_contains($mime, 'webp') && function_exists('imagecreatefromwebp')) {
+                $image = @imagecreatefromwebp($realPath);
+            } elseif (str_contains($mime, 'bmp') && function_exists('imagecreatefrombmp')) {
+                $image = @imagecreatefrombmp($realPath);
+            }
+        }
+
         if (! $image) {
             throw new InvalidArgumentException('File bukan format gambar yang valid.');
         }

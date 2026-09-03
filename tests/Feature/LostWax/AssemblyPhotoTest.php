@@ -400,4 +400,106 @@ class AssemblyPhotoTest extends TestCase
         ]);
         $this->assertCount(1, $response->json('history'));
     }
+
+    public function test_assembly_photos_page_contains_camera_and_gallery_inputs_with_environment_capture(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get('/settings/assembly-photos');
+
+        $response->assertOk();
+        $response->assertSee('Ambil Foto');
+        $response->assertSee('Pilih Galeri');
+        $response->assertSee('capture="environment"', false);
+        $response->assertSee('id="frontCameraInput"', false);
+        $response->assertSee('id="sideCameraInput"', false);
+        $response->assertSee('id="frontGalleryInput"', false);
+        $response->assertSee('id="sideGalleryInput"', false);
+    }
+
+    public function test_valid_webp_and_png_uploads_succeed(): void
+    {
+        $frontWebp = UploadedFile::fake()->image('camera_capture.webp', 1200, 900);
+        $sidePng = UploadedFile::fake()->image('gallery_photo.png', 1200, 900);
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => '268ETB733',
+                'product_name' => 'SS304 SQUARE DN 25',
+                'front_photo' => $frontWebp,
+                'side_photo' => $sidePng,
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $photo = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->where('is_current', true)->first();
+        $this->assertNotNull($photo);
+        $this->assertNotNull($photo->front_image_path);
+        $this->assertNotNull($photo->side_image_path);
+        Storage::disk('public')->assertExists($photo->front_image_path);
+        Storage::disk('public')->assertExists($photo->side_image_path);
+    }
+
+    public function test_large_mobile_photo_up_to_20mb_succeeds(): void
+    {
+        // 15MB fake image (15360 KB)
+        $largeFrontImage = UploadedFile::fake()->image('high_res_camera.jpg', 2000, 1500)->size(15360);
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => 'FL-DN50-304',
+                'product_name' => 'FLANGE 10K DN 50 SS304',
+                'front_photo' => $largeFrontImage,
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $photo = LostWaxAssemblyPhoto::where('product_code', 'FL-DN50-304')->where('is_current', true)->first();
+        $this->assertNotNull($photo);
+        $this->assertNotNull($photo->front_image_path);
+        Storage::disk('public')->assertExists($photo->front_image_path);
+    }
+
+    public function test_oversized_photo_exceeding_20mb_is_rejected(): void
+    {
+        // 25MB fake image (25600 KB)
+        $hugeImage = UploadedFile::fake()->image('too_large.jpg', 3000, 3000)->size(25600);
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => 'FL-DN50-304',
+                'product_name' => 'FLANGE 10K DN 50 SS304',
+                'front_photo' => $hugeImage,
+            ]);
+
+        $response->assertSessionHasErrors(['front_photo']);
+    }
+
+    public function test_invalid_non_image_file_is_rejected(): void
+    {
+        $fakePdf = UploadedFile::fake()->create('document.pdf', 500, 'application/pdf');
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => 'FL-DN50-304',
+                'product_name' => 'FLANGE 10K DN 50 SS304',
+                'front_photo' => $fakePdf,
+            ]);
+
+        $response->assertSessionHasErrors(['front_photo']);
+    }
+
+    public function test_audit_index_renders_both_desktop_table_and_mobile_cards(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get('/settings/assembly-photos/index');
+
+        $response->assertOk();
+        $response->assertSee('MASTER FOTO RANGKAI — AUDIT STATUS');
+        // Desktop table check
+        $response->assertSee('hidden md:block', false);
+        // Mobile card list check
+        $response->assertSee('block md:hidden', false);
+        $response->assertSee('Kelola Foto');
+        $response->assertSee('268ETB733');
+    }
 }

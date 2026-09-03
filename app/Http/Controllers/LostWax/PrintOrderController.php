@@ -88,6 +88,20 @@ class PrintOrderController extends Controller
             $printOrdersQuery->where('print_order_number', 'like', '%'.$request->print_order_number.'%');
         }
 
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $printOrdersQuery->whereHas('lines', function ($q) use ($search) {
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('code', 'like', '%'.$search.'%')
+                        ->orWhere('item_name', 'like', '%'.$search.'%')
+                        ->orWhereHas('productionPlan', function ($p) use ($search) {
+                            $p->where('code', 'like', '%'.$search.'%')
+                                ->orWhere('item_name', 'like', '%'.$search.'%');
+                        });
+                });
+            });
+        }
+
         $printOrders = $printOrdersQuery->orderBy('id', 'desc')
             ->paginate(15, ['*'], 'orders_page')
             ->withQueryString();
@@ -386,7 +400,7 @@ class PrintOrderController extends Controller
     public function show(\App\Models\LostWaxPrintOrder $printOrder)
     {
         $this->authorizePrintOrder($printOrder);
-        $printOrder->load(['creator', 'lines.productionPlan']);
+        $printOrder->load(['creator', 'lines.productionPlan', 'lines.executions.recorder', 'lines.trees']);
 
         return view('lost-wax.print-orders.show', compact('printOrder'));
     }

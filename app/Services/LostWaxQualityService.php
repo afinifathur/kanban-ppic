@@ -211,6 +211,7 @@ class LostWaxQualityService
             'q_assembly_defect' => $qAssemblyDefect,
             'q_layer_defect' => $qLayerDefect,
             'q_oven_defect' => $qOvenDefect,
+            'q_total_defect' => $qPrintDefect + $qTreeDefect,
             'q_excess_closed' => $qExcessClosed,
             'q_usable' => $qUsable,
             'status' => $status,

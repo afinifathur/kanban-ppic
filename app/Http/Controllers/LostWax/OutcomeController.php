@@ -120,7 +120,8 @@ class OutcomeController extends Controller
         $this->authorizePrintOrder($line->printOrder);
 
         $request->validate([
-            'qty_good' => 'required|integer|min:0',
+            'qty_gross_output' => 'nullable|integer|min:0',
+            'qty_good' => 'nullable|integer|min:0',
             'qty_defect' => 'required|integer|min:0',
             'execution_date' => 'required|date|before_or_equal:today',
             'status' => 'required|in:DRAFT,FINALIZED',
@@ -129,7 +130,7 @@ class OutcomeController extends Controller
 
         try {
             $service = app(\App\Services\PrintExecutionService::class);
-            $service->record($line, $request->only(['qty_good', 'qty_defect', 'execution_date', 'status', 'notes']));
+            $service->record($line, $request->only(['qty_gross_output', 'qty_good', 'qty_defect', 'execution_date', 'status', 'notes']));
 
             return response()->json([
                 'success' => true,
@@ -174,7 +175,8 @@ class OutcomeController extends Controller
         $this->authorizePrintOrder($execution->printOrderLine->printOrder);
 
         $request->validate([
-            'qty_good' => 'required|integer|min:0',
+            'qty_gross_output' => 'nullable|integer|min:0',
+            'qty_good' => 'nullable|integer|min:0',
             'qty_defect' => 'required|integer|min:0',
             'execution_date' => 'required|date|before_or_equal:today',
             'notes' => 'nullable|string',
@@ -182,7 +184,7 @@ class OutcomeController extends Controller
 
         try {
             $service = app(\App\Services\PrintExecutionService::class);
-            $service->update($execution, $request->only(['qty_good', 'qty_defect', 'execution_date', 'notes']));
+            $service->update($execution, $request->only(['qty_gross_output', 'qty_good', 'qty_defect', 'execution_date', 'notes']));
 
             return response()->json([
                 'success' => true,

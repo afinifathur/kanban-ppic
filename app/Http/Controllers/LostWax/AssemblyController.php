@@ -19,7 +19,7 @@ class AssemblyController extends Controller
         }
 
         // Get lines where actual outcomes have been recorded
-        $query = \App\Models\LostWaxPrintOrderLine::with(['printOrder', 'trees'])
+        $query = \App\Models\LostWaxPrintOrderLine::with(['printOrder', 'trees.allocations', 'treeAllocations.tree'])
             ->whereNotNull('qty_actual_good');
 
         $scope = auth()->user()->product_scope;
@@ -37,21 +37,79 @@ class AssemblyController extends Controller
                     ->orWhere('customer', 'like', "%{$search}%")
                     ->orWhereHas('printOrder', function ($q2) use ($search) {
                         $q2->where('print_order_number', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('productionPlan', function ($q3) use ($search) {
+                        $q3->where('item_name', 'like', "%{$search}%")
+                            ->orWhere('code', 'like', "%{$search}%")
+                            ->orWhere('customer', 'like', "%{$search}%");
                     });
             });
         }
 
         if ($request->filled('code')) {
-            $query->where('code', $request->code);
+            $code = $request->code;
+            $query->where(function ($q) use ($code) {
+                $q->where('code', 'like', "%{$code}%")
+                    ->orWhereHas('productionPlan', function ($q2) use ($code) {
+                        $q2->where('code', 'like', "%{$code}%");
+                    });
+            });
         }
 
         if ($request->filled('customer')) {
-            $query->where('customer', $request->customer);
+            $customer = $request->customer;
+            $query->where(function ($q) use ($customer) {
+                $q->where('customer', 'like', "%{$customer}%")
+                    ->orWhereHas('productionPlan', function ($q2) use ($customer) {
+                        $q2->where('customer', 'like', "%{$customer}%");
+                    });
+            });
         }
 
         if ($request->filled('size')) {
-            $query->where('size', $request->size);
+            $size = $request->size;
+            $query->where(function ($q) use ($size) {
+                $q->where('size', 'like', "%{$size}%")
+                    ->orWhereHas('productionPlan', function ($q2) use ($size) {
+                        $q2->where('size', 'like', "%{$size}%");
+                    });
+            });
         }
+
+        // Suggestions for autocomplete datalists based on relevant matching candidates
+        $suggestionBaseQuery = clone $query;
+
+        $codeSuggestions = (clone $suggestionBaseQuery)
+            ->whereNotNull('code')
+            ->where('code', '!=', '')
+            ->distinct()
+            ->orderBy('code')
+            ->limit(50)
+            ->pluck('code');
+
+        $customerSuggestions = (clone $suggestionBaseQuery)
+            ->whereNotNull('customer')
+            ->where('customer', '!=', '')
+            ->distinct()
+            ->orderBy('customer')
+            ->limit(50)
+            ->pluck('customer');
+
+        $sizeSuggestions = (clone $suggestionBaseQuery)
+            ->whereNotNull('size')
+            ->where('size', '!=', '')
+            ->distinct()
+            ->orderBy('size')
+            ->limit(50)
+            ->pluck('size');
+
+        $itemSuggestions = (clone $suggestionBaseQuery)
+            ->whereNotNull('item_name')
+            ->where('item_name', '!=', '')
+            ->distinct()
+            ->orderBy('item_name')
+            ->limit(50)
+            ->pluck('item_name');
 
         // Fetch all lines first to filter by dynamic attribute available_qty
         $lines = $query->orderBy('id', 'desc')->get()->filter(function ($line) {
@@ -71,6 +129,10 @@ class AssemblyController extends Controller
 
         return view('lost-wax.assemblies.index', [
             'lines' => $paginatedLines,
+            'codeSuggestions' => $codeSuggestions,
+            'customerSuggestions' => $customerSuggestions,
+            'sizeSuggestions' => $sizeSuggestions,
+            'itemSuggestions' => $itemSuggestions,
         ]);
     }
 
@@ -136,7 +198,6 @@ class AssemblyController extends Controller
         $request->validate([
             'qty_ordered' => 'required|integer|min:1',
             'standard_capacity_guide' => 'required|integer|min:1',
-            'require_layer_7' => 'nullable|boolean',
             'notes' => 'nullable|string',
         ]);
 
@@ -151,7 +212,7 @@ class AssemblyController extends Controller
                 'qty_trees_planned' => $request->qty_ordered,
                 'tree_capacity' => 1, // Store 1 as compatibility bridge
                 'standard_capacity_guide' => $request->standard_capacity_guide,
-                'require_layer_7' => $request->has('require_layer_7'),
+                'require_layer_7' => false,
                 'notes' => $request->notes,
             ]);
 

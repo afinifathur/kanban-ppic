@@ -18,7 +18,7 @@ class RackMonitorService
             ->whereHas('coatingRack', function ($query) {
                 $query->where('status', 'active');
             })
-            ->with('coatingRack')
+            ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference'])
             ->get();
 
         if ($trees->isEmpty()) {
@@ -71,7 +71,9 @@ class RackMonitorService
             return null;
         }
 
-        $trees = LostWaxTree::where('rack_id', $rackId)->get();
+        $trees = LostWaxTree::where('rack_id', $rackId)
+            ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference'])
+            ->get();
         if ($trees->isEmpty()) {
             return null;
         }
@@ -206,10 +208,14 @@ class RackMonitorService
         }
 
         $productionCodes = [];
+        $itemNames = [];
         $treesDetail = [];
         foreach ($treesInRack as $tree) {
             $code = $tree->getSourceCode() ?: 'UNKNOWN';
+            $itemName = $tree->getSourceProduct() ?: 'UNKNOWN';
+
             $productionCodes[$code] = ($productionCodes[$code] ?? 0) + 1;
+            $itemNames[$itemName] = ($itemNames[$itemName] ?? 0) + 1;
 
             $treesDetail[] = [
                 'id' => $tree->id,
@@ -220,6 +226,7 @@ class RackMonitorService
                 'current_stage_label' => $tree->current_stage_label,
                 'last_scan_at' => $tree->last_scan_at ? $tree->last_scan_at->toIso8601String() : null,
                 'production_code' => $code,
+                'item_name' => $itemName,
             ];
         }
 
@@ -238,6 +245,7 @@ class RackMonitorService
             'is_layer7_split' => $isLayer7Split,
             'trees_without_stage' => $distribution['sebelum_scan'] ?? 0,
             'production_codes' => $productionCodes,
+            'item_names' => $itemNames,
             'trees' => $treesDetail,
         ];
     }

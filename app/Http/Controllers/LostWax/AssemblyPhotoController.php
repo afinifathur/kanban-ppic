@@ -104,8 +104,8 @@ class AssemblyPhotoController extends Controller
         $request->validate([
             'product_code' => 'required|string|max:100',
             'product_name' => 'nullable|string|max:255',
-            'front_photo' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
-            'side_photo' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'front_photo' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:20480',
+            'side_photo' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:20480',
             'notes' => 'nullable|string|max:255',
         ]);
 

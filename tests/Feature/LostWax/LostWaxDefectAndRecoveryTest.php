@@ -423,11 +423,11 @@ class LostWaxDefectAndRecoveryTest extends TestCase
         $plan = $this->createPlan(['po_quantity' => 1000, 'qty_planned' => 1200]);
 
         $this->assertSame('NORMAL', $plan->evaluateProductionStatus(1300));
-        $this->assertSame('NORMAL', $plan->evaluateProductionStatus(1200));
-        $this->assertSame('WARNING', $plan->evaluateProductionStatus(1150));
-        $this->assertSame('WARNING', $plan->evaluateProductionStatus(1000));
-        $this->assertSame('CRITICAL', $plan->evaluateProductionStatus(999));
-        $this->assertSame('CRITICAL', $plan->evaluateProductionStatus(0));
+        $this->assertSame('WATCH', $plan->evaluateProductionStatus(1200));
+        $this->assertSame('WATCH', $plan->evaluateProductionStatus(1150));
+        $this->assertSame('WATCH', $plan->evaluateProductionStatus(1000));
+        $this->assertSame('KURANG', $plan->evaluateProductionStatus(999));
+        $this->assertSame('KURANG', $plan->evaluateProductionStatus(0));
     }
 
     /**
@@ -437,10 +437,10 @@ class LostWaxDefectAndRecoveryTest extends TestCase
     {
         $legacyPlan = $this->createPlan(['po_quantity' => null, 'qty_planned' => 1200]);
 
-        $this->assertSame('NORMAL', $legacyPlan->evaluateProductionStatus(1200));
         $this->assertSame('NORMAL', $legacyPlan->evaluateProductionStatus(1300));
-        $this->assertSame('WARNING', $legacyPlan->evaluateProductionStatus(1199));
-        $this->assertSame('WARNING', $legacyPlan->evaluateProductionStatus(500));
+        $this->assertSame('WATCH', $legacyPlan->evaluateProductionStatus(1200));
+        $this->assertSame('WATCH', $legacyPlan->evaluateProductionStatus(1199));
+        $this->assertSame('WATCH', $legacyPlan->evaluateProductionStatus(500));
     }
 
     /**

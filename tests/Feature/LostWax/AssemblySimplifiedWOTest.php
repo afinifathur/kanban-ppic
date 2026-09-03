@@ -420,4 +420,42 @@ class AssemblySimplifiedWOTest extends TestCase
         $response->assertSee('20 pcs / tree');
         $response->assertSee('Pedoman');
     }
+
+    public function test_assembly_create_renders_long_product_name_with_wrapping(): void
+    {
+        $user = User::factory()->create();
+        $accessPlanning = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'access_planning']);
+        $user->givePermissionTo($accessPlanning);
+
+        $plan = $this->createProductionPlan([
+            'item_name' => 'SS304 SORF ANSI 150LBS 1/2" EXTRA LONG SPECIFICATION',
+            'code' => '267KS758',
+        ]);
+        $line = $this->setUpPrintExecution($plan, $user, 100, 0);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.create', $line));
+
+        $response->assertOk();
+        $response->assertSee('Buat Perintah Rangkai (Work Order)');
+        $response->assertSee('SS304 SORF ANSI 150LBS 1/2" EXTRA LONG SPECIFICATION');
+        $response->assertSee('267KS758');
+        $response->assertSee('break-words', false);
+        $response->assertDontSee('block truncate" title="SS304 SORF ANSI 150LBS 1/2" EXTRA LONG SPECIFICATION"', false);
+    }
+
+    public function test_assembly_create_does_not_render_wajib_layer_7_checkbox(): void
+    {
+        $user = User::factory()->create();
+        $accessPlanning = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'access_planning']);
+        $user->givePermissionTo($accessPlanning);
+
+        $plan = $this->createProductionPlan();
+        $line = $this->setUpPrintExecution($plan, $user, 100, 0);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.assemblies.create', $line));
+
+        $response->assertOk();
+        $response->assertDontSee('Wajib Layer 7 (Melalui coating lapisan ke-7)');
+        $response->assertDontSee('name="require_layer_7"', false);
+    }
 }

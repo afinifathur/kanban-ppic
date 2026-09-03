@@ -249,7 +249,10 @@
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">No Perintah Cetak</label>
                         <input type="text" name="print_order_number" value="{{ request('print_order_number') }}" placeholder="PC-202608..." class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
                     </div>
-                    <div></div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kode Produksi / Nama Item</label>
+                        <input type="text" name="search" value="{{ request('search') }}" placeholder="Contoh: 758 atau SS304 ELBOW" class="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-amber-500">
+                    </div>
                     <div class="flex gap-2">
                         <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded text-sm transition-all flex items-center justify-center gap-1.5">
                             <i class="fas fa-search"></i> Cari

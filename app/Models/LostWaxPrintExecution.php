@@ -9,6 +9,7 @@ class LostWaxPrintExecution extends Model
     protected $fillable = [
         'lost_wax_print_order_line_id',
         'execution_date',
+        'qty_gross_output',
         'qty_good',
         'qty_defect',
         'status',
@@ -21,11 +22,19 @@ class LostWaxPrintExecution extends Model
 
     protected $casts = [
         'execution_date' => 'date',
+        'qty_gross_output' => 'integer',
         'qty_good' => 'integer',
         'qty_defect' => 'integer',
         'recorded_at' => 'datetime',
         'finalized_at' => 'datetime',
     ];
+
+    public function getGrossOutputAttribute(): int
+    {
+        return $this->qty_gross_output !== null
+            ? (int) $this->qty_gross_output
+            : (int) ($this->qty_good + $this->qty_defect);
+    }
 
     public function printOrderLine()
     {

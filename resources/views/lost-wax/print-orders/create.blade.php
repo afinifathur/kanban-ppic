@@ -1,22 +1,50 @@
 @extends('layouts.app')
 
 @section('top_bar')
-    <div class="flex items-center justify-between w-full">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-4">
         <div>
             <h1 class="text-lg font-bold text-slate-800 leading-tight">Buat Perintah Cetak Baru</h1>
             <p class="text-gray-500 text-[10px]">Tentukan tanggal dan jumlah cetak untuk setiap item terpilih</p>
         </div>
-        @php
-            $selectionStorageKey = 'lost-wax-print-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
-        @endphp
-        <a href="{{ route('lost-wax.print-orders.plans') }}" onclick="sessionStorage.removeItem(@json($selectionStorageKey));" class="text-slate-500 hover:text-slate-700 text-xs flex items-center gap-1.5 font-bold">
-            <i class="fas fa-arrow-left"></i> Batal & Kembali
-        </a>
+        
+        <div class="flex flex-wrap items-center gap-3">
+            {{-- Summary Bar --}}
+            <div id="selection-summary-bar" class="flex items-stretch divide-x divide-slate-200 bg-white border border-slate-200 rounded-lg shadow-sm shrink-0">
+                <div class="flex items-center gap-2 px-3 py-1.5">
+                    <span class="text-blue-500 text-sm" aria-hidden="true"><i class="fas fa-check-square"></i></span>
+                    <div class="text-right leading-tight">
+                        <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Item Terpilih</div>
+                        <div id="summary-item-count" class="text-sm font-bold text-slate-800 whitespace-nowrap" aria-live="polite">{{ count($plans) }} item</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 px-3 py-1.5">
+                    <span class="text-indigo-500 text-sm" aria-hidden="true"><i class="fas fa-cubes"></i></span>
+                    <div class="text-right leading-tight">
+                        <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Total Qty (PCS)</div>
+                        <div id="summary-total-pcs" class="text-sm font-bold text-slate-800 whitespace-nowrap" aria-live="polite">0 pcs</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 px-3 py-1.5">
+                    <span class="text-emerald-500 text-sm" aria-hidden="true"><i class="fas fa-weight-hanging"></i></span>
+                    <div class="text-right leading-tight">
+                        <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Total Berat (KG)</div>
+                        <div id="summary-total-kg" class="text-sm font-bold text-emerald-600 whitespace-nowrap" aria-live="polite">0.00 kg</div>
+                    </div>
+                </div>
+            </div>
+
+            @php
+                $selectionStorageKey = 'lost-wax-print-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
+            @endphp
+            <a href="{{ route('lost-wax.print-orders.plans') }}" onclick="sessionStorage.removeItem(@json($selectionStorageKey));" class="text-slate-500 hover:text-slate-700 text-xs flex items-center gap-1.5 font-bold shrink-0">
+                <i class="fas fa-arrow-left"></i> Batal & Kembali
+            </a>
+        </div>
     </div>
 @endsection
 
 @section('content')
-    <div class="max-w-6xl mx-auto">
+    <div class="max-w-6xl mx-auto space-y-6">
         <form action="{{ route('lost-wax.print-orders.store') }}" method="POST" class="space-y-6">
             @csrf
 
@@ -47,9 +75,15 @@
 
             <!-- Card Items table -->
             <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6">
-                <h3 class="text-slate-800 font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <i class="fas fa-list text-amber-500"></i> Daftar Item Cetak Lilin
-                </h3>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 mb-4 gap-2">
+                    <h3 class="text-slate-800 font-bold flex items-center gap-2">
+                        <i class="fas fa-list text-amber-500"></i> Daftar Item Cetak Lilin
+                    </h3>
+                    <div class="text-xs text-slate-500">
+                        Total item dalam dokumen: <span class="font-bold text-slate-800">{{ count($plans) }}</span>
+                    </div>
+                </div>
+
                 <div class="overflow-x-auto">
                     <table class="min-w-full border-collapse border border-slate-200 text-sm">
                         <thead class="bg-slate-50">
@@ -99,6 +133,7 @@
                                             value="{{ old("items.{$index}.qty_ordered", $defaultQty) }}" 
                                             min="1" required
                                             data-index="{{ $index }}"
+                                            data-weight-per-piece="{{ $plan->weight ?? 0 }}"
                                             class="qty-input w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm text-center font-bold text-slate-800 focus:outline-none focus:border-amber-500">
                                         <div class="warning-text text-[10px] text-amber-600 mt-1 font-semibold hidden">
                                             Over-scheduled!
@@ -123,10 +158,52 @@
         </form>
     </div>
 
-    <!-- Alert / Concurrency Logic -->
+    <!-- Alert / Concurrency Logic & Live KG Calculator -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const dateInput = document.getElementById('scheduled_date');
+            const qtyInputs = document.querySelectorAll('.qty-input');
+            const summaryTotalPcsEl = document.getElementById('summary-total-pcs');
+            const summaryTotalKgEl = document.getElementById('summary-total-kg');
+            const summaryItemCountEl = document.getElementById('summary-item-count');
+
+            function formatPcs(value) {
+                return Number(value || 0).toLocaleString('en-US');
+            }
+
+            function formatKg(value) {
+                const rounded = Math.round((value || 0) * 100) / 100;
+                return Number(rounded).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+            }
+
+            function recalcSummary() {
+                let totalPcs = 0;
+                let totalKg = 0;
+                let itemCount = 0;
+
+                qtyInputs.forEach(function (input) {
+                    const rawQty = parseInt(input.value, 10);
+                    const qty = (!isNaN(rawQty) && rawQty > 0) ? rawQty : 0;
+                    const weight = Math.max(0, parseFloat(input.getAttribute('data-weight-per-piece')) || 0);
+
+                    totalPcs += qty;
+                    totalKg += qty * weight;
+                    itemCount += 1;
+                });
+
+                if (summaryTotalPcsEl) {
+                    summaryTotalPcsEl.textContent = formatPcs(totalPcs) + ' pcs';
+                }
+                if (summaryTotalKgEl) {
+                    summaryTotalKgEl.textContent = formatKg(totalKg) + ' kg';
+                }
+                if (summaryItemCountEl) {
+                    summaryItemCountEl.textContent = itemCount + ' item';
+                }
+            }
             
             // Watch date input changes to fetch concurrency-safe document number
             if (dateInput) {
@@ -153,15 +230,17 @@
                     });
                 });
             }
-
-            // Watch qty inputs for warnings
-            const qtyInputs = document.querySelectorAll('.qty-input');
             
             function checkWarning(input) {
                 const tr = input.closest('tr');
-                const remaining = parseInt(tr.querySelector('[data-remaining-qty]').getAttribute('data-remaining-qty'));
+                if (!tr) return;
+                const remainingEl = tr.querySelector('[data-remaining-qty]');
+                if (!remainingEl) return;
+                const remaining = parseInt(remainingEl.getAttribute('data-remaining-qty')) || 0;
                 const inputVal = parseInt(input.value) || 0;
                 const warningDiv = tr.querySelector('.warning-text');
+
+                if (!warningDiv) return;
 
                 // If input quantity is greater than remaining, trigger a clear warning message
                 if (remaining > 0 && inputVal > remaining) {
@@ -176,12 +255,17 @@
                 }
             }
 
-            qtyInputs.forEach(input => {
+            qtyInputs.forEach(function (input) {
                 input.addEventListener('input', function () {
                     checkWarning(input);
+                    recalcSummary();
                 });
                 checkWarning(input);
             });
+
+            // Initial calculation on load
+            recalcSummary();
         });
     </script>
 @endsection
+

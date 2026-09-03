@@ -16,33 +16,51 @@
             <form method="GET" action="{{ route('lost-wax.assemblies.index') }}" class="flex flex-wrap items-end gap-3.5">
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Cari Item / No Perintah</label>
-                    <input type="text" name="search" value="{{ request('search') }}" placeholder="Produk, PC-..." class="rounded-lg border-slate-300 text-sm w-48 py-1.5 px-3">
+                    <input type="text" name="search" list="item-suggestions" value="{{ request('search') }}" placeholder="Produk, PC-..." class="rounded-lg border-slate-300 text-sm w-48 py-1.5 px-3">
+                    <datalist id="item-suggestions">
+                        @foreach($itemSuggestions ?? [] as $suggestion)
+                            <option value="{{ $suggestion }}"></option>
+                        @endforeach
+                    </datalist>
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Kode Produksi</label>
-                    <input type="text" name="code" value="{{ request('code') }}" placeholder="26AB001" class="rounded-lg border-slate-300 text-sm w-36 py-1.5 px-3">
+                    <input type="text" name="code" list="code-suggestions" value="{{ request('code') }}" placeholder="Contoh: 758 atau 26AB001" class="rounded-lg border-slate-300 text-sm w-36 py-1.5 px-3">
+                    <datalist id="code-suggestions">
+                        @foreach($codeSuggestions ?? [] as $suggestion)
+                            <option value="{{ $suggestion }}"></option>
+                        @endforeach
+                    </datalist>
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Kode Customer</label>
-                    <input type="text" name="customer" value="{{ request('customer') }}" placeholder="A06" class="rounded-lg border-slate-300 text-sm w-36 py-1.5 px-3">
+                    <input type="text" name="customer" list="customer-suggestions" value="{{ request('customer') }}" placeholder="A06" class="rounded-lg border-slate-300 text-sm w-36 py-1.5 px-3">
+                    <datalist id="customer-suggestions">
+                        @foreach($customerSuggestions ?? [] as $suggestion)
+                            <option value="{{ $suggestion }}"></option>
+                        @endforeach
+                    </datalist>
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Size</label>
-                    <input type="text" name="size" value="{{ request('size') }}" placeholder='1/2"' class="rounded-lg border-slate-300 text-sm w-28 py-1.5 px-3">
+                    <input type="text" name="size" list="size-suggestions" value="{{ request('size') }}" placeholder='1/2"' class="rounded-lg border-slate-300 text-sm w-28 py-1.5 px-3">
+                    <datalist id="size-suggestions">
+                        @foreach($sizeSuggestions ?? [] as $suggestion)
+                            <option value="{{ $suggestion }}"></option>
+                        @endforeach
+                    </datalist>
                 </div>
 
                 <div class="flex items-center gap-2">
                     <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2 px-4 rounded-lg transition-all shadow-sm">
-                        Filter
+                        Cari
                     </button>
-                    @if(request('search') || request('code') || request('customer') || request('size'))
-                        <a href="{{ route('lost-wax.assemblies.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 px-4 rounded-lg transition-all border border-slate-200 text-center">
-                            Reset
-                        </a>
-                    @endif
+                    <a href="{{ route('lost-wax.assemblies.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 px-4 rounded-lg transition-all border border-slate-200 text-center">
+                        Reset
+                    </a>
                 </div>
             </form>
         </div>

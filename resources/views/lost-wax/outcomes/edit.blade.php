@@ -301,21 +301,29 @@
                             class="w-full rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 shadow-sm font-semibold">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Good (pcs) <span class="text-red-500">*</span></label>
-                        <input type="number" id="modalInputGood" value="0" min="0"
-                            class="w-full rounded-lg border-slate-300 text-xs focus:border-emerald-500 focus:ring-emerald-500 shadow-sm font-bold text-emerald-700">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Hasil Cetak / Counter (pcs) <span class="text-red-500">*</span></label>
+                        <input type="number" id="modalInputGross" value="0" min="0" oninput="calculateModalNetGood()"
+                            class="w-full rounded-lg border-slate-300 text-xs focus:border-blue-500 focus:ring-blue-500 shadow-sm font-bold text-blue-700" placeholder="Counter mesin / Gross">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Defect (pcs) <span class="text-red-500">*</span></label>
-                        <input type="number" id="modalInputDefect" value="0" min="0"
-                            class="w-full rounded-lg border-slate-300 text-xs focus:border-rose-500 focus:ring-rose-500 shadow-sm font-bold text-rose-700">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Cacat / Defect (pcs) <span class="text-red-500">*</span></label>
+                        <input type="number" id="modalInputDefect" value="0" min="0" oninput="calculateModalNetGood()"
+                            class="w-full rounded-lg border-slate-300 text-xs focus:border-rose-500 focus:ring-rose-500 shadow-sm font-bold text-rose-700" placeholder="Jumlah lilin rusak">
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Catatan</label>
-                    <input type="text" id="modalInputNotes" placeholder="Catatan tambahan hasil cetak (opsional)..."
-                        class="w-full rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 shadow-sm">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Hasil Good / Net (pcs)</label>
+                        <input type="number" id="modalInputGood" value="0" min="0" readonly
+                            class="w-full rounded-lg border-emerald-300 bg-emerald-50/70 text-xs shadow-sm font-black text-emerald-800 cursor-not-allowed">
+                        <span class="text-[10px] text-slate-400">Otomatis = Counter &minus; Cacat</span>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Catatan</label>
+                        <input type="text" id="modalInputNotes" placeholder="Catatan tambahan hasil cetak (opsional)..."
+                            class="w-full rounded-lg border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 shadow-sm">
+                    </div>
                 </div>
 
                 <!-- Dynamic Preview Box -->
@@ -481,12 +489,14 @@
 
             // Reset inputs
             document.getElementById('modalInputDate').value = new Date().toISOString().split('T')[0];
-            document.getElementById('modalInputGood').value = '0';
+            const defaultGross = parseInt(row.dataset.outstanding) || 0;
+            document.getElementById('modalInputGross').value = '0';
             document.getElementById('modalInputDefect').value = '0';
+            document.getElementById('modalInputGood').value = '0';
             document.getElementById('modalInputNotes').value = '';
 
             // Update live preview calculation
-            updateModalPreview();
+            calculateModalNetGood();
 
             // Load History for this item
             const historyContainer = document.getElementById('modalHistoryContainer');
@@ -506,9 +516,9 @@
             modal.classList.add('flex');
 
             setTimeout(() => {
-                const goodInput = document.getElementById('modalInputGood');
-                goodInput.focus();
-                goodInput.select();
+                const grossInput = document.getElementById('modalInputGross');
+                grossInput.focus();
+                grossInput.select();
             }, 50);
         }
 
@@ -520,18 +530,26 @@
         }
 
         // 3. Dynamic Calculation in Modal Form
+        function calculateModalNetGood() {
+            const gross = parseInt(document.getElementById('modalInputGross').value) || 0;
+            const defect = parseInt(document.getElementById('modalInputDefect').value) || 0;
+            const netGood = Math.max(0, gross - defect);
+            document.getElementById('modalInputGood').value = netGood;
+            updateModalPreview();
+        }
+
         function updateModalPreview() {
             if (!currentActiveLineId) return;
             const row = document.querySelector(`.item-row[data-line-id="${currentActiveLineId}"]`);
             if (!row) return;
 
             const outstanding = parseInt(row.dataset.outstanding) || 0;
-            const good = parseInt(document.getElementById('modalInputGood').value) || 0;
+            const gross = parseInt(document.getElementById('modalInputGross').value) || 0;
             const defect = parseInt(document.getElementById('modalInputDefect').value) || 0;
-            const totalInput = good + defect;
+            const good = Math.max(0, gross - defect);
 
-            document.getElementById('modalPreviewToday').textContent = totalInput.toLocaleString();
-            const newOutstanding = Math.max(0, outstanding - totalInput);
+            document.getElementById('modalPreviewToday').textContent = gross.toLocaleString();
+            const newOutstanding = Math.max(0, outstanding - gross);
             document.getElementById('modalPreviewRemaining').textContent = newOutstanding.toLocaleString() + ' pcs';
 
             const warningBox = document.getElementById('modalWarningBox');
@@ -539,18 +557,22 @@
             const btnFinalize = document.getElementById('btnModalFinalize');
 
             let warning = '';
+            if (defect > gross) {
+                warning = `⚠️ Kuantitas Cacat (${defect} pcs) tidak boleh melebihi Hasil Cetak / Counter (${gross} pcs).`;
+            }
+
             const allocatedTrees = parseInt(row.dataset.allocatedTrees) || 0;
             const totalGoodExisting = parseInt(row.dataset.good) || 0;
             const projectedTotalGood = totalGoodExisting + good;
 
-            if (allocatedTrees > 0 && projectedTotalGood < allocatedTrees) {
+            if (!warning && allocatedTrees > 0 && projectedTotalGood < allocatedTrees) {
                 warning = `⚠️ Total Hasil Good (${projectedTotalGood} pcs) tidak boleh kurang dari tree yang sudah dirangkai (${allocatedTrees} pcs).`;
             }
 
             const selectedDate = new Date(document.getElementById('modalInputDate').value);
             const todayDate = new Date();
             todayDate.setHours(23, 59, 59, 999);
-            if (selectedDate > todayDate) {
+            if (!warning && selectedDate > todayDate) {
                 warning = '⚠️ Tanggal Cetak tidak boleh di masa depan.';
             }
 
@@ -574,8 +596,9 @@
         function submitModalExecution(status) {
             if (!currentActiveLineId) return;
 
-            const good = parseInt(document.getElementById('modalInputGood').value) || 0;
+            const gross = parseInt(document.getElementById('modalInputGross').value) || 0;
             const defect = parseInt(document.getElementById('modalInputDefect').value) || 0;
+            const good = Math.max(0, gross - defect);
             const date = document.getElementById('modalInputDate').value;
             const notes = document.getElementById('modalInputNotes').value;
 
@@ -599,6 +622,7 @@
                 preConfirm: () => {
                     const url = storeExecutionUrlTemplate.replace(':line', currentActiveLineId);
                     return axios.post(url, {
+                        qty_gross_output: gross,
                         qty_good: good,
                         qty_defect: defect,
                         execution_date: date,

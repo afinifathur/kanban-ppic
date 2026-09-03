@@ -89,17 +89,40 @@ class LostWaxPrintOrderLine extends Model
         $excessClosed = (int) ($this->qty_excess_closed ?? 0);
 
         // 1. Allocation from new ledger (active trees)
-        $allocatedNew = (int) $this->treeAllocations()
-            ->whereHas('tree', function ($q) {
-                $q->where('status', '!=', 'cancelled');
-            })
-            ->sum('allocated_qty');
+        if ($this->relationLoaded('treeAllocations')) {
+            $allocatedNew = (int) $this->treeAllocations
+                ->filter(function ($alloc) {
+                    return $alloc->tree && $alloc->tree->status !== 'cancelled';
+                })
+                ->sum('allocated_qty');
+        } else {
+            $allocatedNew = (int) $this->treeAllocations()
+                ->whereHas('tree', function ($q) {
+                    $q->where('status', '!=', 'cancelled');
+                })
+                ->sum('allocated_qty');
+        }
 
         // 2. Allocation from legacy trees (without allocation ledger records)
-        $allocatedLegacy = (int) $this->trees()
-            ->where('status', '!=', 'cancelled')
-            ->whereDoesntHave('allocations')
-            ->sum('quantity');
+        if ($this->relationLoaded('trees')) {
+            $allocatedLegacy = (int) $this->trees
+                ->filter(function ($tree) {
+                    if ($tree->status === 'cancelled') {
+                        return false;
+                    }
+                    if ($tree->relationLoaded('allocations')) {
+                        return $tree->allocations->isEmpty();
+                    }
+
+                    return $tree->allocations()->doesntExist();
+                })
+                ->sum('quantity');
+        } else {
+            $allocatedLegacy = (int) $this->trees()
+                ->where('status', '!=', 'cancelled')
+                ->whereDoesntHave('allocations')
+                ->sum('quantity');
+        }
 
         return max(0, $good - $allocatedNew - $allocatedLegacy - $excessClosed);
     }
