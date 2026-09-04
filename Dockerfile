@@ -41,4 +41,5 @@ COPY --from=frontend /app/public/build /var/www/html/public/build
 
 RUN git config --global --add safe.directory /var/www/html
 RUN composer install --no-interaction --optimize-autoloader --no-dev --ignore-platform-reqs
+RUN php artisan storage:link || true
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
