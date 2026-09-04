@@ -65,12 +65,12 @@ return [
 
         'masterdata_kpi' => [
             'driver' => 'mysql',
-            'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => 'masterdata_kpi',
-            'username' => env('DB_USERNAME', 'root'),
-            'password' => env('DB_PASSWORD', ''),
+            'url' => env('DB_MASTERDATA_URL', env('DB_URL')),
+            'host' => env('DB_MASTERDATA_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_MASTERDATA_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_MASTERDATA_DATABASE', 'masterdata_kpi'),
+            'username' => env('DB_MASTERDATA_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_MASTERDATA_PASSWORD', env('DB_PASSWORD', '')),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',

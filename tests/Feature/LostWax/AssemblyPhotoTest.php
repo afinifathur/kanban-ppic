@@ -502,4 +502,16 @@ class AssemblyPhotoTest extends TestCase
         $response->assertSee('Kelola Foto');
         $response->assertSee('268ETB733');
     }
+
+    public function test_masterdata_kpi_connection_configuration_honors_dedicated_environment_variables(): void
+    {
+        $conn = config('database.connections.masterdata_kpi');
+
+        $this->assertIsArray($conn);
+        $this->assertEquals('mysql', $conn['driver']);
+        $this->assertArrayHasKey('host', $conn);
+        $this->assertArrayHasKey('database', $conn);
+        $this->assertArrayHasKey('username', $conn);
+        $this->assertArrayHasKey('password', $conn);
+    }
 }
