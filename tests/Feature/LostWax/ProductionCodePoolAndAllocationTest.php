@@ -338,7 +338,7 @@ class ProductionCodePoolAndAllocationTest extends TestCase
     }
 
     /**
-     * CASE 8: Physical Over-Consumption / Anomaly (Physical > Recorded Pool Available)
+     * CASE 8: Physical Over-Consumption / Additional Source (Physical > Recorded Pool Available)
      */
     public function test_case_8_physical_over_consumption_anomaly_handling(): void
     {
@@ -355,25 +355,38 @@ class ProductionCodePoolAndAllocationTest extends TestCase
         $this->rangkaiService->closeExcessBalance($line, 4);
         $this->assertEquals(252, $line->fresh()->qty_available_for_rangkai);
 
-        // Operator physically consumes 256 pcs (4 pcs more than the 252 recorded in pool)
+        // Attempting to execute 256 pcs without additional source must be REJECTED
         $quantities = array_fill(0, 8, 32); // 8 x 32 = 256 pcs
+        try {
+            $this->rangkaiService->recordExecution($workOrder, [
+                'execution_date' => now()->format('Y-m-d'),
+                'trees_created' => 8,
+                'quantities' => $quantities,
+                'family_code' => '6',
+            ]);
+            $this->fail('Expected InvalidArgumentException when executing over available without additional source');
+        } catch (\InvalidArgumentException $e) {
+            $this->assertStringContainsString('melebihi ketersediaan', $e->getMessage());
+        }
+
+        // Now provide another line with available wax as additional source
+        $plan2 = $this->createPlan('268ETB828', 50);
+        $line2 = $this->createPrintLine($plan2, 50, 50, 0);
+
         $execution = $this->rangkaiService->recordExecution($workOrder, [
             'execution_date' => now()->format('Y-m-d'),
             'trees_created' => 8,
             'quantities' => $quantities,
             'family_code' => '6',
+            'additional_source_line_id' => $line2->id,
+            'additional_source_qty' => 4,
+            'additional_source_reason' => 'Menggunakan sisa lilin dari line 268ETB828',
         ]);
 
-        // Traveler must be created successfully without fake allocations
         $this->assertEquals(8, LostWaxTree::count());
-        $this->assertEquals(252, LostWaxTreeAllocation::sum('allocated_qty')); // Exactly 252 official allocations
-
-        // Execution flagged with variance and anomaly
-        $this->assertEquals(-4, $execution->variance_qty);
-        $this->assertTrue($execution->is_anomaly);
-        $this->assertStringContainsString('256 pcs', $execution->anomaly_notes);
-        $this->assertStringContainsString('252 pcs', $execution->anomaly_notes);
+        $this->assertEquals(256, LostWaxTreeAllocation::sum('allocated_qty'));
         $this->assertEquals(0, $line->fresh()->qty_available_for_rangkai);
+        $this->assertEquals(46, $line2->fresh()->qty_available_for_rangkai);
     }
 
     /**

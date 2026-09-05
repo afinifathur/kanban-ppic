@@ -13,6 +13,10 @@ class LostWaxRangkaiExecution extends Model
         'execution_date',
         'trees_created',
         'family_code',
+        'additional_source_line_id',
+        'additional_source_code',
+        'additional_source_qty',
+        'additional_source_reason',
         'status',
         'variance_qty',
         'is_anomaly',
@@ -27,11 +31,18 @@ class LostWaxRangkaiExecution extends Model
     protected $casts = [
         'execution_date' => 'date',
         'trees_created' => 'integer',
+        'additional_source_line_id' => 'integer',
+        'additional_source_qty' => 'integer',
         'variance_qty' => 'integer',
         'is_anomaly' => 'boolean',
         'recorded_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];
+
+    public function additionalSourceLine()
+    {
+        return $this->belongsTo(LostWaxPrintOrderLine::class, 'additional_source_line_id');
+    }
 
     public function workOrder()
     {
@@ -51,6 +62,11 @@ class LostWaxRangkaiExecution extends Model
     public function trees()
     {
         return $this->hasMany(LostWaxTree::class, 'rangkai_execution_id');
+    }
+
+    public function getTotalPcsAttribute(): int
+    {
+        return (int) $this->trees->sum('quantity');
     }
 
     public function getIsCancelledAttribute(): bool

@@ -234,6 +234,7 @@ class AssemblyController extends Controller
             'printOrderLine.productionPlan',
             'executions.recorder',
             'executions.canceller',
+            'executions.additionalSourceLine.printOrder',
             'executions.trees.scanEvents',
         ]);
 
@@ -260,6 +261,18 @@ class AssemblyController extends Controller
         $photoService = app(\App\Services\AssemblyPhotoService::class);
         $assemblyPhoto = $photoService->getCurrentPhoto($productCode, $productName);
 
+        // Fetch candidate print order lines with available physical balance for additional source selection
+        $availableSourceLines = \App\Models\LostWaxPrintOrderLine::with('printOrder')
+            ->where('execution_status', '!=', 'CANCELLED')
+            ->where(function ($q) {
+                $q->whereNotNull('qty_executed_good')->orWhereNotNull('qty_actual_good');
+            })
+            ->get()
+            ->filter(function ($l) {
+                return $l->qty_available_for_rangkai > 0;
+            })
+            ->values();
+
         return view('lost-wax.assemblies.show_wo', compact(
             'workOrder',
             'line',
@@ -269,7 +282,8 @@ class AssemblyController extends Controller
             'capacity',
             'productName',
             'productCode',
-            'assemblyPhoto'
+            'assemblyPhoto',
+            'availableSourceLines'
         ));
     }
 
@@ -307,6 +321,9 @@ class AssemblyController extends Controller
             'quantities' => 'required|array|min:1',
             'quantities.*' => 'required|integer|min:1',
             'family_code' => 'required|string|max:10',
+            'additional_source_line_id' => 'nullable|exists:lost_wax_print_order_lines,id',
+            'additional_source_qty' => 'nullable|integer|min:0',
+            'additional_source_reason' => 'nullable|string|max:500',
         ]);
 
         try {
@@ -316,6 +333,9 @@ class AssemblyController extends Controller
                 'trees_created' => $request->trees_created,
                 'quantities' => $request->quantities,
                 'family_code' => $request->family_code,
+                'additional_source_line_id' => $request->additional_source_line_id,
+                'additional_source_qty' => $request->additional_source_qty,
+                'additional_source_reason' => $request->additional_source_reason,
             ]);
 
             return redirect()->route('lost-wax.assemblies.work-orders.show', $workOrder)
@@ -368,21 +388,21 @@ class AssemblyController extends Controller
     }
 
     /**
-     * Close excess balance on a Print Order Line.
+     * Close excess balance on a Print Order Line (Afkir Sisa Lilin).
      */
     public function closeExcess(Request $request, \App\Models\LostWaxPrintOrderLine $line)
     {
         $this->authorizeLine($line);
         $request->validate([
             'qty_to_close' => 'required|integer|min:1',
+            'excess_closure_reason' => 'required|string|max:500',
         ]);
 
         try {
             $service = app(\App\Services\RangkaiExecutionService::class);
-            $service->closeExcessBalance($line, (int) $request->qty_to_close);
+            $service->closeExcessBalance($line, (int) $request->qty_to_close, $request->excess_closure_reason, auth()->user());
 
-            return redirect()->route('lost-wax.assemblies.index')
-                ->with('success', 'Saldo excess berhasil ditutup (closed/recycled).');
+            return back()->with('success', "Sisa lilin ({$request->qty_to_close} pcs) berhasil diafkir (SCRAPPED / CLOSED).");
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

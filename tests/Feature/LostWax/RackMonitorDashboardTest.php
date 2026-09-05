@@ -263,4 +263,55 @@ class RackMonitorDashboardTest extends TestCase
         // This is bounded and far below N (e.g. 10 racks)
         $this->assertLessThan(10, $queryCount, 'Database query count should be small and bounded.');
     }
+
+    // ─── Test 8: Dashboard excludes Oven trees and renders Rack 10 correctly ───
+    public function test_dashboard_excludes_oven_trees_and_displays_compact_barcode(): void
+    {
+        $user = User::factory()->create();
+        Carbon::setTestNow(Carbon::create(2026, 8, 30, 12, 0, 0));
+
+        $rack10 = LostWaxCoatingRack::where('rack_number', 10)->first();
+
+        // 7 trees in layer_3
+        for ($i = 1; $i <= 7; $i++) {
+            $this->createTree([
+                'barcode' => '1290826'.str_pad((string) (8 + $i), 3, '0', STR_PAD_LEFT),
+                'rack_id' => $rack10->id,
+                'quantity' => ($i === 1) ? 32 : 16,
+                'current_stage' => 'layer_3',
+                'last_scan_at' => Carbon::now()->subHours(2),
+            ]);
+        }
+
+        // 5 trees in oven (should be excluded)
+        for ($i = 1; $i <= 5; $i++) {
+            $this->createTree([
+                'barcode' => '3290826'.str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                'rack_id' => $rack10->id,
+                'quantity' => 32,
+                'current_stage' => 'oven',
+                'last_scan_at' => Carbon::now()->subHours(1),
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('lost-wax.rack-monitor.index'));
+        $response->assertOk();
+
+        $viewRacks = $response->viewData('racks');
+        $this->assertCount(1, $viewRacks);
+        $this->assertEquals(7, $viewRacks[0]['tree_count']);
+        $this->assertEquals(128, $viewRacks[0]['total_quantity']);
+        $this->assertEquals('layer_3', $viewRacks[0]['dominant_stage']);
+
+        // Check barcodes in view payload
+        $barcodes = array_column($viewRacks[0]['trees'], 'barcode');
+        $this->assertContains('1290826009', $barcodes);
+        $this->assertNotContains('3290826001', $barcodes);
+        $this->assertNotContains('3290826002', $barcodes);
+
+        $summary = $response->viewData('summary');
+        $this->assertEquals(1, $summary['total_active']);
+
+        Carbon::setTestNow(null);
+    }
 }

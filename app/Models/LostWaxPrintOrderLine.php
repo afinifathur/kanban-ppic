@@ -25,6 +25,9 @@ class LostWaxPrintOrderLine extends Model
         'qty_executed_good',
         'qty_executed_defect',
         'qty_excess_closed',
+        'excess_closure_reason',
+        'excess_closed_by',
+        'excess_closed_at',
     ];
 
     protected $casts = [
@@ -37,7 +40,13 @@ class LostWaxPrintOrderLine extends Model
         'qty_executed_good' => 'integer',
         'qty_executed_defect' => 'integer',
         'qty_excess_closed' => 'integer',
+        'excess_closed_at' => 'datetime',
     ];
+
+    public function excessCloser()
+    {
+        return $this->belongsTo(User::class, 'excess_closed_by');
+    }
 
     public function printOrder()
     {

@@ -115,6 +115,9 @@ class RackMonitorController extends Controller
         ];
 
         foreach ($stages as $stageKey => $stageLabel) {
+            if ($stageKey === 'oven') {
+                continue;
+            }
             $stageReport[$stageKey] = [
                 'label' => $stageLabel,
                 'rack_count' => 0,

@@ -9,12 +9,26 @@ use Carbon\Carbon;
 class RackMonitorService
 {
     /**
-     * Get aggregated information for all active coating racks that contain at least one tree.
+     * Allowed stages for trees physically residing on a coating rack.
+     */
+    public const RACK_STAGES = [
+        'layer_1',
+        'layer_2',
+        'layer_3',
+        'layer_4',
+        'layer_5',
+        'layer_6',
+        'layer_7',
+    ];
+
+    /**
+     * Get aggregated information for all active coating racks that contain at least one tree on Layer 1-7.
      */
     public function getActiveRacks(): array
     {
-        // Fetch all trees that are currently assigned to active coating racks
+        // Fetch all trees that are currently on Layer 1-7 assigned to active coating racks
         $trees = LostWaxTree::whereNotNull('rack_id')
+            ->whereIn('current_stage', self::RACK_STAGES)
             ->whereHas('coatingRack', function ($query) {
                 $query->where('status', 'active');
             })
@@ -59,7 +73,7 @@ class RackMonitorService
     }
 
     /**
-     * Get detail of a specific rack.
+     * Get detail of a specific rack containing trees on Layer 1-7.
      */
     public function getRackDetail(int $rackId): ?array
     {
@@ -72,6 +86,7 @@ class RackMonitorService
         }
 
         $trees = LostWaxTree::where('rack_id', $rackId)
+            ->whereIn('current_stage', self::RACK_STAGES)
             ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference'])
             ->get();
         if ($trees->isEmpty()) {
@@ -89,7 +104,7 @@ class RackMonitorService
         return LostWaxTree::whereNull('rack_id')
             ->where(function ($query) {
                 $query->whereNull('current_stage')
-                    ->orWhere('current_stage', '!=', 'oven');
+                    ->orWhereIn('current_stage', self::RACK_STAGES);
             })
             ->count();
     }
@@ -104,9 +119,8 @@ class RackMonitorService
         $treeCount = $treesInRack->count();
         $totalQuantity = $treesInRack->sum('quantity');
 
-        // Build stage distribution
+        // Build stage distribution for physical rack stages
         $distribution = [
-            'sebelum_scan' => 0,
             'layer_1' => 0,
             'layer_2' => 0,
             'layer_3' => 0,
@@ -114,18 +128,18 @@ class RackMonitorService
             'layer_5' => 0,
             'layer_6' => 0,
             'layer_7' => 0,
-            'oven' => 0,
         ];
 
         $distinctStages = [];
         $stageCounts = [];
 
         foreach ($treesInRack as $tree) {
-            $stageKey = $tree->current_stage ?: 'sebelum_scan';
-            $distribution[$stageKey] = ($distribution[$stageKey] ?? 0) + 1;
-
-            $distinctStages[$stageKey] = true;
-            $stageCounts[$stageKey] = ($stageCounts[$stageKey] ?? 0) + 1;
+            $stageKey = $tree->current_stage;
+            if ($stageKey) {
+                $distribution[$stageKey] = ($distribution[$stageKey] ?? 0) + 1;
+                $distinctStages[$stageKey] = true;
+                $stageCounts[$stageKey] = ($stageCounts[$stageKey] ?? 0) + 1;
+            }
         }
 
         $isMixed = count($distinctStages) > 1;
@@ -140,8 +154,8 @@ class RackMonitorService
                 $maxCount = $count;
                 $dominantStage = $stage;
             } elseif ($count === $maxCount) {
-                $idx1 = $stage === 'sebelum_scan' ? -1 : array_search($stage, $stagesOrder);
-                $idx2 = $dominantStage === 'sebelum_scan' ? -1 : array_search($dominantStage, $stagesOrder);
+                $idx1 = array_search($stage, $stagesOrder);
+                $idx2 = array_search($dominantStage, $stagesOrder);
 
                 $idx1 = $idx1 === false ? 999 : $idx1;
                 $idx2 = $idx2 === false ? 999 : $idx2;
@@ -152,7 +166,7 @@ class RackMonitorService
             }
         }
 
-        $dominantStageResult = ($dominantStage === 'sebelum_scan') ? null : $dominantStage;
+        $dominantStageResult = $dominantStage;
 
         // Calculate rack_stage_started_at (MAX of valid scanned_at of trees in the dominant stage)
         $rackStageStartedAt = null;
@@ -199,11 +213,8 @@ class RackMonitorService
         $isLayer7Split = false;
         $hasLayer7 = ($distribution['layer_7'] ?? 0) > 0;
         $hasLayer6 = ($distribution['layer_6'] ?? 0) > 0;
-        $hasOven = ($distribution['oven'] ?? 0) > 0;
 
-        if ($hasLayer7 && ($hasLayer6 || $hasOven || count(array_filter($distribution)) > 1)) {
-            $isLayer7Split = true;
-        } elseif ($hasLayer6 && $hasOven) {
+        if ($hasLayer7 && ($hasLayer6 || count(array_filter($distribution)) > 1)) {
             $isLayer7Split = true;
         }
 
@@ -217,10 +228,12 @@ class RackMonitorService
             $productionCodes[$code] = ($productionCodes[$code] ?? 0) + 1;
             $itemNames[$itemName] = ($itemNames[$itemName] ?? 0) + 1;
 
+            $cleanBarcode = preg_replace('/[\s\-]/', '', (string) $tree->barcode);
+
             $treesDetail[] = [
                 'id' => $tree->id,
-                'barcode' => $tree->barcode,
-                'human_barcode' => $tree->human_barcode,
+                'barcode' => $cleanBarcode,
+                'human_barcode' => $cleanBarcode,
                 'quantity' => $tree->quantity,
                 'current_stage' => $tree->current_stage,
                 'current_stage_label' => $tree->current_stage_label,
@@ -243,7 +256,7 @@ class RackMonitorService
             'aging_status' => $agingStatus,
             'is_mixed' => $isMixed,
             'is_layer7_split' => $isLayer7Split,
-            'trees_without_stage' => $distribution['sebelum_scan'] ?? 0,
+            'trees_without_stage' => 0,
             'production_codes' => $productionCodes,
             'item_names' => $itemNames,
             'trees' => $treesDetail,

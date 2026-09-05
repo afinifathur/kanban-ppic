@@ -299,4 +299,82 @@ class RackMonitorServiceTest extends TestCase
         // It should be exactly 2 queries, or at least a very small bounded number, definitely not proportional to the number of racks (10).
         $this->assertLessThanOrEqual(5, count($queryLog), 'Query count should be bounded and not scale with number of racks.');
     }
+
+    // ─── Test 11: Oven trees are excluded from rack aggregation (Rack 10 scenario) ───
+    public function test_oven_trees_are_excluded_from_rack_dataset_and_aggregation(): void
+    {
+        $rack10 = LostWaxCoatingRack::where('rack_number', 10)->first();
+
+        // 7 Trees on Layer 3
+        for ($i = 1; $i <= 7; $i++) {
+            $this->createTree([
+                'barcode' => '1290826'.str_pad((string) (8 + $i), 3, '0', STR_PAD_LEFT),
+                'rack_id' => $rack10->id,
+                'quantity' => ($i === 1) ? 32 : 16,
+                'current_stage' => 'layer_3',
+                'last_scan_at' => Carbon::create(2026, 8, 30, 6, 25, 0),
+            ]);
+        }
+
+        // 5 Trees on Oven (physically out of rack)
+        for ($i = 1; $i <= 5; $i++) {
+            $this->createTree([
+                'barcode' => '3290826'.str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                'rack_id' => $rack10->id,
+                'quantity' => 32,
+                'current_stage' => 'oven',
+                'last_scan_at' => Carbon::create(2026, 9, 5, 21, 48, 0),
+            ]);
+        }
+
+        $activeRacks = $this->service->getActiveRacks();
+
+        $this->assertCount(1, $activeRacks);
+        $rackData = $activeRacks[0];
+
+        $this->assertEquals(10, $rackData['rack_number']);
+        $this->assertEquals(7, $rackData['tree_count'], 'Tree count should only include 7 Layer 3 trees');
+        $this->assertEquals(128, $rackData['total_quantity'], 'Total quantity should be 32 + (6*16) = 128 pcs');
+        $this->assertEquals('layer_3', $rackData['dominant_stage']);
+        $this->assertFalse($rackData['is_mixed']);
+        $this->assertEquals(7, $rackData['stage_distribution']['layer_3']);
+        $this->assertArrayNotHasKey('oven', $rackData['stage_distribution']);
+
+        // Check tree list
+        $this->assertCount(7, $rackData['trees']);
+        foreach ($rackData['trees'] as $tree) {
+            $this->assertEquals('layer_3', $tree['current_stage']);
+            $this->assertStringNotContainsString(' ', $tree['human_barcode']);
+            $this->assertStringNotContainsString('-', $tree['human_barcode']);
+            $this->assertMatchesRegularExpression('/^[0-9]{10}$/', $tree['human_barcode']);
+        }
+
+        // Check getRackDetail
+        $detail = $this->service->getRackDetail($rack10->id);
+        $this->assertNotNull($detail);
+        $this->assertEquals(7, $detail['tree_count']);
+        $this->assertEquals(128, $detail['total_quantity']);
+    }
+
+    // ─── Test 12: Rack with ONLY oven trees is considered empty ───
+    public function test_rack_with_only_oven_trees_is_considered_empty(): void
+    {
+        $rack = LostWaxCoatingRack::where('rack_number', 5)->first();
+
+        // 3 trees in oven associated with this rack
+        for ($i = 1; $i <= 3; $i++) {
+            $this->createTree([
+                'rack_id' => $rack->id,
+                'quantity' => 20,
+                'current_stage' => 'oven',
+                'last_scan_at' => now(),
+            ]);
+        }
+
+        $activeRacks = $this->service->getActiveRacks();
+        $this->assertEmpty($activeRacks, 'Rack with only oven trees should not be in active racks');
+
+        $detail = $this->service->getRackDetail($rack->id);
+        $this->assertNull($detail, 'getRackDetail should return null for rack with only oven trees');
+    }
 }

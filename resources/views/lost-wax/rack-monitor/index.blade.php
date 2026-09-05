@@ -718,7 +718,7 @@
 
                 tbody.innerHTML += `
                     <tr class="border-b border-slate-100 hover:bg-slate-50">
-                        <td class="p-2 font-mono text-xs font-bold text-slate-700 whitespace-nowrap">${tree.human_barcode}</td>
+                        <td class="p-2 font-mono text-xs font-bold text-slate-700 whitespace-nowrap">${tree.barcode || tree.human_barcode}</td>
                         <td class="p-2 font-semibold text-slate-800">${tree.item_name || '-'}</td>
                         <td class="p-2 font-medium text-slate-500 text-xs whitespace-nowrap">${tree.production_code}</td>
                         <td class="p-2 text-center font-bold text-slate-800">${tree.quantity}</td>

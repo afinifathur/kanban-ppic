@@ -119,7 +119,7 @@
                                     <label class="block text-xs font-bold text-slate-800 mb-1">Qty yang Akan Dirangkai <span class="text-red-500">*</span></label>
                                     <input type="number" id="qtyExecutionInput" 
                                         value="{{ min($workOrder->qty_outstanding, $line->qty_available_for_rangkai) }}" 
-                                        min="1" max="{{ min($workOrder->qty_outstanding, $line->qty_available_for_rangkai) }}" required
+                                        min="1" required
                                         class="w-full rounded-lg border-slate-300 text-sm focus:border-amber-500 focus:ring-amber-500 shadow-sm font-semibold">
                                     <span class="text-[9px] text-slate-400 block mt-1">Jumlah produk fisik yang akan mulai dirangkai hari ini.</span>
                                 </div>
@@ -129,6 +129,85 @@
                                         value="{{ $capacity }}" min="1" required
                                         class="w-full rounded-lg border-slate-300 text-sm focus:border-amber-500 focus:ring-amber-500 shadow-sm font-semibold">
                                     <span class="text-[9px] text-slate-400 block mt-1">Kapasitas maksimum lilin per pohon fisik (sebagai pedoman pembagian).</span>
+                                </div>
+                            </div>
+
+                            <!-- ADDITIONAL PHYSICAL SOURCE SECTION (SHOWS IF QTY > AVAILABLE) -->
+                            <div id="additionalSourceSection" class="hidden p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3">
+                                <div class="flex items-start justify-between gap-2 border-b border-amber-200/60 pb-2">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center font-bold text-xs">
+                                            <i class="fas fa-plus"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-xs font-bold text-amber-900">Sumber Lilin Fisik Tambahan (Additional Source)</h3>
+                                            <p class="text-[10px] text-amber-800/90" id="additionalSourceDiffNotice">
+                                                Kuantitas melebihi ketersediaan. Harap cantumkan sumber lilin fisik yang digunakan.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button type="button" id="revertQtyBtn" class="text-[10px] font-bold text-amber-800 hover:text-amber-950 bg-amber-200/60 hover:bg-amber-200 px-2.5 py-1 rounded transition-colors">
+                                        Sesuaikan ke Ketersediaan
+                                    </button>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">
+                                            Pilih Sumber Lilin (Print Order Line) <span class="text-red-500">*</span>
+                                        </label>
+                                        
+                                        <!-- Hidden input for selected Print Order Line ID -->
+                                        <input type="hidden" name="additional_source_line_id" id="additionalSourceLineIdInput" value="{{ old('additional_source_line_id') }}">
+
+                                        <!-- Autocomplete Input with Dropdown -->
+                                        <div class="relative" id="sourceAutocompleteContainer">
+                                            <div class="relative flex items-center">
+                                                <input type="text" id="sourceSearchInput" autocomplete="off"
+                                                    placeholder="Ketik Production Code / Nama Produk / SPK..."
+                                                    class="w-full rounded-lg border-amber-300 text-xs focus:border-amber-500 focus:ring-amber-500 shadow-sm bg-white pr-8 py-2">
+                                                <button type="button" id="clearSourceBtn" title="Hapus Pilihan"
+                                                    class="hidden absolute right-2 text-slate-400 hover:text-slate-600 focus:outline-none p-1 text-xs transition-colors">
+                                                    <i class="fas fa-times-circle"></i>
+                                                </button>
+                                            </div>
+
+                                            <!-- Suggestions Dropdown List -->
+                                            <div id="sourceSuggestionsList" 
+                                                class="hidden absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
+                                                <!-- Dynamic suggestions rendered by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Selected Source Summary Card -->
+                                        <div id="selectedSourceCard" class="hidden mt-2 p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 text-xs space-y-1">
+                                            <div class="flex items-center justify-between">
+                                                <span class="font-bold text-slate-900 truncate pr-2" id="selectedSourceTitle">-</span>
+                                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0" id="selectedSourceBadge">Tersedia: 0 pcs</span>
+                                            </div>
+                                            <div class="text-[11px] text-slate-500 flex items-center justify-between">
+                                                <span id="selectedSourceSpk">SPK: -</span>
+                                                <span class="text-amber-800 font-semibold" id="selectedSourceUsage">Tambahan: 0 pcs</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">
+                                            Kuantitas Tambahan (pcs) <span class="text-red-500">*</span>
+                                        </label>
+                                        <input type="number" name="additional_source_qty" id="additionalSourceQtyInput" value="{{ old('additional_source_qty', 0) }}" readonly
+                                            class="w-full rounded-lg border-amber-300 bg-amber-100/50 text-xs font-bold text-slate-800 shadow-sm py-2">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1">
+                                        Alasan Penambahan Lilin Fisik <span class="text-red-500">*</span>
+                                    </label>
+                                    <textarea name="additional_source_reason" id="additionalSourceReasonInput" rows="2"
+                                        placeholder="Contoh: Menggunakan sisa lilin sehat dari rangkaian produksi sebelumnya..."
+                                        class="w-full rounded-lg border-amber-300 text-xs focus:border-amber-500 focus:ring-amber-500 shadow-sm bg-white"></textarea>
+                                    <span class="text-[9px] text-amber-800 block mt-0.5">Alasan penambahan wajib diisi untuk rekam jejak audit (traceability).</span>
                                 </div>
                             </div>
 
@@ -157,7 +236,7 @@
 
                                 <div class="p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-650 flex flex-col sm:flex-row sm:justify-between gap-2">
                                     <div>Total Eksekusi Rangkai: <strong id="totalQty" class="text-slate-900 text-sm font-bold">0</strong> pcs</div>
-                                    <div>Maksimum Diizinkan: <strong class="text-slate-800">{{ number_format(min($workOrder->qty_outstanding, $line->qty_available_for_rangkai)) }}</strong> pcs</div>
+                                    <div>Ketersediaan Normal WO: <strong class="text-slate-800">{{ number_format(min($workOrder->qty_outstanding, $line->qty_available_for_rangkai)) }}</strong> pcs</div>
                                 </div>
                             </div>
 
@@ -233,6 +312,25 @@
                                         </div>
                                         <div class="text-[11px] italic bg-white/70 p-1.5 rounded border border-red-200/50">
                                             "{{ $exec->cancellation_reason }}"
+                                        </div>
+                                    </div>
+                                @endif
+
+                                @if($exec->additional_source_qty > 0)
+                                    <!-- ADDITIONAL SOURCE AUDIT INFO -->
+                                    <div class="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                                        <i class="fas fa-plus-circle text-amber-600 mt-0.5"></i>
+                                        <div class="space-y-0.5">
+                                            <span class="font-bold">Termasuk Sumber Lilin Tambahan (+{{ $exec->additional_source_qty }} pcs):</span>
+                                            <div class="text-[11px] text-slate-700">
+                                                Kode Produksi: <strong>{{ $exec->additional_source_code }}</strong>
+                                                @if($exec->additionalSourceLine?->printOrder)
+                                                    (No. SPK: <strong>{{ $exec->additionalSourceLine->printOrder->print_order_number }}</strong>)
+                                                @endif
+                                            </div>
+                                            @if($exec->additional_source_reason)
+                                                <div class="text-[11px] italic text-slate-600">"{{ $exec->additional_source_reason }}"</div>
+                                            @endif
                                         </div>
                                     </div>
                                 @endif
@@ -337,6 +435,31 @@
                                 <span class="font-bold text-slate-800">{{ $workOrder->tree_capacity }} pcs / tree</span>
                             @endif
                         </div>
+                        <div class="flex justify-between border-b border-slate-50 pb-1.5 items-center">
+                            <span class="text-slate-500">Saldo Tersedia Line:</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-bold text-slate-800">{{ $line->qty_available_for_rangkai }} pcs</span>
+                                @if($line->qty_available_for_rangkai > 0)
+                                    <button type="button" onclick="openScrapModal({{ $line->id }}, '{{ $line->code }}', {{ $line->qty_available_for_rangkai }})" 
+                                        class="px-2 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold transition-colors">
+                                        <i class="fas fa-trash-alt mr-0.5"></i> Afkir Sisa
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                        @if($line->qty_excess_closed > 0)
+                            <div class="p-2.5 rounded-lg bg-red-50/60 border border-red-200 text-[11px] text-red-800 space-y-1">
+                                <div class="font-bold flex items-center gap-1 text-red-900">
+                                    <i class="fas fa-ban"></i> Sisa Lilin Diafkir: {{ $line->qty_excess_closed }} pcs
+                                </div>
+                                <div class="text-[10px] text-red-700">
+                                    Alasan: {{ $line->excess_closure_reason ?? '-' }}
+                                    @if($line->excess_closed_at)
+                                        <br>Ditutup: {{ $line->excess_closed_at->format('d/m/Y H:i') }} ({{ $line->excessCloser?->name ?? 'User' }})
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
                         <div>
                             <span class="text-slate-500 block mb-1">Catatan WO:</span>
                             <p class="p-2.5 rounded bg-slate-50 border border-slate-100 text-slate-650 italic text-[11px]">
@@ -522,6 +645,68 @@
         </div>
     </div>
 
+    <!-- MODAL AFKIR SISA LILIN (SCRAP / CLOSE EXCESS) -->
+    <div id="scrapModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" aria-labelledby="scrap-modal-title" role="dialog" aria-modal="true">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 transform transition-all">
+            <form id="scrapForm" method="POST" action="">
+                @csrf
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                        <i class="fas fa-trash-alt text-xl"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <span class="text-[10px] font-extrabold uppercase text-red-700 tracking-wider block">Afkir / Tutup Sisa Lilin</span>
+                        <h3 class="text-base font-black text-slate-900 leading-snug" id="scrap-modal-title">
+                            AFKIR SISA LILIN CETAK?
+                        </h3>
+                        <p class="text-xs font-bold text-slate-700 mt-0.5" id="scrapItemInfo">
+                            {{ $line->code ?? '-' }} &bull; {{ $productName ?? $line->item_name }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900">
+                    <div class="font-bold flex items-center gap-1.5 mb-1 text-red-900">
+                        <i class="fas fa-exclamation-triangle"></i> Perhatian:
+                    </div>
+                    <p class="text-[11px] leading-relaxed">
+                        Kuantitas lilin yang diafkir akan <strong>ditutup secara permanen</strong> dari saldo tersedia sistem, tidak dapat digunakan untuk assembly/sumber tambahan, dan dicatat dalam audit trail.
+                    </p>
+                </div>
+
+                <div class="mt-4 space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 mb-1">
+                            Jumlah Lilin yang Diafkir (pcs) <span class="text-red-500">*</span>
+                        </label>
+                        <input type="number" name="qty_to_close" id="scrapQtyInput" min="1" required
+                            class="w-full rounded-lg border-slate-300 text-xs focus:border-red-500 focus:ring-red-500 shadow-sm font-bold">
+                        <span class="text-[10px] text-slate-400 block mt-0.5" id="scrapMaxHint">Maksimal: 0 pcs</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 mb-1">
+                            Alasan Afkir / Scrap <span class="text-red-500">*</span>
+                        </label>
+                        <textarea name="excess_closure_reason" id="scrapReasonInput" rows="3" required
+                            placeholder="Contoh: Lilin cacat/patah, pattern rusak, disposal sisa cetak..."
+                            class="w-full rounded-lg border-slate-300 text-xs focus:border-red-500 focus:ring-red-500 shadow-sm leading-relaxed"></textarea>
+                        <span class="text-[10px] text-slate-400 block">Alasan afkir wajib diisi untuk rekam jejak audit.</span>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeScrapModal()" class="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 text-xs font-black text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm flex items-center gap-1.5">
+                        <i class="fas fa-ban"></i> Konfirmasi Afkir Sisa
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- SCRIPT REAL-TIME CALCULATION, CONFIRMATION MODAL & CANCELLATION MODAL -->
     <script>
         // Global helper for opening cancellation modal
@@ -540,6 +725,31 @@
 
         function closeCancelModal() {
             const modal = document.getElementById('cancelTravelerModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Global helper for opening scrap modal
+        function openScrapModal(lineId, lineCode, maxAvailable) {
+            const modal = document.getElementById('scrapModal');
+            const form = document.getElementById('scrapForm');
+            const qtyInput = document.getElementById('scrapQtyInput');
+            const reasonInput = document.getElementById('scrapReasonInput');
+            const maxHint = document.getElementById('scrapMaxHint');
+
+            form.action = `/lost-wax/assemblies/lines/${lineId}/close-excess`;
+            qtyInput.max = maxAvailable;
+            qtyInput.value = maxAvailable;
+            maxHint.textContent = `Maksimal tersedia: ${maxAvailable} pcs`;
+            reasonInput.value = '';
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => reasonInput.focus(), 50);
+        }
+
+        function closeScrapModal() {
+            const modal = document.getElementById('scrapModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
         }
@@ -572,16 +782,278 @@
                 const modalTotalPcs = document.getElementById('modalTotalPcs');
                 const modalBreakdownNote = document.getElementById('modalBreakdownNote');
 
+                const additionalSourceSection = document.getElementById('additionalSourceSection');
+                const additionalSourceDiffNotice = document.getElementById('additionalSourceDiffNotice');
+                const revertQtyBtn = document.getElementById('revertQtyBtn');
+                
+                // Autocomplete Elements
+                const additionalSourceLineIdInput = document.getElementById('additionalSourceLineIdInput');
+                const sourceSearchInput = document.getElementById('sourceSearchInput');
+                const clearSourceBtn = document.getElementById('clearSourceBtn');
+                const sourceSuggestionsList = document.getElementById('sourceSuggestionsList');
+                const selectedSourceCard = document.getElementById('selectedSourceCard');
+                const selectedSourceTitle = document.getElementById('selectedSourceTitle');
+                const selectedSourceBadge = document.getElementById('selectedSourceBadge');
+                const selectedSourceSpk = document.getElementById('selectedSourceSpk');
+                const selectedSourceUsage = document.getElementById('selectedSourceUsage');
+                const sourceAutocompleteContainer = document.getElementById('sourceAutocompleteContainer');
+
+                const additionalSourceQtyInput = document.getElementById('additionalSourceQtyInput');
+                const additionalSourceReasonInput = document.getElementById('additionalSourceReasonInput');
+
+                @php
+                    $sourceLinesJson = [];
+                    if (isset($availableSourceLines)) {
+                        foreach ($availableSourceLines as $s) {
+                            $sourceLinesJson[] = [
+                                'id' => (int) $s->id,
+                                'code' => (string) ($s->code ?? ''),
+                                'item_name' => (string) ($s->item_name ?? ''),
+                                'spk' => (string) ($s->printOrder?->print_order_number ?? '-'),
+                                'avail' => (int) $s->qty_available_for_rangkai,
+                            ];
+                        }
+                    }
+                @endphp
+                const availableSourceLinesData = {!! json_encode($sourceLinesJson) !!};
+
+                let selectedSourceItem = null;
+                let activeSuggestionIndex = -1;
                 let confirmedSubmit = false;
                 
                 const outstanding = {{ $workOrder->qty_outstanding }};
                 const available = {{ $line->qty_available_for_rangkai }};
                 const maxAvailable = Math.min(outstanding, available);
 
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+
+                function renderSuggestions(query) {
+                    if (!sourceSuggestionsList) return;
+                    const q = (query || '').trim().toLowerCase();
+                    if (!q) {
+                        sourceSuggestionsList.innerHTML = '';
+                        sourceSuggestionsList.classList.add('hidden');
+                        activeSuggestionIndex = -1;
+                        return;
+                    }
+
+                    const matches = availableSourceLinesData.filter(item => {
+                        return item.code.toLowerCase().includes(q) ||
+                               item.item_name.toLowerCase().includes(q) ||
+                               item.spk.toLowerCase().includes(q);
+                    }).slice(0, 10);
+
+                    if (matches.length === 0) {
+                        sourceSuggestionsList.innerHTML = `
+                            <div class="p-3 text-center text-slate-400 italic text-[11px]">
+                                <i class="fas fa-search mb-1 block text-slate-300"></i>
+                                Tidak ditemukan sumber lilin yang cocok untuk "${escapeHtml(query)}".
+                            </div>
+                        `;
+                        sourceSuggestionsList.classList.remove('hidden');
+                        activeSuggestionIndex = -1;
+                        return;
+                    }
+
+                    let html = '';
+                    matches.forEach((item, idx) => {
+                        html += `
+                            <div class="suggestion-item p-2.5 hover:bg-amber-50 cursor-pointer transition-colors" data-id="${item.id}" data-index="${idx}">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="font-bold text-slate-800 truncate">${escapeHtml(item.code)} &mdash; <span class="font-medium text-slate-650">${escapeHtml(item.item_name)}</span></div>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0">Tersedia: ${item.avail} pcs</span>
+                                </div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">SPK: ${escapeHtml(item.spk)}</div>
+                            </div>
+                        `;
+                    });
+
+                    sourceSuggestionsList.innerHTML = html;
+                    sourceSuggestionsList.classList.remove('hidden');
+                    activeSuggestionIndex = -1;
+
+                    sourceSuggestionsList.querySelectorAll('.suggestion-item').forEach(el => {
+                        el.addEventListener('click', function () {
+                            const id = parseInt(this.getAttribute('data-id'));
+                            const item = availableSourceLinesData.find(s => s.id === id);
+                            if (item) {
+                                selectSourceItem(item);
+                            }
+                        });
+                    });
+                }
+
+                function selectSourceItem(item) {
+                    selectedSourceItem = item;
+                    if (additionalSourceLineIdInput) {
+                        additionalSourceLineIdInput.value = item.id;
+                    }
+                    if (sourceSearchInput) {
+                        sourceSearchInput.value = `${item.code} — ${item.item_name}`;
+                    }
+                    if (clearSourceBtn) {
+                        clearSourceBtn.classList.remove('hidden');
+                    }
+                    if (sourceSuggestionsList) {
+                        sourceSuggestionsList.classList.add('hidden');
+                    }
+
+                    const expectedTotal = parseInt(qtyInput.value) || 0;
+                    const diff = Math.max(0, expectedTotal - maxAvailable);
+
+                    if (selectedSourceTitle) selectedSourceTitle.textContent = `${item.code} — ${item.item_name}`;
+                    if (selectedSourceBadge) selectedSourceBadge.textContent = `Tersedia: ${item.avail} pcs`;
+                    if (selectedSourceSpk) selectedSourceSpk.textContent = `SPK: ${item.spk}`;
+                    if (selectedSourceUsage) selectedSourceUsage.textContent = `Tambahan yang digunakan: ${diff} pcs`;
+                    if (selectedSourceCard) selectedSourceCard.classList.remove('hidden');
+
+                    updateSummary();
+                }
+
+                function clearSelectedSource() {
+                    selectedSourceItem = null;
+                    if (additionalSourceLineIdInput) additionalSourceLineIdInput.value = '';
+                    if (sourceSearchInput) sourceSearchInput.value = '';
+                    if (clearSourceBtn) clearSourceBtn.classList.add('hidden');
+                    if (sourceSuggestionsList) sourceSuggestionsList.classList.add('hidden');
+                    if (selectedSourceCard) selectedSourceCard.classList.add('hidden');
+                    updateSummary();
+                }
+
+                if (sourceSearchInput) {
+                    sourceSearchInput.addEventListener('input', function () {
+                        // Reset selected item and ID while user is freely typing
+                        selectedSourceItem = null;
+                        if (additionalSourceLineIdInput) additionalSourceLineIdInput.value = '';
+                        if (selectedSourceCard) selectedSourceCard.classList.add('hidden');
+                        
+                        if (this.value.trim().length > 0) {
+                            if (clearSourceBtn) clearSourceBtn.classList.remove('hidden');
+                            renderSuggestions(this.value);
+                        } else {
+                            if (clearSourceBtn) clearSourceBtn.classList.add('hidden');
+                            if (sourceSuggestionsList) sourceSuggestionsList.classList.add('hidden');
+                        }
+                        updateSummary();
+                    });
+
+                    sourceSearchInput.addEventListener('focus', function () {
+                        if (!selectedSourceItem && this.value.trim().length > 0) {
+                            renderSuggestions(this.value);
+                        }
+                    });
+
+                    sourceSearchInput.addEventListener('keydown', function (e) {
+                        if (!sourceSuggestionsList || sourceSuggestionsList.classList.contains('hidden')) return;
+
+                        const items = sourceSuggestionsList.querySelectorAll('.suggestion-item');
+                        if (items.length === 0) return;
+
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            activeSuggestionIndex = (activeSuggestionIndex + 1) % items.length;
+                            updateActiveSuggestion(items);
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            activeSuggestionIndex = (activeSuggestionIndex - 1 + items.length) % items.length;
+                            updateActiveSuggestion(items);
+                        } else if (e.key === 'Enter') {
+                            if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+                                e.preventDefault();
+                                items[activeSuggestionIndex].click();
+                            }
+                        } else if (e.key === 'Escape') {
+                            sourceSuggestionsList.classList.add('hidden');
+                        }
+                    });
+                }
+
+                function updateActiveSuggestion(items) {
+                    items.forEach((el, idx) => {
+                        if (idx === activeSuggestionIndex) {
+                            el.classList.add('bg-amber-100');
+                            el.scrollIntoView({ block: 'nearest' });
+                        } else {
+                            el.classList.remove('bg-amber-100');
+                        }
+                    });
+                }
+
+                if (clearSourceBtn) {
+                    clearSourceBtn.addEventListener('click', function () {
+                        clearSelectedSource();
+                        if (sourceSearchInput) sourceSearchInput.focus();
+                    });
+                }
+
+                // Close suggestions on click outside
+                document.addEventListener('click', function (e) {
+                    if (sourceAutocompleteContainer && !sourceAutocompleteContainer.contains(e.target)) {
+                        if (sourceSuggestionsList) {
+                            sourceSuggestionsList.classList.add('hidden');
+                        }
+                    }
+                });
+
+                if (revertQtyBtn) {
+                    revertQtyBtn.addEventListener('click', function () {
+                        qtyInput.value = maxAvailable;
+                        clearSelectedSource();
+                        autoDistribute();
+                    });
+                }
+
+                if (additionalSourceReasonInput) {
+                    additionalSourceReasonInput.addEventListener('input', updateSummary);
+                }
+
+                // Initial hydration if old value exists
+                if (additionalSourceLineIdInput && additionalSourceLineIdInput.value) {
+                    const existingId = parseInt(additionalSourceLineIdInput.value);
+                    const matched = availableSourceLinesData.find(s => s.id === existingId);
+                    if (matched) {
+                        selectSourceItem(matched);
+                    }
+                }
+
                 // Dynamically distribute quantity and render row inputs
                 function autoDistribute() {
                     const qty = parseInt(qtyInput.value) || 0;
                     const capacity = parseInt(capacityInput.value) || 0;
+
+                    // Handle Additional Source visibility & calculation
+                    if (additionalSourceSection) {
+                        if (qty > maxAvailable) {
+                            const diff = qty - maxAvailable;
+                            additionalSourceSection.classList.remove('hidden');
+                            if (additionalSourceDiffNotice) {
+                                additionalSourceDiffNotice.textContent = diff + ' pcs';
+                            }
+                            if (additionalSourceQtyInput) {
+                                additionalSourceQtyInput.value = diff;
+                            }
+                            if (selectedSourceUsage) {
+                                selectedSourceUsage.textContent = 'Tambahan yang digunakan: ' + diff + ' pcs';
+                            }
+                            if (additionalSourceReasonInput) {
+                                additionalSourceReasonInput.required = true;
+                            }
+                        } else {
+                            additionalSourceSection.classList.add('hidden');
+                            if (additionalSourceQtyInput) {
+                                additionalSourceQtyInput.value = 0;
+                            }
+                            if (additionalSourceReasonInput) {
+                                additionalSourceReasonInput.required = false;
+                                additionalSourceReasonInput.value = '';
+                            }
+                            clearSelectedSource();
+                        }
+                    }
                     
                     if (qty <= 0 || capacity <= 0) {
                         container.innerHTML = '<div class="text-xs text-slate-400 italic text-center py-2">Masukkan kuantitas dan pedoman kapasitas untuk melihat distribusi.</div>';
@@ -638,12 +1110,25 @@
                     if (expectedTotal <= 0) {
                         isValid = false;
                         warningText = 'Kuantitas eksekusi harus lebih besar dari 0.';
-                    } else if (expectedTotal > maxAvailable) {
-                        isValid = false;
-                        warningText = `Kuantitas eksekusi tidak boleh melebihi sisa outstanding/ketersediaan cetak (${maxAvailable} pcs).`;
                     } else if (total !== expectedTotal) {
                         isValid = false;
                         warningText = `Total distribusi tree (${total} pcs) tidak sama dengan Qty yang Akan Dirangkai (${expectedTotal} pcs).`;
+                    } else if (expectedTotal > maxAvailable) {
+                        const diff = expectedTotal - maxAvailable;
+                        const hasSelectedSource = additionalSourceLineIdInput && additionalSourceLineIdInput.value && selectedSourceItem;
+                        if (!hasSelectedSource) {
+                            isValid = false;
+                            warningText = `Kuantitas eksekusi (${expectedTotal} pcs) melebihi ketersediaan normal WO (${maxAvailable} pcs). Wajib memilih Sumber Lilin Tambahan untuk ${diff} pcs selisih fisik.`;
+                        } else {
+                            const avail = selectedSourceItem.avail || 0;
+                            if (avail < diff) {
+                                isValid = false;
+                                warningText = `Sumber lilin yang dipilih hanya memiliki saldo tersedia ${avail} pcs, tidak mencukupi untuk selisih ${diff} pcs.`;
+                            } else if (!additionalSourceReasonInput || !additionalSourceReasonInput.value.trim()) {
+                                isValid = false;
+                                warningText = 'Alasan penambahan lilin fisik wajib diisi sebagai audit trail.';
+                            }
+                        }
                     }
 
                     if (!isValid) {
@@ -685,15 +1170,24 @@
                     modalTreesCount.textContent = numTrees;
                     modalTotalPcs.textContent = new Intl.NumberFormat().format(total);
 
+                    const expectedTotal = parseInt(qtyInput.value) || 0;
+                    let sourceBreakdownHtml = '';
+                    if (expectedTotal > maxAvailable && selectedSourceItem) {
+                        const diff = expectedTotal - maxAvailable;
+                        sourceBreakdownHtml = `<div class="mt-1 text-[10px] text-amber-900 bg-amber-100/60 p-1.5 rounded border border-amber-200">
+                            <strong>Sumber Lilin:</strong> ${maxAvailable} pcs (WO Ini) + ${diff} pcs (Sumber Tambahan: <strong>${escapeHtml(selectedSourceItem.code)}</strong> &mdash; ${escapeHtml(selectedSourceItem.item_name)})
+                        </div>`;
+                    }
+
                     // Check if uniform
                     const allEqual = values.every(v => v === values[0]);
                     if (allEqual && numTrees > 0) {
                         modalTreeCapacity.textContent = values[0];
-                        modalBreakdownNote.textContent = `${numTrees} tree × ${values[0]} pcs = ${total} pcs`;
+                        modalBreakdownNote.innerHTML = `<div>${numTrees} tree × ${values[0]} pcs = ${total} pcs</div>${sourceBreakdownHtml}`;
                     } else {
                         const avg = numTrees > 0 ? (total / numTrees).toFixed(1) : 0;
                         modalTreeCapacity.textContent = avg;
-                        modalBreakdownNote.textContent = `Distribusi bervariasi (${values.join(', ')} pcs)`;
+                        modalBreakdownNote.innerHTML = `<div>Distribusi bervariasi (${values.join(', ')} pcs)</div>${sourceBreakdownHtml}`;
                     }
 
                     modal.classList.remove('hidden');
@@ -736,9 +1230,16 @@
                             total += parseInt(input.value) || 0;
                         });
 
-                        if (expectedTotal <= 0 || expectedTotal > maxAvailable || total !== expectedTotal) {
+                        if (expectedTotal <= 0 || total !== expectedTotal) {
                             updateSummary();
                             return;
+                        }
+
+                        if (expectedTotal > maxAvailable) {
+                            if (!additionalSourceLineIdInput || !additionalSourceLineIdInput.value || !selectedSourceItem || !additionalSourceReasonInput || !additionalSourceReasonInput.value.trim()) {
+                                updateSummary();
+                                return;
+                            }
                         }
 
                         // Open confirmation modal

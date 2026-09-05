@@ -139,37 +139,68 @@ class RangkaiExecutionService
                 throw new \InvalidArgumentException('Work Order ini sudah selesai atau tidak memiliki sisa outstanding.');
             }
 
-            if ($requestedQty > $outstanding) {
-                throw new \InvalidArgumentException("Total kuantitas rangkai ({$requestedQty} pcs) melebihi sisa outstanding work order ({$outstanding} pcs).");
-            }
-
             // Total available across the Production Code pool
             $totalAvailable = (int) $fifoLines->sum(fn ($l) => $l->qty_available_for_rangkai);
+            $availableForWo = min($outstanding, $totalAvailable);
 
-            // Variance & Anomaly Handling: Record reality, expose anomaly, do not hard-block
-            $isAnomaly = false;
-            $varianceQty = 0;
-            $anomalyNotes = null;
+            // Additional Physical Source Handling
+            $additionalSourceLineId = $data['additional_source_line_id'] ?? null;
+            $additionalSourceQty = (int) ($data['additional_source_qty'] ?? 0);
+            $additionalSourceReason = isset($data['additional_source_reason']) ? trim((string) $data['additional_source_reason']) : null;
 
-            if ($requestedQty > $totalAvailable) {
-                $isAnomaly = true;
-                $varianceQty = $totalAvailable - $requestedQty; // e.g. -4
-                $anomalyNotes = "Konsumsi fisik ({$requestedQty} pcs) melebihi hasil cetak resmi tercatat ({$totalAvailable} pcs) sebesar ".abs($varianceQty).' pcs.';
+            $additionalLine = null;
+            $additionalSourceCode = null;
+            $additionalLineBalance = 0;
+
+            if ($requestedQty > $availableForWo) {
+                $diff = $requestedQty - $availableForWo;
+
+                if (! $additionalSourceLineId || $additionalSourceQty <= 0) {
+                    throw new \InvalidArgumentException("Total kuantitas rangkai ({$requestedQty} pcs) melebihi ketersediaan ({$availableForWo} pcs) sebesar {$diff} pcs. Harap cantumkan Sumber Lilin Tambahan.");
+                }
+
+                if ($additionalSourceQty !== $diff) {
+                    throw new \InvalidArgumentException("Kuantitas sumber tambahan ({$additionalSourceQty} pcs) harus sama persis dengan selisih kuantitas ({$diff} pcs).");
+                }
+
+                if (empty($additionalSourceReason)) {
+                    throw new \InvalidArgumentException('Alasan penambahan sumber lilin fisik wajib diisi.');
+                }
+
+                $additionalLine = LostWaxPrintOrderLine::lockForUpdate()->findOrFail($additionalSourceLineId);
+
+                // If additional line is one of the fifoLines, ensure its balance is evaluated correctly
+                $availInAdditional = $additionalLine->qty_available_for_rangkai;
+                if ($availInAdditional < $additionalSourceQty) {
+                    throw new \InvalidArgumentException("Kuantitas lilin tersedia pada sumber tambahan Kode {$additionalLine->code} ({$availInAdditional} pcs) tidak mencukupi untuk tambahan {$additionalSourceQty} pcs.");
+                }
+
+                $additionalSourceCode = $additionalLine->code;
+                $additionalLineBalance = $additionalSourceQty;
+            } else {
+                if ($additionalSourceQty > 0) {
+                    throw new \InvalidArgumentException("Sumber tambahan tidak diperlukan karena kuantitas rangkai ({$requestedQty} pcs) tidak melebihi ketersediaan ({$availableForWo} pcs).");
+                }
+                $additionalSourceReason = null;
             }
 
-            $familyCode = $data['family_code'];
+            $familyCode = $data['family_code'] ?? $mainLine->code ?? 'TREE';
             $executionDate = Carbon::parse($data['execution_date']);
             $recordedBy = $data['recorded_by'] ?? auth()->id() ?? 1;
 
-            // Create execution record with variance tracking
+            // Create execution record with explicit additional source traceability
             $execution = LostWaxRangkaiExecution::create([
                 'rangkai_work_order_id' => $lockedWo->id,
                 'execution_date' => $executionDate->format('Y-m-d'),
                 'trees_created' => $treesCreated,
                 'family_code' => $familyCode,
-                'variance_qty' => $varianceQty,
-                'is_anomaly' => $isAnomaly,
-                'anomaly_notes' => $anomalyNotes,
+                'additional_source_line_id' => $additionalLine?->id,
+                'additional_source_code' => $additionalSourceCode,
+                'additional_source_qty' => $additionalSourceQty,
+                'additional_source_reason' => $additionalSourceReason,
+                'variance_qty' => 0,
+                'is_anomaly' => false,
+                'anomaly_notes' => null,
                 'recorded_by' => $recordedBy,
                 'recorded_at' => now(),
             ]);
@@ -193,7 +224,7 @@ class RangkaiExecutionService
                 $currentTreeCount = LostWaxTree::where('lost_wax_print_order_line_id', $mainLine->id)->count();
 
                 try {
-                    DB::transaction(function () use ($execution, $mainLine, $fifoLines, &$lineBalances, $quantities, &$maxSeq, &$currentTreeCount, $productionDate, $familyCode, $lockedWo) {
+                    DB::transaction(function () use ($execution, $mainLine, $fifoLines, &$lineBalances, $quantities, &$maxSeq, &$currentTreeCount, $productionDate, $familyCode, $lockedWo, $additionalLine, &$additionalLineBalance) {
                         foreach ($quantities as $qty) {
                             $maxSeq++;
                             $currentTreeCount++;
@@ -217,7 +248,7 @@ class RangkaiExecutionService
                                 'daily_sequence' => $maxSeq,
                             ]);
 
-                            // Deduct FIFO from available lines
+                            // Deduct FIFO from primary available pool lines
                             $neededForTree = (int) $qty;
 
                             foreach ($fifoLines as $fLine) {
@@ -242,7 +273,21 @@ class RangkaiExecutionService
                                     $neededForTree -= $take;
                                 }
                             }
-                            // If neededForTree > 0 (variance case), no fake allocation row is made
+
+                            // If tree still needs physical wax and additional source line was provided
+                            if ($neededForTree > 0 && $additionalLine && $additionalLineBalance > 0) {
+                                $take = min($neededForTree, $additionalLineBalance);
+                                if ($take > 0) {
+                                    LostWaxTreeAllocation::create([
+                                        'lost_wax_tree_id' => $tree->id,
+                                        'lost_wax_print_order_line_id' => $additionalLine->id,
+                                        'allocated_qty' => $take,
+                                    ]);
+
+                                    $additionalLineBalance -= $take;
+                                    $neededForTree -= $take;
+                                }
+                            }
                         }
                     }, 5);
 
@@ -312,7 +357,7 @@ class RangkaiExecutionService
                 ]);
             }
 
-            // 3. Delete allocation ledger rows to release FIFO balances back to source lines
+            // 3. Delete allocation ledger rows to release FIFO balances back to source lines (including additional source lines)
             LostWaxTreeAllocation::whereIn('lost_wax_tree_id', $treeIds)->delete();
 
             // 4. Recalculate Work Order Status
@@ -358,15 +403,15 @@ class RangkaiExecutionService
     }
 
     /**
-     * Close excess balance on a Print Order Line.
+     * Close excess balance on a Print Order Line (Afkir Sisa Lilin).
      */
-    public function closeExcessBalance(LostWaxPrintOrderLine $line, int $qtyToClose): LostWaxPrintOrderLine
+    public function closeExcessBalance(LostWaxPrintOrderLine $line, int $qtyToClose, ?string $reason = null, ?User $user = null): LostWaxPrintOrderLine
     {
         if ($qtyToClose <= 0) {
             throw new \InvalidArgumentException('Kuantitas excess yang ditutup harus lebih dari 0.');
         }
 
-        return DB::transaction(function () use ($line, $qtyToClose) {
+        return DB::transaction(function () use ($line, $qtyToClose, $reason, $user) {
             $lockedLine = LostWaxPrintOrderLine::lockForUpdate()->findOrFail($line->id);
             $available = $lockedLine->qty_available_for_rangkai;
 
@@ -375,6 +420,9 @@ class RangkaiExecutionService
             }
 
             $lockedLine->qty_excess_closed = ($lockedLine->qty_excess_closed ?? 0) + $qtyToClose;
+            $lockedLine->excess_closure_reason = $reason ? trim($reason) : ($lockedLine->excess_closure_reason ?? 'Afkir / closed sisa lilin');
+            $lockedLine->excess_closed_by = $user?->id ?? auth()->id() ?? 1;
+            $lockedLine->excess_closed_at = now();
             $lockedLine->save();
 
             return $lockedLine;
