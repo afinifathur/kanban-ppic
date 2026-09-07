@@ -463,10 +463,10 @@ class OutcomeAndAssemblyTest extends TestCase
         $this->assertStringNotContainsString('Total Hasil Cetak Good', $html);
         $this->assertStringNotContainsString('Sisa Tersedia Rangkai', $html);
 
-        // Assert that REFERENSI GAMBAR is present
+        // Assert that REFERENSI GAMBAR is present and redundant sub-labels are removed for maximized image area
         $this->assertStringContainsString('REFERENSI GAMBAR', $html);
-        $this->assertStringContainsString('TAMPAK DEPAN', $html);
-        $this->assertStringContainsString('TAMPAK SAMPING', $html);
+        $this->assertStringNotContainsString('TAMPAK DEPAN', $html);
+        $this->assertStringNotContainsString('TAMPAK SAMPING', $html);
 
         // Assert web controls are hidden on print
         $this->assertStringContainsString('no-print', $html);

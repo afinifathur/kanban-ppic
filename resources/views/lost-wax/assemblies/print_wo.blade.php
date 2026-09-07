@@ -192,13 +192,12 @@
                         <span class="text-[7.5px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5 border-b border-slate-200 pb-0.5 leading-none">REFERENSI GAMBAR</span>
                         
                         <div class="grid grid-cols-2 gap-1.5 h-[34mm] min-h-[60px]">
-                            <!-- TAMPAK DEPAN -->
-                            <div class="border border-dashed border-slate-300 rounded p-0.5 bg-slate-50/50 flex flex-col justify-center items-center text-center overflow-hidden">
-                                <span class="text-[6.5px] font-bold text-slate-500 block uppercase leading-none mb-0.5">TAMPAK DEPAN</span>
+                            <!-- Foto 1 (Depan) -->
+                            <div class="border border-dashed border-slate-300 rounded p-0.5 bg-slate-50/50 flex justify-center items-center overflow-hidden h-full">
                                 @if(!empty($assemblyPhoto?->front_image_url))
-                                    <img src="{{ $assemblyPhoto->front_image_url }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Depan">
+                                    <img src="{{ $assemblyPhoto->front_image_url }}" class="w-full h-full object-contain" alt="Foto Rangkai">
                                 @elseif(!empty($workOrder->reference_image_path))
-                                    <img src="{{ asset($workOrder->reference_image_path) }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Depan">
+                                    <img src="{{ asset($workOrder->reference_image_path) }}" class="w-full h-full object-contain" alt="Foto Rangkai">
                                 @else
                                     <div class="flex flex-col items-center justify-center p-1 text-center h-full">
                                         <span class="text-[6.5px] font-bold text-slate-400 leading-tight">FOTO BELUM TERSEDIA</span>
@@ -206,13 +205,12 @@
                                 @endif
                             </div>
                             
-                            <!-- TAMPAK SAMPING -->
-                            <div class="border border-dashed border-slate-300 rounded p-0.5 bg-slate-50/50 flex flex-col justify-center items-center text-center overflow-hidden">
-                                <span class="text-[6.5px] font-bold text-slate-500 block uppercase leading-none mb-0.5">TAMPAK SAMPING</span>
+                            <!-- Foto 2 (Samping) -->
+                            <div class="border border-dashed border-slate-300 rounded p-0.5 bg-slate-50/50 flex justify-center items-center overflow-hidden h-full">
                                 @if(!empty($assemblyPhoto?->side_image_url))
-                                    <img src="{{ $assemblyPhoto->side_image_url }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Samping">
+                                    <img src="{{ $assemblyPhoto->side_image_url }}" class="w-full h-full object-contain" alt="Foto Rangkai">
                                 @elseif(!empty($workOrder->reference_image_path))
-                                    <img src="{{ asset($workOrder->reference_image_path) }}" class="max-h-[25mm] max-w-full object-contain" alt="Tampak Samping">
+                                    <img src="{{ asset($workOrder->reference_image_path) }}" class="w-full h-full object-contain" alt="Foto Rangkai">
                                 @else
                                     <div class="flex flex-col items-center justify-center p-1 text-center h-full">
                                         <span class="text-[6.5px] font-bold text-slate-400 leading-tight">FOTO BELUM TERSEDIA</span>
