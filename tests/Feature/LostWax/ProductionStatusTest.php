@@ -447,7 +447,7 @@ class ProductionStatusTest extends TestCase
         $content = $response->streamedContent();
 
         // Write streamed content to a temporary file
-        $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+        $tempFile = tempnam(sys_get_temp_dir(), 'tmp');
         file_put_contents($tempFile, $content);
 
         // Load with PhpSpreadsheet Reader
@@ -482,7 +482,7 @@ class ProductionStatusTest extends TestCase
         $response->assertOk();
         $content = $response->streamedContent();
 
-        $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+        $tempFile = tempnam(sys_get_temp_dir(), 'tmp');
         file_put_contents($tempFile, $content);
 
         $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Xlsx');
@@ -1065,7 +1065,7 @@ class ProductionStatusTest extends TestCase
         $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('Content-Type'));
 
         // Save content to parse
-        $tempFile = tempnam(sys_get_temp_dir(), 'xlsx');
+        $tempFile = tempnam(sys_get_temp_dir(), 'tmp');
         file_put_contents($tempFile, $response->streamedContent());
         $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tempFile);
         $sheet = $spreadsheet->getActiveSheet();
@@ -1370,5 +1370,391 @@ class ProductionStatusTest extends TestCase
         $content = $response->getContent();
         $this->assertStringContainsString('text-red-600', $content);
         $this->assertStringContainsString('268TEST01', $content);
+    }
+
+    public function test_production_status_excludes_plans_with_only_cancelled_print_orders(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Create plan BA43
+        $plan = \App\Models\ProductionPlan::create([
+            'code' => 'BA43',
+            'customer' => 'LOKAL',
+            'item_code' => '4.101105K.A0043',
+            'item_name' => 'SS304 BLIND JIS 10K NS 2-1/2"',
+            'aisi' => '304',
+            'size' => '2-1/2"',
+            'weight' => 1.5,
+            'po_number' => '164',
+            'po_quantity' => null,
+            'qty_planned' => 22,
+            'qty_remaining' => 22,
+            'line_number' => 1,
+            'status' => 'completed',
+        ]);
+
+        // 2. Create Print Order that is CANCELLED
+        $order = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260820-0001',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+
+        $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 25,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        // 3. Test on filter=all, filter=active
+        $responseAll = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $responseAll->assertOk();
+        $rowsAll = $responseAll->viewData('rows');
+        $this->assertNull(collect($rowsAll)->firstWhere('code', 'BA43'), 'Plan with only CANCELLED print order must not appear in ALL tab');
+        $responseAll->assertDontSee('BA43');
+
+        $responseActive = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'active']));
+        $responseActive->assertOk();
+        $rowsActive = $responseActive->viewData('rows');
+        $this->assertNull(collect($rowsActive)->firstWhere('code', 'BA43'), 'Plan with only CANCELLED print order must not appear in ACTIVE tab');
+    }
+
+    public function test_production_status_includes_plan_with_cancelled_and_active_print_order(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Create plan BA62
+        $plan = \App\Models\ProductionPlan::create([
+            'code' => 'BA62',
+            'customer' => 'LOKAL',
+            'item_code' => '4.101105K.A0062',
+            'item_name' => 'SS316 BLIND RAISED ANSI 150LBS 4"',
+            'aisi' => '316',
+            'size' => '4"',
+            'weight' => 2.5,
+            'po_number' => '172',
+            'po_quantity' => null,
+            'qty_planned' => 17,
+            'qty_remaining' => 0,
+            'line_number' => 1,
+            'status' => 'completed',
+        ]);
+
+        // 2. First Print Order: CANCELLED (qty 17)
+        $order1 = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260820-0001',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+        $order1->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 17,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        // 3. Second Print Order: ISSUED (qty 17)
+        $order2 = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260820-0003',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $line2 = $order2->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 17,
+            'qty_actual_good' => 17,
+            'qty_actual_defect' => 0,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        // Create 4 active trees totaling 17 pcs
+        \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line2->id,
+            'barcode' => '4200826001',
+            'tree_number' => 1,
+            'quantity' => 5,
+            'usable_quantity' => 5,
+            'current_stage' => null, // Sebelum scan / RGKI
+            'status' => 'generated',
+            'production_date' => '2026-08-20',
+            'family_code' => '4',
+            'daily_sequence' => 1,
+        ]);
+        \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line2->id,
+            'barcode' => '4200826002',
+            'tree_number' => 2,
+            'quantity' => 5,
+            'usable_quantity' => 5,
+            'current_stage' => null,
+            'status' => 'generated',
+            'production_date' => '2026-08-20',
+            'family_code' => '4',
+            'daily_sequence' => 2,
+        ]);
+        \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line2->id,
+            'barcode' => '4200826003',
+            'tree_number' => 3,
+            'quantity' => 5,
+            'usable_quantity' => 5,
+            'current_stage' => null,
+            'status' => 'generated',
+            'production_date' => '2026-08-20',
+            'family_code' => '4',
+            'daily_sequence' => 3,
+        ]);
+        \App\Models\LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line2->id,
+            'barcode' => '4200826004',
+            'tree_number' => 4,
+            'quantity' => 2,
+            'usable_quantity' => 2,
+            'current_stage' => null,
+            'status' => 'generated',
+            'production_date' => '2026-08-20',
+            'family_code' => '4',
+            'daily_sequence' => 4,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $targetRow = collect($rows)->firstWhere('code', 'BA62');
+
+        $this->assertNotNull($targetRow, 'BA62 with active print order must appear in Production Status');
+        $this->assertEquals(17, $targetRow['scheduled_qty'], 'Scheduled quantity must only count active print order (17, not 34)');
+        $this->assertEquals(17, $targetRow['total_lap'], 'Total distributed must be 17');
+        $this->assertEquals(17, $targetRow['rgki_display'], 'RGKI display must be 17');
+        $this->assertEquals(4, $targetRow['tree_count'], 'Tree count must be 4');
+    }
+
+    public function test_multiple_cancelled_only_plans_are_excluded(): void
+    {
+        $user = User::factory()->create();
+
+        $codes = ['BA43', 'BA44', 'BA53', 'BA55'];
+        $cancelledOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-CANCEL-BULK',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+
+        foreach ($codes as $c) {
+            $plan = \App\Models\ProductionPlan::create([
+                'code' => $c,
+                'customer' => 'LOKAL',
+                'item_code' => '4.101105K.' . $c,
+                'item_name' => 'Item ' . $c,
+                'aisi' => '304',
+                'size' => '2"',
+                'weight' => 1.0,
+                'po_number' => '100',
+                'po_quantity' => null,
+                'qty_planned' => 10,
+                'qty_remaining' => 10,
+                'line_number' => 1,
+                'status' => 'planning',
+            ]);
+
+            $cancelledOrder->lines()->create([
+                'production_plan_id' => $plan->id,
+                'qty_ordered' => 10,
+                'code' => $plan->code,
+                'customer' => $plan->customer,
+                'item_name' => $plan->item_name,
+                'size' => $plan->size,
+                'aisi' => $plan->aisi,
+                'standard_tree_capacity' => 20,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $renderedCodes = collect($rows)->pluck('code')->toArray();
+
+        foreach ($codes as $c) {
+            $this->assertNotContains($c, $renderedCodes, "Code $c with only cancelled order must not appear");
+        }
+    }
+
+    public function test_active_plan_with_excess_closure_and_cancelled_history_remains_visible(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Plan BA61
+        $plan = \App\Models\ProductionPlan::create([
+            'code' => 'BA61',
+            'customer' => 'LOKAL',
+            'item_code' => '4.101105K.A0061',
+            'item_name' => 'SS316 BLIND RAISED ANSI 150LBS 2"',
+            'aisi' => '316',
+            'size' => '2"',
+            'weight' => 1.2,
+            'po_number' => '172',
+            'po_quantity' => null,
+            'qty_planned' => 11,
+            'qty_remaining' => 0,
+            'line_number' => 1,
+            'status' => 'completed',
+        ]);
+
+        // Old cancelled order
+        $oldOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-OLD-CANCELLED',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+        $oldOrder->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 11,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        // Active issued order with excess closure
+        $activeOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-NEW-ISSUED',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $activeOrder->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 11,
+            'qty_actual_good' => 11,
+            'qty_excess_closed' => 11,
+            'excess_closure_reason' => 'hanya untuk uji coba',
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+            'size' => $plan->size,
+            'aisi' => $plan->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status', ['filter' => 'all']));
+        $response->assertOk();
+        $rows = $response->viewData('rows');
+        $targetRow = collect($rows)->firstWhere('code', 'BA61');
+
+        $this->assertNotNull($targetRow, 'BA61 with active order must appear');
+        $this->assertEquals(11, $targetRow['scheduled_qty']);
+        $this->assertEquals('WATCH', $targetRow['quality_status']);
+    }
+
+    public function test_production_status_export_excludes_cancelled_only_plans(): void
+    {
+        $user = User::factory()->create();
+
+        // 1. Cancelled-only plan
+        $planCancelled = \App\Models\ProductionPlan::create([
+            'code' => 'CANCELLED_ITEM',
+            'customer' => 'CUST_CANCEL',
+            'item_code' => '4.101105K.CANCEL',
+            'item_name' => 'Item Cancelled Only',
+            'aisi' => '304',
+            'size' => '2"',
+            'weight' => 1.0,
+            'po_number' => '100',
+            'po_quantity' => null,
+            'qty_planned' => 10,
+            'qty_remaining' => 10,
+            'line_number' => 1,
+            'status' => 'planning',
+        ]);
+        $cancelledOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-EXPORT-CANCEL',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'CANCELLED',
+            'created_by' => $user->id,
+        ]);
+        $cancelledOrder->lines()->create([
+            'production_plan_id' => $planCancelled->id,
+            'qty_ordered' => 10,
+            'code' => $planCancelled->code,
+            'customer' => $planCancelled->customer,
+            'item_name' => $planCancelled->item_name,
+            'size' => $planCancelled->size,
+            'aisi' => $planCancelled->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        // 2. Active plan
+        $planActive = \App\Models\ProductionPlan::create([
+            'code' => 'ACTIVE_ITEM',
+            'customer' => 'CUST_ACTIVE',
+            'item_code' => '4.101105K.ACTIVE',
+            'item_name' => 'Item Active Flow',
+            'aisi' => '304',
+            'size' => '2"',
+            'weight' => 1.0,
+            'po_number' => '101',
+            'po_quantity' => null,
+            'qty_planned' => 20,
+            'qty_remaining' => 0,
+            'line_number' => 2,
+            'status' => 'planning',
+        ]);
+        $activeOrder = \App\Models\LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-EXPORT-ACTIVE',
+            'scheduled_date' => '2026-08-20',
+            'status' => 'ISSUED',
+            'created_by' => $user->id,
+        ]);
+        $activeOrder->lines()->create([
+            'production_plan_id' => $planActive->id,
+            'qty_ordered' => 20,
+            'code' => $planActive->code,
+            'customer' => $planActive->customer,
+            'item_name' => $planActive->item_name,
+            'size' => $planActive->size,
+            'aisi' => $planActive->aisi,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('lost-wax.production-status.export', ['filter' => 'all']));
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $content = $response->streamedContent();
+        $tempFile = tempnam(sys_get_temp_dir(), 'tmp');
+        file_put_contents($tempFile, $content);
+
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Xlsx');
+        $spreadsheet = $reader->load($tempFile);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $rows = $sheet->toArray();
+        $exportedCodes = array_column($rows, 0); // Column A: Kode Cust
+
+        $this->assertContains('ACTIVE_ITEM', $exportedCodes, 'Export must contain active item');
+        $this->assertNotContains('CANCELLED_ITEM', $exportedCodes, 'Export must NOT contain cancelled-only item');
+
+        unlink($tempFile);
     }
 }

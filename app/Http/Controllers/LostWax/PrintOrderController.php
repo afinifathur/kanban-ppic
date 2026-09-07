@@ -115,7 +115,13 @@ class PrintOrderController extends Controller
         $qualityService = app(\App\Services\LostWaxQualityService::class);
 
         $recoveryBaseQuery = \App\Models\ProductionPlan::query()
-            ->whereHas('printOrderLines')
+            ->whereHas('printOrderLines', function ($q) {
+                $q->whereHas('printOrder', function ($poQ) {
+                    $poQ->where('status', '!=', 'CANCELLED');
+                })->orWhereHas('executions')
+                  ->orWhereHas('trees')
+                  ->orWhereHas('treeAllocations');
+            })
             ->with([
                 'printOrderLines.executions',
                 'printOrderLines.printOrder',
@@ -181,6 +187,14 @@ class PrintOrderController extends Controller
             ]);
         }
 
+        $recoverySummary = [
+            'total_items' => $recoveryItems->count(),
+            'total_deficit_plan' => $recoveryItems->sum(fn ($i) => $i->breakdown['deficit_vs_plan']),
+            'count_deficit_po' => $recoveryItems->filter(fn ($i) => $i->breakdown['status'] === 'KURANG')->count(),
+            'count_need_coverage' => $recoveryItems->filter(fn ($i) => $i->breakdown['status'] === 'WATCH')->count(),
+            'count_active_reprint' => $recoveryItems->filter(fn ($i) => $i->active_reprint !== null)->count(),
+        ];
+
         $perPage = 25;
         $currentPage = \Illuminate\Pagination\LengthAwarePaginator::resolveCurrentPage('recovery_page');
         $currentItems = $recoveryItems->slice(($currentPage - 1) * $perPage, $perPage)->values();
@@ -198,6 +212,7 @@ class PrintOrderController extends Controller
             'printOrders',
             'recoveryPlans',
             'totalActiveRecoveryCount',
+            'recoverySummary',
             'activeTab',
             'uniqueCodes',
             'uniqueCustomers'

@@ -517,7 +517,9 @@ class ProductionStatusController extends Controller
             'printOrderLines.executions',
             'printOrderLines.trees.defects',
             'printOrderLines.treeAllocations.tree.defects',
-        ])->has('printOrderLines');
+        ])->whereHas('printOrderLines.printOrder', function ($q) {
+            $q->where('status', '!=', 'CANCELLED');
+        });
 
         if ($search !== '') {
             $planQuery->where(function ($q) use ($search) {
@@ -554,6 +556,10 @@ class ProductionStatusController extends Controller
         foreach ($plans as $plan) {
             $breakdown = $qualityService->getProductionPlanQuantityBreakdown($plan);
             $lines = $plan->printOrderLines->filter(fn ($l) => ! $l->printOrder || $l->printOrder->status !== 'CANCELLED');
+
+            if ($lines->isEmpty()) {
+                continue;
+            }
 
             $allTrees = collect();
             foreach ($lines as $line) {
@@ -709,7 +715,9 @@ class ProductionStatusController extends Controller
 
         if ($field === 'code') {
             $legacyQuery = LostWaxWorkOrder::whereNotNull('et_code')->distinct();
-            $newFlowQuery = ProductionPlan::whereNotNull('code')->distinct();
+            $newFlowQuery = ProductionPlan::whereHas('printOrderLines.printOrder', function ($q) {
+                $q->where('status', '!=', 'CANCELLED');
+            })->whereNotNull('code')->distinct();
 
             if (auth()->user()->hasRole('ppic') && $scope) {
                 if ($scope === 'FLANGE_STAINLESS') {
@@ -733,7 +741,9 @@ class ProductionStatusController extends Controller
 
         if ($field === 'customer') {
             $legacyQuery = LostWaxWorkOrder::whereNotNull('customer_name')->distinct();
-            $newFlowQuery = ProductionPlan::whereNotNull('customer')->distinct();
+            $newFlowQuery = ProductionPlan::whereHas('printOrderLines.printOrder', function ($q) {
+                $q->where('status', '!=', 'CANCELLED');
+            })->whereNotNull('customer')->distinct();
 
             if (auth()->user()->hasRole('ppic') && $scope) {
                 if ($scope === 'FLANGE_STAINLESS') {
@@ -757,7 +767,9 @@ class ProductionStatusController extends Controller
 
         if ($field === 'po_number') {
             $legacyQuery = LostWaxWorkOrder::whereNotNull('po_number')->distinct();
-            $newFlowQuery = ProductionPlan::whereNotNull('po_number')->distinct();
+            $newFlowQuery = ProductionPlan::whereHas('printOrderLines.printOrder', function ($q) {
+                $q->where('status', '!=', 'CANCELLED');
+            })->whereNotNull('po_number')->distinct();
 
             if (auth()->user()->hasRole('ppic') && $scope) {
                 if ($scope === 'FLANGE_STAINLESS') {
@@ -781,7 +793,9 @@ class ProductionStatusController extends Controller
 
         if ($field === 'aisi') {
             $legacyQuery = \App\Models\LostWaxItemReference::whereNotNull('aisi_snapshot')->distinct();
-            $newFlowQuery = ProductionPlan::whereNotNull('aisi')->distinct();
+            $newFlowQuery = ProductionPlan::whereHas('printOrderLines.printOrder', function ($q) {
+                $q->where('status', '!=', 'CANCELLED');
+            })->whereNotNull('aisi')->distinct();
 
             if (auth()->user()->hasRole('ppic') && $scope) {
                 $legacyQuery->whereHas('workOrders', function ($q) use ($scope) {

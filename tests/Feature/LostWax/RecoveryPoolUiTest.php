@@ -134,7 +134,7 @@ class RecoveryPoolUiTest extends TestCase
     }
 
     /**
-     * TEST 3: Warning plan appears in active recovery pool.
+     * TEST 3: Warning/Watch plan appears in active recovery pool.
      */
     public function test_3_warning_plan_appears(): void
     {
@@ -144,11 +144,11 @@ class RecoveryPoolUiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('lost-wax.print-orders.plans', ['tab' => 'recovery']));
         $response->assertOk();
         $response->assertSee('WARN-PLAN-01');
-        $response->assertSee('WARNING');
+        $response->assertSee('PERLU COVERAGE');
     }
 
     /**
-     * TEST 4: Critical plan appears with CRITICAL badge.
+     * TEST 4: Deficit PO (Kurang) plan appears with DEFISIT PO badge.
      */
     public function test_4_critical_plan_appears(): void
     {
@@ -158,7 +158,7 @@ class RecoveryPoolUiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('lost-wax.print-orders.plans', ['tab' => 'recovery']));
         $response->assertOk();
         $response->assertSee('CRIT-PLAN-01');
-        $response->assertSee('CRITICAL');
+        $response->assertSee('DEFISIT PO');
     }
 
     /**

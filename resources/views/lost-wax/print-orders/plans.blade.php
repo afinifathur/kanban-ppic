@@ -353,7 +353,50 @@
 
         @if(($activeTab ?? 'plans') === 'recovery')
             <!-- Tab 3: Recovery Pool -->
-            <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-4">
+            <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-5">
+                <!-- Recovery Pool Summary Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-lg font-bold">
+                            <i class="fas fa-cubes"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-500 font-semibold uppercase">Total Rencana Recovery</div>
+                            <div class="text-lg font-bold text-slate-800 font-mono">{{ number_format($recoverySummary['total_items'] ?? 0) }}</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-rose-50/60 border border-rose-200 rounded-xl p-4 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center text-lg font-bold">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-rose-700 font-semibold uppercase" title="Output usable kurang dari Target PO">Defisit PO (Kurang)</div>
+                            <div class="text-lg font-bold text-rose-800 font-mono">{{ number_format($recoverySummary['count_deficit_po'] ?? 0) }}</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-amber-50/60 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-lg font-bold">
+                            <i class="fas fa-eye"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-amber-700 font-semibold uppercase" title="Belum ada Target PO atau sedang dipantau">Perlu Coverage (Watch)</div>
+                            <div class="text-lg font-bold text-amber-800 font-mono">{{ number_format($recoverySummary['count_need_coverage'] ?? 0) }}</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50/60 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-lg font-bold">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-blue-700 font-semibold uppercase" title="Total kekurangan fisik terhadap rencana awal">Total Defisit Plan</div>
+                            <div class="text-lg font-bold text-blue-800 font-mono">{{ number_format($recoverySummary['total_deficit_plan'] ?? 0) }} <span class="text-xs font-normal">pcs</span></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Recovery Pool Filters -->
                 <form method="GET" action="{{ route('lost-wax.print-orders.plans') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-100">
                     <input type="hidden" name="tab" value="recovery">
@@ -389,17 +432,17 @@
                         <thead class="bg-slate-50">
                             <tr>
                                 <th class="border border-slate-200 p-3 text-left">Kode Cust & Produk</th>
-                                <th class="border border-slate-200 p-3 text-center">Target Plan</th>
-                                <th class="border border-slate-200 p-3 text-center">Target PO</th>
-                                <th class="border border-slate-200 p-3 text-center">Ctk Bagus</th>
-                                <th class="border border-slate-200 p-3 text-center">Standby</th>
-                                <th class="border border-slate-200 p-3 text-center">WIP Net</th>
-                                <th class="border border-slate-200 p-3 text-center">Oven</th>
-                                <th class="border border-slate-200 p-3 text-center">Rusak</th>
-                                <th class="border border-slate-200 p-3 text-center bg-slate-100 font-bold">Total Usable</th>
-                                <th class="border border-slate-200 p-3 text-center">Defisit Plan</th>
-                                <th class="border border-slate-200 p-3 text-center">Defisit PO</th>
-                                <th class="border border-slate-200 p-3 text-center">Status</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Target kuantitas perencanaan internal">Target Plan</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Kebutuhan kuantitas sesuai Purchase Order customer">Target PO</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Hasil cetak bagus lilin">Ctk Bagus</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Stok lilin siap dirangkai">Standby</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Pohon aktif dalam proses pelapisan">WIP Net</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Pohon di oven / siap cor">Oven</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Total defect pohon">Rusak</th>
+                                <th class="border border-slate-200 p-3 text-center bg-slate-100 font-bold" title="Kuantitas fisik usable (Ctk Bagus - Total Defect - Tutup Sisa)">Total Usable</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Selisih kebutuhan Production Plan dengan Total Usable">Defisit Plan</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Selisih Target PO dengan Total Usable">Defisit PO</th>
+                                <th class="border border-slate-200 p-3 text-center" title="Status pemenuhan Target PO / Planning">Status</th>
                                 <th class="border border-slate-200 p-3 text-center">Alur Recovery</th>
                                 <th class="border border-slate-200 p-3 text-center">Aksi</th>
                             </tr>
@@ -412,7 +455,7 @@
                                     $activeReprint = $item->active_reprint;
                                     $isScopeOwner = auth()->user()->hasRole('ppic') && auth()->user()->product_scope === $plan->product_scope;
                                 @endphp
-                                <tr class="hover:bg-slate-50/50 transition-colors {{ $bd['status'] === 'CRITICAL' ? 'bg-rose-50/30' : '' }}">
+                                <tr class="hover:bg-slate-50/50 transition-colors {{ $bd['status'] === 'KURANG' ? 'bg-rose-50/30' : '' }}">
                                     <td class="border border-slate-200 p-3">
                                         <div class="font-mono font-bold text-slate-800 text-sm flex items-center gap-1.5">
                                             {{ $plan->code }}
@@ -429,7 +472,7 @@
                                             <div class="font-bold text-slate-800">{{ number_format($plan->po_quantity) }}</div>
                                             <div class="text-[10px] text-slate-400 font-mono">{{ $plan->po_number ?? 'PO' }}</div>
                                         @else
-                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200" title="Belum ada target kuantitas PO Customer">
                                                 PO BELUM DIISI
                                             </span>
                                         @endif
@@ -451,6 +494,11 @@
                                     </td>
                                     <td class="border border-slate-200 p-3 text-center font-bold bg-slate-50 text-slate-900 text-sm">
                                         {{ number_format($bd['q_usable']) }}
+                                        @if(($bd['q_excess_closed'] ?? 0) > 0)
+                                            <div class="text-[10px] text-amber-700 font-normal mt-0.5" title="Total Usable dikurangi karena quantity excess telah ditutup.">
+                                                <i class="fas fa-info-circle text-[9px]"></i> Tutup Sisa: {{ number_format($bd['q_excess_closed']) }}
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="border border-slate-200 p-3 text-center font-bold {{ $bd['deficit_vs_plan'] > 0 ? 'text-amber-700' : 'text-slate-400' }}">
                                         {{ $bd['deficit_vs_plan'] > 0 ? number_format($bd['deficit_vs_plan']).' pcs' : '0' }}
@@ -459,28 +507,28 @@
                                         @if($bd['deficit_vs_po'] !== null)
                                             {{ $bd['deficit_vs_po'] > 0 ? number_format($bd['deficit_vs_po']).' pcs' : '0' }}
                                         @else
-                                            <span class="text-slate-300 font-normal">—</span>
+                                            <span class="text-slate-300 font-normal" title="PO belum ditentukan">—</span>
                                         @endif
                                     </td>
                                     <td class="border border-slate-200 p-3 text-center">
-                                        @if($bd['status'] === 'CRITICAL')
-                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-rose-100 text-rose-800 border border-rose-200 tracking-wider animate-pulse">
-                                                CRITICAL
+                                        @if($bd['status'] === 'KURANG')
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-rose-100 text-rose-800 border border-rose-200 tracking-wider inline-flex items-center gap-1" title="Output usable masih kurang dari Target PO.">
+                                                <i class="fas fa-exclamation-triangle text-[9px]"></i> DEFISIT PO
                                             </span>
-                                        @elseif($bd['status'] === 'WARNING')
-                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200 tracking-wider">
-                                                WARNING
+                                        @elseif($bd['status'] === 'WATCH')
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200 tracking-wider inline-flex items-center gap-1" title="Belum ada Target PO aktif yang menutup kebutuhan.">
+                                                <i class="fas fa-eye text-[9px]"></i> PERLU COVERAGE
                                             </span>
                                         @else
-                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200 tracking-wider">
-                                                NORMAL
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200 tracking-wider inline-flex items-center gap-1" title="Output usable sudah memenuhi Target PO.">
+                                                <i class="fas fa-check text-[9px]"></i> TERPENUHI
                                             </span>
                                         @endif
                                     </td>
                                     <td class="border border-slate-200 p-3 text-center text-xs">
                                         @if($activeReprint)
-                                            <a href="{{ route('lost-wax.print-orders.show', $activeReprint) }}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-colors shadow-xs" title="Buka Detail SPK Cetak Ulang">
-                                                <i class="fas fa-file-invoice"></i> SPK #{{ $activeReprint->reprint_cycle }}: {{ $activeReprint->print_order_number }}
+                                            <a href="{{ route('lost-wax.print-orders.show', $activeReprint) }}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-colors shadow-xs" title="SPK Cetak Ulang sedang berjalan. Klik untuk membuka detail.">
+                                                <i class="fas fa-redo"></i> SPK #{{ $activeReprint->reprint_cycle }}: {{ $activeReprint->print_order_number }}
                                                 <span class="px-1.5 py-0.2 rounded text-[9px] uppercase bg-amber-200 text-amber-900">{{ $activeReprint->status }}</span>
                                             </a>
                                         @elseif($plan->is_closed)
@@ -500,14 +548,14 @@
                                         <div class="flex items-center justify-center gap-1.5">
                                             @if($isScopeOwner)
                                                 @if(! $plan->is_closed && ! $activeReprint)
-                                                    <button type="button" onclick="openReprintModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', {{ $plan->qty_planned }}, '{{ $plan->po_quantity ?? '-' }}', {{ $bd['q_usable'] }}, {{ $bd['deficit_vs_plan'] }}, '{{ $bd['deficit_vs_po'] ?? '-' }}', '{{ $bd['status'] }}')" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2.5 rounded text-xs transition-colors flex items-center gap-1 shadow-xs" title="Terbitkan SPK Cetak Ulang">
+                                                    <button type="button" onclick="openReprintModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', {{ $plan->qty_planned }}, '{{ $plan->po_quantity ?? '-' }}', {{ $bd['q_usable'] }}, {{ $bd['deficit_vs_plan'] }}, '{{ $bd['deficit_vs_po'] ?? '-' }}', '{{ $bd['status'] }}')" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2.5 rounded text-xs transition-colors flex items-center gap-1 shadow-xs" title="Buat Print Order baru untuk menutup kekurangan">
                                                         <i class="fas fa-redo"></i> + SPK Reprint
                                                     </button>
-                                                    <button type="button" onclick="openCloseModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', {{ $plan->qty_planned }}, '{{ $plan->po_quantity ?? '-' }}', {{ $bd['q_usable'] }}, {{ $bd['deficit_vs_plan'] }}, '{{ route('lost-wax.production-plans.close-recovery', $plan) }}')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1 px-2 rounded text-xs transition-colors flex items-center gap-1" title="Tutup Rencana Tanpa Reprint">
+                                                    <button type="button" onclick="openCloseModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', {{ $plan->qty_planned }}, '{{ $plan->po_quantity ?? '-' }}', {{ $bd['q_usable'] }}, {{ $bd['deficit_vs_plan'] }}, '{{ route('lost-wax.production-plans.close-recovery', $plan) }}')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1 px-2 rounded text-xs transition-colors flex items-center gap-1" title="Tutup Recovery tanpa membuat SPK baru (Alasan wajib diisi)">
                                                         <i class="fas fa-ban"></i> Tutup
                                                     </button>
                                                 @endif
-                                                <button type="button" onclick="openPoModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', '{{ $plan->po_number }}', '{{ $plan->po_quantity }}', '{{ route('lost-wax.production-plans.update-po', $plan) }}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold px-1.5 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1" title="Perbarui Nomor & Kuantitas PO">
+                                                <button type="button" onclick="openPoModal({{ $plan->id }}, '{{ $plan->code }}', '{{ addslashes($plan->item_name) }}', '{{ $plan->po_number }}', '{{ $plan->po_quantity }}', '{{ route('lost-wax.production-plans.update-po', $plan) }}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold px-1.5 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1" title="Perbarui Nomor & Kuantitas PO Customer">
                                                     <i class="fas fa-edit"></i> Isi PO
                                                 </button>
                                             @else
