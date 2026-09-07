@@ -1562,8 +1562,8 @@ class ProductionStatusTest extends TestCase
             $plan = \App\Models\ProductionPlan::create([
                 'code' => $c,
                 'customer' => 'LOKAL',
-                'item_code' => '4.101105K.' . $c,
-                'item_name' => 'Item ' . $c,
+                'item_code' => '4.101105K.'.$c,
+                'item_name' => 'Item '.$c,
                 'aisi' => '304',
                 'size' => '2"',
                 'weight' => 1.0,

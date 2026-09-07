@@ -415,8 +415,29 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const historyContainer = document.getElementById('historyContainer');
     const historyCountBadge = document.getElementById('historyCountBadge');
+    const photoUploadForm = document.getElementById('photoUploadForm');
+    const savePhotoButton = document.getElementById('savePhotoButton');
+    const notesInput = document.getElementById('notesInput');
 
+    // Dedicated File State
+    let selectedFrontFile = null;
+    let selectedSideFile = null;
+    let currentPhotoState = null;
     let debounceTimer = null;
+
+    function showNotification(type, message) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: type === 'success' ? 'success' : 'error',
+                title: type === 'success' ? 'Berhasil' : 'Gagal Menyimpan',
+                text: message,
+                confirmButtonColor: type === 'success' ? '#2563eb' : '#dc2626',
+                confirmButtonText: 'OK'
+            });
+        } else {
+            alert((type === 'success' ? 'Berhasil: ' : 'Gagal: ') + message);
+        }
+    }
 
     // Autocomplete input listener
     searchInput.addEventListener('input', function () {
@@ -434,6 +455,7 @@ document.addEventListener('DOMContentLoaded', function () {
         clearSearchBtn.classList.add('hidden');
         searchDropdown.classList.add('hidden');
         workspace.classList.add('hidden');
+        resetFileState();
     });
 
     // Close dropdown on outside click
@@ -503,6 +525,17 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
+    function resetFileState() {
+        selectedFrontFile = null;
+        selectedSideFile = null;
+        if (frontPhotoInput) frontPhotoInput.value = '';
+        if (frontCameraInput) frontCameraInput.value = '';
+        if (frontGalleryInput) frontGalleryInput.value = '';
+        if (sidePhotoInput) sidePhotoInput.value = '';
+        if (sideCameraInput) sideCameraInput.value = '';
+        if (sideGalleryInput) sideGalleryInput.value = '';
+    }
+
     function selectProduct(code, name, aisi) {
         searchInput.value = `${code} — ${name}`;
         searchDropdown.classList.add('hidden');
@@ -512,15 +545,11 @@ document.addEventListener('DOMContentLoaded', function () {
         formProductName.value = name;
         bannerProductCode.textContent = code;
         bannerProductName.textContent = name;
-        bannerProductSpec.textContent = aisi ? `AISI: ${aisi}` : '';
+        if (bannerProductSpec && aisi) {
+            bannerProductSpec.textContent = `AISI: ${aisi}`;
+        }
 
-        // Reset file inputs
-        frontPhotoInput.value = '';
-        if (frontCameraInput) frontCameraInput.value = '';
-        if (frontGalleryInput) frontGalleryInput.value = '';
-        sidePhotoInput.value = '';
-        if (sideCameraInput) sideCameraInput.value = '';
-        if (sideGalleryInput) sideGalleryInput.value = '';
+        resetFileState();
 
         // Fetch detail & history via AJAX
         fetch(`{{ route('settings.assembly-photos.detail') }}?product_code=${encodeURIComponent(code)}`)
@@ -530,6 +559,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (data.success && data.current) {
                     const c = data.current;
+                    currentPhotoState = c;
                     bannerPhotoBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
                     bannerPhotoStatusText.textContent = `FOTO TERSEDIA (V${c.version})`;
 
@@ -559,6 +589,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         sideStatusTag.className = 'text-[10px] text-slate-500 font-medium';
                     }
                 } else {
+                    currentPhotoState = null;
                     bannerPhotoBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
                     bannerPhotoStatusText.textContent = 'FOTO BELUM TERSEDIA';
 
@@ -631,61 +662,165 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    // Generic file selection & synchronization handler
-    function syncAndPreviewFile(sourceInput, targetInput, imagePreview, placeholder, statusTag) {
-        if (sourceInput.files && sourceInput.files[0]) {
-            const file = sourceInput.files[0];
-            
-            // Sync file to main form input using DataTransfer if different input
-            if (sourceInput !== targetInput && typeof DataTransfer !== 'undefined') {
-                try {
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    targetInput.files = dt.files;
-                } catch (e) {
-                    console.warn('DataTransfer sync warning:', e);
-                }
-            }
+    // Direct File state handler for Tampak Depan
+    function handleFrontFileSelected(file) {
+        if (!file) return;
+        selectedFrontFile = file;
 
-            imagePreview.src = URL.createObjectURL(file);
-            imagePreview.classList.remove('hidden');
-            placeholder.classList.add('hidden');
+        frontImagePreview.src = URL.createObjectURL(file);
+        frontImagePreview.classList.remove('hidden');
+        frontPlaceholder.classList.add('hidden');
 
-            const sizeKb = (file.size / 1024).toFixed(0);
-            statusTag.textContent = `File Baru: ${sizeKb} KB (Siap Disimpan)`;
-            statusTag.className = 'text-[10px] text-blue-600 font-bold';
-        }
+        const sizeKb = (file.size / 1024).toFixed(0);
+        frontStatusTag.textContent = `File Baru: ${sizeKb} KB (Siap Disimpan)`;
+        frontStatusTag.className = 'text-[10px] text-blue-600 font-bold';
     }
 
-    // Front photo listeners
+    // Direct File state handler for Tampak Samping
+    function handleSideFileSelected(file) {
+        if (!file) return;
+        selectedSideFile = file;
+
+        sideImagePreview.src = URL.createObjectURL(file);
+        sideImagePreview.classList.remove('hidden');
+        sidePlaceholder.classList.add('hidden');
+
+        const sizeKb = (file.size / 1024).toFixed(0);
+        sideStatusTag.textContent = `File Baru: ${sizeKb} KB (Siap Disimpan)`;
+        sideStatusTag.className = 'text-[10px] text-blue-600 font-bold';
+    }
+
+    // Front photo input listeners
     if (frontCameraInput) {
         frontCameraInput.addEventListener('change', function () {
-            syncAndPreviewFile(this, frontPhotoInput, frontImagePreview, frontPlaceholder, frontStatusTag);
+            if (this.files && this.files[0]) handleFrontFileSelected(this.files[0]);
         });
     }
     if (frontGalleryInput) {
         frontGalleryInput.addEventListener('change', function () {
-            syncAndPreviewFile(this, frontPhotoInput, frontImagePreview, frontPlaceholder, frontStatusTag);
+            if (this.files && this.files[0]) handleFrontFileSelected(this.files[0]);
         });
     }
-    frontPhotoInput.addEventListener('change', function () {
-        syncAndPreviewFile(this, frontPhotoInput, frontImagePreview, frontPlaceholder, frontStatusTag);
-    });
+    if (frontPhotoInput) {
+        frontPhotoInput.addEventListener('change', function () {
+            if (this.files && this.files[0]) handleFrontFileSelected(this.files[0]);
+        });
+    }
 
-    // Side photo listeners
+    // Side photo input listeners
     if (sideCameraInput) {
         sideCameraInput.addEventListener('change', function () {
-            syncAndPreviewFile(this, sidePhotoInput, sideImagePreview, sidePlaceholder, sideStatusTag);
+            if (this.files && this.files[0]) handleSideFileSelected(this.files[0]);
         });
     }
     if (sideGalleryInput) {
         sideGalleryInput.addEventListener('change', function () {
-            syncAndPreviewFile(this, sidePhotoInput, sideImagePreview, sidePlaceholder, sideStatusTag);
+            if (this.files && this.files[0]) handleSideFileSelected(this.files[0]);
         });
     }
-    sidePhotoInput.addEventListener('change', function () {
-        syncAndPreviewFile(this, sidePhotoInput, sideImagePreview, sidePlaceholder, sideStatusTag);
-    });
+    if (sidePhotoInput) {
+        sidePhotoInput.addEventListener('change', function () {
+            if (this.files && this.files[0]) handleSideFileSelected(this.files[0]);
+        });
+    }
+
+    // FormData AJAX Form Submission
+    if (photoUploadForm) {
+        photoUploadForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const code = formProductCode.value.trim();
+            if (!code) {
+                showNotification('error', 'Silakan cari dan pilih produk terlebih dahulu.');
+                return;
+            }
+
+            // Check if there is anything to save
+            const hasCurrent = currentPhotoState !== null;
+            if (!selectedFrontFile && !selectedSideFile && !hasCurrent) {
+                showNotification('error', 'Minimal upload salah satu foto (Depan atau Samping).');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('product_code', code);
+            formData.append('product_name', formProductName.value ? formProductName.value.trim() : '');
+            if (notesInput && notesInput.value) {
+                formData.append('notes', notesInput.value.trim());
+            }
+            const csrfToken = photoUploadForm.querySelector('input[name="_token"]')?.value;
+            if (csrfToken) {
+                formData.append('_token', csrfToken);
+            }
+
+            if (selectedFrontFile) {
+                formData.append('front_photo', selectedFrontFile);
+            }
+            if (selectedSideFile) {
+                formData.append('side_photo', selectedSideFile);
+            }
+
+            // Button loading state
+            const originalButtonHtml = savePhotoButton.innerHTML;
+            savePhotoButton.disabled = true;
+            savePhotoButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i><span>Menyimpan Foto...</span>`;
+
+            fetch(photoUploadForm.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(async response => {
+                const contentType = response.headers.get('content-type') || '';
+                let data = null;
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                }
+
+                if (response.ok && data && data.success) {
+                    showNotification('success', data.message || `Foto Rangkai ${code} berhasil disimpan.`);
+                    resetFileState();
+                    if (notesInput) notesInput.value = '';
+                    // Refresh data in view
+                    selectProduct(code, formProductName.value ? formProductName.value.trim() : '', '');
+                    return;
+                }
+
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                if (response.status === 422) {
+                    let errorMsg = data?.message || 'Validasi gagal.';
+                    if (data?.errors) {
+                        errorMsg = Object.values(data.errors).flat().join('\n');
+                    }
+                    showNotification('error', errorMsg);
+                    return;
+                }
+
+                if (response.status === 419) {
+                    showNotification('error', 'Sesi telah berakhir (CSRF). Silakan refresh halaman.');
+                    return;
+                }
+
+                const serverMsg = data?.message || `Terjadi kesalahan server (Status: ${response.status}).`;
+                showNotification('error', serverMsg);
+            })
+            .catch(err => {
+                console.error('Save photo error:', err);
+                showNotification('error', 'Gagal menghubungi server. Periksa koneksi jaringan.');
+            })
+            .finally(() => {
+                savePhotoButton.disabled = false;
+                savePhotoButton.innerHTML = originalButtonHtml;
+            });
+        });
+    }
 });
 </script>
 @endsection

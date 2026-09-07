@@ -109,7 +109,7 @@ class AssemblyPhotoService
             throw new InvalidArgumentException('Minimal upload salah satu foto (Depan atau Samping).');
         }
 
-        // Determine if we are completing an existing incomplete version or creating a new version
+        // Determine if we are completing an existing incomplete version
         $isCompletingCurrent = false;
         if ($current) {
             $currentIncomplete = empty($current->front_image_path) || empty($current->side_image_path);
@@ -122,19 +122,31 @@ class AssemblyPhotoService
             }
         }
 
+        // If no new file uploaded but current exists, just update metadata on current
+        if (! $frontFile && ! $sideFile && $current) {
+            return DB::transaction(function () use ($productName, $notes, $current) {
+                $current->update([
+                    'product_name' => $productName ? trim($productName) : $current->product_name,
+                    'notes' => $notes !== null ? trim($notes) : $current->notes,
+                ]);
+
+                return $current->fresh();
+            });
+        }
+
         $version = $current ? ($isCompletingCurrent ? $current->version : $current->version + 1) : 1;
         $cleanSlug = Str::slug($productCode, '_');
         $randomSuffix = Str::lower(Str::random(6));
 
-        // Process Front Photo
-        $frontPath = $isCompletingCurrent ? $current->front_image_path : null;
+        // Process Front Photo: if new file uploaded -> compress and store, else inherit from current
+        $frontPath = $current?->front_image_path;
         if ($frontFile && $frontFile->isValid()) {
             $frontTarget = "assembly_photos/{$cleanSlug}_v{$version}_front_{$randomSuffix}.webp";
             $frontPath = $this->compressAndStore($frontFile, $frontTarget);
         }
 
-        // Process Side Photo
-        $sidePath = $isCompletingCurrent ? $current->side_image_path : null;
+        // Process Side Photo: if new file uploaded -> compress and store, else inherit from current
+        $sidePath = $current?->side_image_path;
         if ($sideFile && $sideFile->isValid()) {
             $sideTarget = "assembly_photos/{$cleanSlug}_v{$version}_side_{$randomSuffix}.webp";
             $sidePath = $this->compressAndStore($sideFile, $sideTarget);
@@ -146,7 +158,7 @@ class AssemblyPhotoService
                     'product_name' => $productName ? trim($productName) : $current->product_name,
                     'front_image_path' => $frontPath ?? $current->front_image_path,
                     'side_image_path' => $sidePath ?? $current->side_image_path,
-                    'notes' => $notes ? trim($notes) : $current->notes,
+                    'notes' => $notes !== null ? trim($notes) : $current->notes,
                 ]);
 
                 return $current->fresh();
@@ -165,7 +177,7 @@ class AssemblyPhotoService
                 'side_image_path' => $sidePath,
                 'is_current' => true,
                 'created_by' => $user?->id,
-                'notes' => $notes ? trim($notes) : null,
+                'notes' => $notes !== null ? trim($notes) : null,
             ]);
         });
     }

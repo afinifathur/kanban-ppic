@@ -503,6 +503,151 @@ class AssemblyPhotoTest extends TestCase
         $response->assertSee('268ETB733');
     }
 
+    public function test_upload_front_only_succeeds_and_creates_version_1(): void
+    {
+        $front = UploadedFile::fake()->image('front_only.jpg', 600, 600);
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => '268ETB733',
+                'product_name' => 'SS304 SQUARE DN 25',
+                'front_photo' => $front,
+            ]);
+
+        $response->assertRedirect();
+        $photo = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->where('is_current', true)->first();
+        $this->assertNotNull($photo);
+        $this->assertEquals(1, $photo->version);
+        $this->assertNotNull($photo->front_image_path);
+        $this->assertNull($photo->side_image_path);
+        Storage::disk('public')->assertExists($photo->front_image_path);
+    }
+
+    public function test_upload_side_only_succeeds_and_creates_version_1(): void
+    {
+        $side = UploadedFile::fake()->image('side_only.jpg', 600, 600);
+
+        $response = $this->actingAs($this->adminUser)
+            ->post('/settings/assembly-photos', [
+                'product_code' => '268ETB733',
+                'product_name' => 'SS304 SQUARE DN 25',
+                'side_photo' => $side,
+            ]);
+
+        $response->assertRedirect();
+        $photo = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->where('is_current', true)->first();
+        $this->assertNotNull($photo);
+        $this->assertEquals(1, $photo->version);
+        $this->assertNull($photo->front_image_path);
+        $this->assertNotNull($photo->side_image_path);
+        Storage::disk('public')->assertExists($photo->side_image_path);
+    }
+
+    public function test_existing_complete_photo_front_replacement_preserves_side_photo_in_new_version(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $frontV1 = UploadedFile::fake()->image('front_v1.jpg', 600, 600);
+        $sideV1 = UploadedFile::fake()->image('side_v1.jpg', 600, 600);
+
+        // V1 Complete
+        $v1 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV1, $sideV1, $this->adminUser, 'V1 Complete');
+        $this->assertEquals(1, $v1->version);
+        $this->assertNotNull($v1->front_image_path);
+        $this->assertNotNull($v1->side_image_path);
+        $v1SidePath = $v1->side_image_path;
+
+        // V2: Replace front only
+        $frontV2 = UploadedFile::fake()->image('front_v2.jpg', 600, 600);
+        $v2 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV2, null, $this->adminUser, 'V2 Front Only');
+
+        $this->assertEquals(2, $v2->version);
+        $this->assertTrue($v2->is_current);
+        $this->assertNotEquals($v1->front_image_path, $v2->front_image_path);
+        // Side photo MUST be preserved from V1
+        $this->assertEquals($v1SidePath, $v2->side_image_path);
+
+        // V1 must remain intact with is_current = false
+        $this->assertFalse($v1->fresh()->is_current);
+        $this->assertEquals($v1SidePath, $v1->fresh()->side_image_path);
+    }
+
+    public function test_existing_complete_photo_side_replacement_preserves_front_photo_in_new_version(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $frontV1 = UploadedFile::fake()->image('front_v1.jpg', 600, 600);
+        $sideV1 = UploadedFile::fake()->image('side_v1.jpg', 600, 600);
+
+        // V1 Complete
+        $v1 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $frontV1, $sideV1, $this->adminUser, 'V1 Complete');
+        $v1FrontPath = $v1->front_image_path;
+
+        // V2: Replace side only
+        $sideV2 = UploadedFile::fake()->image('side_v2.jpg', 600, 600);
+        $v2 = $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', null, $sideV2, $this->adminUser, 'V2 Side Only');
+
+        $this->assertEquals(2, $v2->version);
+        $this->assertTrue($v2->is_current);
+        // Front photo MUST be preserved from V1
+        $this->assertEquals($v1FrontPath, $v2->front_image_path);
+        $this->assertNotEquals($v1->side_image_path, $v2->side_image_path);
+    }
+
+    public function test_ajax_formdata_request_returns_valid_json_response(): void
+    {
+        $front = UploadedFile::fake()->image('ajax_front.jpg', 600, 600);
+
+        $response = $this->actingAs($this->adminUser)
+            ->postJson('/settings/assembly-photos', [
+                'product_code' => '268ETB733',
+                'product_name' => 'SS304 SQUARE DN 25',
+                'front_photo' => $front,
+                'notes' => 'Via AJAX FormData',
+            ]);
+
+        $response->assertOk();
+        $response->assertJson([
+            'success' => true,
+        ]);
+        $this->assertStringContainsString('268ETB733', $response->json('message'));
+        $this->assertEquals(1, $response->json('photo.version'));
+    }
+
+    public function test_no_file_uploaded_on_non_existent_photo_produces_clear_error(): void
+    {
+        $response = $this->actingAs($this->adminUser)
+            ->postJson('/settings/assembly-photos', [
+                'product_code' => '268ETB733',
+                'product_name' => 'SS304 SQUARE DN 25',
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'success' => false,
+            'message' => 'Minimal upload salah satu foto (Depan atau Samping).',
+        ]);
+    }
+
+    public function test_there_is_always_exactly_one_current_version_and_no_duplicates(): void
+    {
+        $service = app(AssemblyPhotoService::class);
+        $front1 = UploadedFile::fake()->image('f1.jpg', 600, 600);
+        $side1 = UploadedFile::fake()->image('s1.jpg', 600, 600);
+        $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $front1, $side1, $this->adminUser);
+
+        $front2 = UploadedFile::fake()->image('f2.jpg', 600, 600);
+        $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', $front2, null, $this->adminUser);
+
+        $side3 = UploadedFile::fake()->image('s3.jpg', 600, 600);
+        $service->storePhoto('268ETB733', 'SS304 SQUARE DN 25', null, $side3, $this->adminUser);
+
+        $currentPhotos = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->where('is_current', true)->get();
+        $this->assertCount(1, $currentPhotos, 'Must have exactly ONE current version.');
+        $this->assertEquals(3, $currentPhotos->first()->version);
+
+        $totalVersions = LostWaxAssemblyPhoto::where('product_code', '268ETB733')->count();
+        $this->assertEquals(3, $totalVersions, 'All 3 versions must exist in history.');
+    }
+
     public function test_masterdata_kpi_connection_configuration_honors_dedicated_environment_variables(): void
     {
         $conn = config('database.connections.masterdata_kpi');

@@ -119,8 +119,8 @@ class PrintOrderController extends Controller
                 $q->whereHas('printOrder', function ($poQ) {
                     $poQ->where('status', '!=', 'CANCELLED');
                 })->orWhereHas('executions')
-                  ->orWhereHas('trees')
-                  ->orWhereHas('treeAllocations');
+                    ->orWhereHas('trees')
+                    ->orWhereHas('treeAllocations');
             })
             ->with([
                 'printOrderLines.executions',
