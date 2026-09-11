@@ -454,6 +454,14 @@
                         <span class="text-sm sidebar-text ml-2">Rekap Kerusakan</span>
                     </a>
                 </li>
+                <li>
+                    <a href="{{ route('lost-wax.report.production.index') }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.report.production.*') ? 'bg-blue-600 text-white border-l-4 border-blue-400 font-medium' : 'text-slate-300' }}"
+                        title="Report Produksi">
+                        <i class="fas fa-chart-line w-6 shrink-0 text-center text-blue-400"></i>
+                        <span class="text-sm sidebar-text ml-2">Report Produksi</span>
+                    </a>
+                </li>
 
                 <!-- 6. REPORT -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">

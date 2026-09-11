@@ -713,4 +713,98 @@ class DailyDefectReportTest extends TestCase
         // Bounded constant query count without N+1 (constant number of eager-loaded relations regardless of row count)
         $this->assertLessThanOrEqual(15, $queryCount, "Expected bounded query count without N+1, got {$queryCount} queries.");
     }
+
+    /**
+     * 12. PPIC Data Scope / RBAC Security in Rekap Kerusakan.
+     */
+    public function test_ppic_user_strictly_restricted_to_own_product_scope_in_defects_report(): void
+    {
+        $rolePpic = Role::firstOrCreate(['name' => 'ppic', 'guard_name' => 'web']);
+        $ppicFlangeBesi = User::factory()->create([
+            'name' => 'PPIC Flange Besi',
+            'email' => 'ppicflangebesi@peroniks.com',
+            'product_scope' => 'FLANGE_BESI',
+        ]);
+        $ppicFlangeBesi->assignRole($rolePpic);
+
+        $planBesi = $this->createPlan([
+            'code' => '268FB_DEF',
+            'product_scope' => 'FLANGE_BESI',
+            'item_name' => 'BESI FLANGE',
+        ]);
+
+        $planStainless = $this->createPlan([
+            'code' => '268SS_DEF',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'item_name' => 'SS304 FLANGE',
+        ]);
+
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PC-20260829-RBAC',
+            'scheduled_date' => '2026-08-29',
+            'status' => 'ISSUED',
+            'created_by' => $this->qcUser->id,
+        ]);
+
+        $lineBesi = $order->lines()->create([
+            'production_plan_id' => $planBesi->id,
+            'code' => $planBesi->code,
+            'customer' => $planBesi->customer,
+            'item_name' => $planBesi->item_name,
+            'size' => $planBesi->size,
+            'aisi' => $planBesi->aisi,
+            'qty_ordered' => 100,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        $lineStainless = $order->lines()->create([
+            'production_plan_id' => $planStainless->id,
+            'code' => $planStainless->code,
+            'customer' => $planStainless->customer,
+            'item_name' => $planStainless->item_name,
+            'size' => $planStainless->size,
+            'aisi' => $planStainless->aisi,
+            'qty_ordered' => 100,
+            'standard_tree_capacity' => 20,
+        ]);
+
+        app(PrintExecutionService::class)->record($lineBesi, [
+            'qty_good' => 90,
+            'qty_defect' => 10,
+            'execution_date' => '2026-08-29',
+            'status' => 'FINALIZED',
+            'recorded_by' => $this->qcUser->id,
+        ]);
+
+        app(PrintExecutionService::class)->record($lineStainless, [
+            'qty_good' => 80,
+            'qty_defect' => 20,
+            'execution_date' => '2026-08-29',
+            'status' => 'FINALIZED',
+            'recorded_by' => $this->qcUser->id,
+        ]);
+
+        // PPIC Flange Besi requests defect report
+        $resBesi = $this->actingAs($ppicFlangeBesi)->get(route('lost-wax.quality.defects.index', [
+            'date_from' => '2026-08-29',
+            'date_to' => '2026-08-29',
+            'mode' => 'ringkas',
+        ]));
+
+        $resBesi->assertStatus(200);
+        $resBesi->assertSee('268FB_DEF');
+        $resBesi->assertDontSee('268SS_DEF');
+        $resBesi->assertSee('10 pcs'); // Defect count for Besi
+        $resBesi->assertDontSee('30 pcs'); // Combined total must not appear
+
+        // Search filter must not bypass scope
+        $resSearch = $this->actingAs($ppicFlangeBesi)->get(route('lost-wax.quality.defects.index', [
+            'date_from' => '2026-08-29',
+            'date_to' => '2026-08-29',
+            'search' => '268SS_DEF',
+            'mode' => 'ringkas',
+        ]));
+        $resSearch->assertStatus(200);
+        $this->assertEmpty($resSearch->viewData('items'));
+    }
 }

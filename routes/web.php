@@ -193,6 +193,11 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/quality/defects', [\App\Http\Controllers\LostWax\DefectReportController::class, 'index'])->name('quality.defects.index');
             Route::get('/quality/defects/export/excel', [\App\Http\Controllers\LostWax\DefectReportController::class, 'exportExcel'])->name('quality.defects.export.excel');
             Route::get('/quality/defects/export/pdf', [\App\Http\Controllers\LostWax\DefectReportController::class, 'exportPdf'])->name('quality.defects.export.pdf');
+
+            // Production Report - Report Produksi Lost Wax
+            Route::get('/report/production', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'index'])->name('report.production.index');
+            Route::get('/report/production/export/excel', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportExcel'])->name('report.production.export.excel');
+            Route::get('/report/production/export/pdf', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportPdf'])->name('report.production.export.pdf');
         });
     });
 });

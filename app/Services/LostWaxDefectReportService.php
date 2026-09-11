@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\LostWaxPrintExecution;
 use App\Models\LostWaxTreeDefect;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -47,8 +48,12 @@ class LostWaxDefectReportService
      * @param  array{date_from?: string, date_to?: string, stage?: string, search?: string, production_code?: string, mode?: string}  $filters
      * @return array{items: Collection, summary: array<string, int>, filters: array}
      */
-    public function getDefectDataset(array $filters = []): array
+    public function getDefectDataset(array $filters = [], ?User $user = null): array
     {
+        $currentUser = $user ?? auth()->user();
+        $isPpic = $currentUser?->hasRole('ppic');
+        $scope = ($isPpic && $currentUser?->product_scope) ? $currentUser->product_scope : null;
+
         $dateFrom = ! empty($filters['date_from']) ? $filters['date_from'] : date('Y-m-d');
         $dateTo = ! empty($filters['date_to']) ? $filters['date_to'] : date('Y-m-d');
         $selectedStage = ! empty($filters['stage']) ? $filters['stage'] : 'all';
@@ -67,7 +72,7 @@ class LostWaxDefectReportService
 
         // 1. Fetch Cetak Defects (from lost_wax_print_executions)
         if ($selectedStage === 'all' || $selectedStage === 'cetak') {
-            $printExecutions = LostWaxPrintExecution::with([
+            $printExecQuery = LostWaxPrintExecution::with([
                 'printOrderLine.productionPlan',
                 'printOrderLine.printOrder',
                 'recorder',
@@ -77,8 +82,15 @@ class LostWaxDefectReportService
                 ->where(function ($q) use ($dateFrom, $dateTo) {
                     $q->whereDate('execution_date', '>=', $dateFrom)
                         ->whereDate('execution_date', '<=', $dateTo);
-                })
-                ->get();
+                });
+
+            if ($scope) {
+                $printExecQuery->whereHas('printOrderLine.productionPlan', function ($q) use ($scope) {
+                    $q->where('product_scope', $scope);
+                });
+            }
+
+            $printExecutions = $printExecQuery->get();
 
             foreach ($printExecutions as $exec) {
                 $line = $exec->printOrderLine;
@@ -122,6 +134,28 @@ class LostWaxDefectReportService
 
             if ($selectedStage !== 'all') {
                 $treeDefectsQuery->where('stage', $selectedStage);
+            }
+
+            if ($scope) {
+                $treeDefectsQuery->whereHas('tree', function ($t) use ($scope) {
+                    $t->where(function ($q) use ($scope) {
+                        $q->whereHas('printOrderLine.productionPlan', function ($p) use ($scope) {
+                            $p->where('product_scope', $scope);
+                        })->orWhereHas('allocations.printOrderLine.productionPlan', function ($p) use ($scope) {
+                            $p->where('product_scope', $scope);
+                        })->orWhereHas('workOrder', function ($w) use ($scope) {
+                            if ($scope === 'FLANGE_STAINLESS') {
+                                $w->whereIn('family_code', ['3', '4']);
+                            } elseif ($scope === 'FLANGE_BESI') {
+                                $w->whereIn('family_code', ['6']);
+                            } elseif ($scope === 'FITTING_STAINLESS') {
+                                $w->whereIn('family_code', ['1', '2']);
+                            } else {
+                                $w->whereRaw('1=0');
+                            }
+                        });
+                    });
+                });
             }
 
             $treeDefects = $treeDefectsQuery->get();
