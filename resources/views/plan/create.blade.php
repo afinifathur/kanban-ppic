@@ -2,37 +2,58 @@
 
 @section('content')
     <div class="bg-white shadow-md rounded-lg p-6 h-full flex flex-col">
-        <div class="flex justify-between items-center mb-4">
-            <div class="flex items-center gap-6">
-                <div>
-                    <h1 class="text-xl font-bold text-gray-800">Rencana Produksi Lost Wax (Input PPIC)</h1>
-                    <p class="text-sm text-gray-500">Masukkan data P.O. dari Customer untuk perencanaan produksi Lost Wax.</p>
-                </div>
-                <div class="bg-slate-100 p-2 rounded flex items-center gap-4 border border-slate-200">
+        <!-- Top Bar / Header -->
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+            <div>
+                <h1 class="text-xl font-bold text-gray-800">Rencana Produksi</h1>
+                <p class="text-sm text-gray-500">Masukkan data P.O. dari Customer untuk perencanaan produksi.</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4">
+                <!-- Planning Info Inputs -->
+                <div class="bg-slate-50 p-2.5 rounded-lg flex flex-wrap items-center gap-3 border border-slate-200">
                     <div class="flex items-center gap-2">
                         <label class="text-xs font-bold text-slate-600 uppercase">Judul Rencana <span class="text-red-500">*</span>:</label>
-                        <input type="text" id="planTitle" placeholder="Misal: Produksi Lost Wax Flange" required
-                            class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 w-48">
+                        <input type="text" id="planTitle" placeholder="Misal: Rencana A06" required
+                            class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 w-48 px-2.5 py-1.5 bg-white">
                     </div>
+
                     <div class="hidden sm:block h-6 w-px bg-slate-300"></div>
+
                     <div class="flex items-center gap-2">
-                        <label class="text-xs font-bold text-slate-600 uppercase">Tanggal:</label>
-                        <input type="date" id="planDate" value="{{ date('Y-m-d') }}"
-                            class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 w-36">
+                        <label class="text-xs font-bold text-slate-600 uppercase">Tanggal <span class="text-red-500">*</span>:</label>
+                        <input type="date" id="planDate" value="{{ date('Y-m-d') }}" required
+                            class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 w-36 px-2 py-1.5 bg-white">
+                    </div>
+
+                    <div class="hidden sm:block h-6 w-px bg-slate-300"></div>
+
+                    <!-- Production Domain Selection -->
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-bold text-slate-600 uppercase">Proses Produksi <span class="text-red-500">*</span>:</label>
+                        <select id="productionDomain" required
+                            class="text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 px-3 py-1.5 bg-white font-medium text-slate-700">
+                            <option value="" disabled selected>-- Pilih Proses Produksi --</option>
+                            <option value="LOST_WAX">Lost Wax</option>
+                            <option value="SAND_CASTING">Sand Casting</option>
+                        </select>
                     </div>
                 </div>
+
+                <button onclick="savePlans()" id="saveBtn"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2">
+                    <i class="fas fa-save"></i> Simpan Rencana
+                </button>
             </div>
-            <button onclick="savePlans()" id="saveBtn"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                <i class="fas fa-save mr-2"></i> Simpan Rencana
-            </button>
         </div>
 
-        <div class="mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 text-xs text-blue-700">
-            <p><strong>Tips:</strong> Anda bisa Copy (Ctrl+C) data dari Excel dan Paste (Ctrl+V) langsung ke tabel di bawah.
-            </p>
-            <p>Format Kolom: Code | Item Code | Item Name | AISI | Size | Weight | P.O. Number | P.O. Quantity | Qty Plan | Line | Customer
-            </p>
+        <!-- Instructions Tip -->
+        <div class="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-xs text-blue-800 rounded-r flex items-start gap-2">
+            <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+            <div>
+                <p><strong>Tips:</strong> Anda bisa Copy (Ctrl+C) data dari Excel dan Paste (Ctrl+V) langsung ke tabel di bawah. Semua baris di bawah akan mewarisi Proses Produksi yang dipilih di atas.</p>
+                <p class="text-slate-600 mt-0.5">Format Kolom: Code | Item Code | Item Name | AISI | Size | Weight | P.O. Number | P.O. Quantity | Qty Plan | Line | Customer</p>
+            </div>
         </div>
 
         <div id="planTable" class="flex-1 overflow-hidden border border-gray-200 rounded"></div>
@@ -81,16 +102,70 @@
 
         function savePlans() {
             const saveBtn = document.getElementById('saveBtn');
-            const planDate = document.getElementById('planDate').value;
             const planTitle = document.getElementById('planTitle').value;
-            const rawData = hot.getData();
-            const plans = [];
+            const planDate = document.getElementById('planDate').value;
+            const domainSelect = document.getElementById('productionDomain');
+            const productionDomain = domainSelect ? domainSelect.value : '';
 
+            // Priority 1: Judul Rencana
             if (!planTitle || planTitle.trim() === '') {
-                alert('Judul Rencana harus diisi!');
-                document.getElementById('planTitle').focus();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Judul Rencana Belum Diisi',
+                        text: 'Silakan isi Judul Rencana terlebih dahulu.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#2563eb'
+                    }).then(() => {
+                        document.getElementById('planTitle').focus();
+                    });
+                } else {
+                    alert('Silakan isi Judul Rencana terlebih dahulu.');
+                    document.getElementById('planTitle').focus();
+                }
                 return;
             }
+
+            // Priority 2: Tanggal Rencana
+            if (!planDate || planDate.trim() === '') {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Tanggal Rencana Belum Diisi',
+                        text: 'Silakan pilih Tanggal Rencana terlebih dahulu.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#2563eb'
+                    }).then(() => {
+                        document.getElementById('planDate').focus();
+                    });
+                } else {
+                    alert('Silakan pilih Tanggal Rencana terlebih dahulu.');
+                    document.getElementById('planDate').focus();
+                }
+                return;
+            }
+
+            // Priority 3: Proses Produksi
+            if (!productionDomain || productionDomain.trim() === '') {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Proses Produksi Belum Dipilih',
+                        text: 'Silakan pilih Proses Produksi terlebih dahulu: Lost Wax atau Sand Casting.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#2563eb'
+                    }).then(() => {
+                        document.getElementById('productionDomain').focus();
+                    });
+                } else {
+                    alert('Silakan pilih Proses Produksi terlebih dahulu: Lost Wax atau Sand Casting.');
+                    document.getElementById('productionDomain').focus();
+                }
+                return;
+            }
+
+            const rawData = hot.getData();
+            const plans = [];
 
             rawData.forEach(row => {
                 // Check if Item Code, Item Name, PO Number, Qty Plan, and Line are filled
@@ -111,8 +186,19 @@
                 }
             });
 
+            // Priority 4: Handsontable Rows
             if (plans.length === 0) {
-                alert('Silakan masukkan minimal satu baris data rencana yang lengkap (Item Code, Name, PO, Qty, Line).');
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Data Rencana Kosong',
+                        text: 'Silakan masukkan minimal satu baris data rencana yang lengkap (Item Code, Name, PO, Qty, Line).',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#2563eb'
+                    });
+                } else {
+                    alert('Silakan masukkan minimal satu baris data rencana yang lengkap (Item Code, Name, PO, Qty, Line).');
+                }
                 return;
             }
 
@@ -123,20 +209,47 @@
             axios.post('{{ route('plan.store') }}', {
                 plans: plans,
                 date: planDate,
-                title: planTitle
+                title: planTitle,
+                production_domain: productionDomain
             })
                 .then(res => {
-                    alert(res.data.message);
-                    if (res.data.redirect) {
-                        window.location.href = res.data.redirect;
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil',
+                            text: res.data.message,
+                            confirmButtonColor: '#2563eb'
+                        }).then(() => {
+                            if (res.data.redirect) {
+                                window.location.href = res.data.redirect;
+                            } else {
+                                saveBtn.disabled = false;
+                                saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';
+                            }
+                        });
                     } else {
-                        saveBtn.disabled = false;
-                        saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';
+                        alert(res.data.message);
+                        if (res.data.redirect) {
+                            window.location.href = res.data.redirect;
+                        } else {
+                            saveBtn.disabled = false;
+                            saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';
+                        }
                     }
                 })
                 .catch(err => {
                     console.error(err);
-                    alert('Terjadi kesalahan saat menyimpan data. Periksa konsol.');
+                    const msg = err.response && err.response.data && err.response.data.message ? err.response.data.message : 'Terjadi kesalahan saat menyimpan data. Periksa konsol.';
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal Menyimpan',
+                            text: msg,
+                            confirmButtonColor: '#2563eb'
+                        });
+                    } else {
+                        alert(msg);
+                    }
                     saveBtn.disabled = false;
                     saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';
                 });

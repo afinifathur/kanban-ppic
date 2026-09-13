@@ -1,29 +1,48 @@
 @extends('layouts.app')
 
 @section('top_bar')
-    <div class="flex items-center justify-between w-full relative">
-        <div>
-            <h1 class="text-lg font-bold text-gray-800 leading-tight">Detail Rencana Produksi</h1>
-            <p class="text-gray-500 text-[10px]">{{ \Carbon\Carbon::parse($date)->isoFormat('dddd, D MMMM Y') }}</p>
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between w-full gap-2 relative">
+        <div class="flex items-center gap-3">
+            <div>
+                <h1 class="text-lg font-bold text-gray-800 leading-tight">Detail Rencana Produksi</h1>
+                <p class="text-gray-500 text-[10px]">{{ \Carbon\Carbon::parse($date)->isoFormat('dddd, D MMMM Y') }}</p>
+            </div>
+            
+            <!-- Prominent Domain Badge in Header -->
+            @if(isset($headerDomain) && $headerDomain)
+                @if($headerDomain === 'LOST_WAX')
+                    <span class="text-xs bg-amber-100 text-amber-900 border border-amber-300 font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                        <i class="fas fa-fire text-amber-600"></i> LOST WAX
+                    </span>
+                @elseif($headerDomain === 'SAND_CASTING')
+                    <span class="text-xs bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                        <i class="fas fa-cubes text-indigo-600"></i> SAND CASTING
+                    </span>
+                @else
+                    <span class="text-xs bg-gray-100 text-gray-800 border border-gray-300 font-bold px-3 py-1 rounded-full uppercase">
+                        {{ str_replace('_', ' ', $headerDomain) }}
+                    </span>
+                @endif
+            @endif
         </div>
         
         @if(isset($planTitle) && $planTitle)
-        <div class="absolute hidden md:flex items-center gap-2 left-1/2 transform -translate-x-1/2 bg-blue-50 px-4 py-1.5 rounded-full border border-blue-200 group">
+        <div class="flex items-center gap-2 bg-blue-50 px-4 py-1.5 rounded-full border border-blue-200 group">
             <span class="text-sm font-bold text-blue-800"><i class="fas fa-clipboard-check mr-1 opacity-70"></i> {{ $planTitle }}</span>
             <button onclick="editTitle('{{ $date }}', '{{ $planTitle }}')" class="text-blue-400 hover:text-blue-600 ml-1" title="Edit Judul">
                 <i class="fas fa-edit"></i>
             </button>
         </div>
         @else
-        <div class="absolute hidden md:flex items-center gap-2 left-1/2 transform -translate-x-1/2 bg-gray-50 px-4 py-1.5 rounded-full border border-gray-200 group">
+        <div class="flex items-center gap-2 bg-gray-50 px-4 py-1.5 rounded-full border border-gray-200 group">
             <button onclick="editTitle('{{ $date }}', '')" class="text-sm font-bold text-gray-500 hover:text-blue-600" title="Tambah Judul">
                 <i class="fas fa-plus"></i> Tambah Judul
             </button>
         </div>
         @endif
 
-        <a href="{{ route('plan.index') }}" class="text-blue-600 hover:underline text-xs flex items-center gap-1">
-            <i class="fas fa-arrow-left"></i> Kembali
+        <a href="{{ route('plan.index', array_filter(['production_domain' => $selectedDomain !== 'ALL' ? $selectedDomain : null])) }}" class="text-blue-600 hover:underline text-xs flex items-center gap-1">
+            <i class="fas fa-arrow-left"></i> Kembali ke Index
         </a>
     </div>
 @endsection
@@ -56,6 +75,7 @@
                         <th class="border border-gray-200 px-3 py-2 text-left">{!! sortLink('code', 'Code') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-left">{!! sortLink('customer', 'Customer') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-left">{!! sortLink('item_name', 'Item Name') !!}</th>
+                        <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('production_domain', 'Domain', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('qty_planned', 'Planned', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('hasil_cor', 'Hasil Cor', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('qty_remaining', 'Remaining', 'center') !!}</th>
@@ -76,9 +96,24 @@
                                 <div class="text-[11px] text-gray-500 font-mono mt-0.5">{{ $plan->po_number }}</div>
                             </td>
                             <td class="border border-gray-200 px-3 py-2">
-                                <div class="font-bold">{{ $plan->item_name }}</div>
+                                <div class="font-bold text-gray-800">{{ $plan->item_name }}</div>
                                 <div class="text-[10px] text-gray-500">{{ $plan->item_code }} | {{ $plan->aisi }} |
                                     {{ $plan->size }}</div>
+                            </td>
+                            <td class="border border-gray-200 px-3 py-2 text-center">
+                                @if($plan->production_domain === 'LOST_WAX')
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                                        Lost Wax
+                                    </span>
+                                @elseif($plan->production_domain === 'SAND_CASTING')
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-100 text-indigo-800 border border-indigo-300">
+                                        Sand Casting
+                                    </span>
+                                @else
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-600">
+                                        {{ $plan->production_domain }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="border border-gray-200 px-3 py-2 text-center font-bold">
                                 {{ number_format($plan->qty_planned) }}</td>
@@ -122,7 +157,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="border border-gray-200 px-3 py-8 text-center text-gray-400 italic">Belum ada
+                            <td colspan="11" class="border border-gray-200 px-3 py-8 text-center text-gray-400 italic">Belum ada
                                 data rencana.</td>
                         </tr>
                     @endforelse

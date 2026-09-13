@@ -200,6 +200,34 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/report/production/export/pdf', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportPdf'])->name('report.production.export.pdf');
         });
     });
+
+    // Sand Casting Routes
+    Route::prefix('sand-casting')->name('sand-casting.')->group(function () {
+        Route::get('/', function () {
+            if (auth()->user()->can('access_planning')) {
+                return redirect()->route('sand-casting.casting-orders.plans');
+            }
+
+            return redirect()->route('kanban.index', 'rencana_cor');
+        });
+
+        // Group with permission:access_planning
+        Route::middleware(['permission:access_planning'])->group(function () {
+            // Casting Orders (Perintah Cor)
+            Route::get('/casting-orders/plans', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'plans'])->name('casting-orders.plans');
+            Route::get('/casting-orders', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'index'])->name('casting-orders.index');
+            Route::get('/casting-orders/create', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'create'])->name('casting-orders.create');
+            Route::post('/casting-orders', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'store'])->name('casting-orders.store');
+            Route::get('/casting-orders/{castingOrder}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'show'])->name('casting-orders.show');
+            Route::get('/casting-orders/{castingOrder}/edit', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'edit'])->name('casting-orders.edit');
+            Route::put('/casting-orders/{castingOrder}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'update'])->name('casting-orders.update');
+            Route::post('/casting-orders/{castingOrder}/status', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'updateStatus'])->name('casting-orders.update-status');
+            Route::get('/casting-orders/{castingOrder}/print', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'print'])->name('casting-orders.print');
+            Route::delete('/casting-orders/{castingOrder}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'destroy'])->name('casting-orders.destroy');
+            Route::post('/casting-orders/{castingOrder}/lines', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'storeLine'])->name('casting-orders.lines.store');
+            Route::delete('/casting-orders/{castingOrder}/lines/{line}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'destroyLine'])->name('casting-orders.lines.destroy');
+        });
+    });
 });
 
 Route::get('/debug-session', function () {

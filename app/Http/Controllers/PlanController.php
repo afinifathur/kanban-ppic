@@ -12,6 +12,9 @@ class PlanController extends Controller
         $date = $request->query('date');
         $scope = auth()->user()->product_scope;
         $isPpic = auth()->user()->hasRole('ppic');
+        $selectedDomain = $request->query('production_domain', 'ALL');
+        $search = trim((string) $request->query('search', ''));
+        $selectedStatus = $request->query('status');
 
         if ($date) {
             // Detail View for a specific date
@@ -22,6 +25,24 @@ class PlanController extends Controller
 
             if ($isPpic && $scope) {
                 $query->where('product_scope', $scope);
+            }
+
+            if ($selectedDomain && $selectedDomain !== 'ALL') {
+                $query->where('production_domain', $selectedDomain);
+            }
+
+            if ($selectedStatus) {
+                $query->where('status', $selectedStatus);
+            }
+
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->where('code', 'like', "%{$search}%")
+                        ->orWhere('item_code', 'like', "%{$search}%")
+                        ->orWhere('item_name', 'like', "%{$search}%")
+                        ->orWhere('customer', 'like', "%{$search}%")
+                        ->orWhere('po_number', 'like', "%{$search}%");
+                });
             }
 
             if ($sort) {
@@ -41,9 +62,17 @@ class PlanController extends Controller
             if ($isPpic && $scope) {
                 $titleQuery->where('product_scope', $scope);
             }
+            if ($selectedDomain && $selectedDomain !== 'ALL') {
+                $titleQuery->where('production_domain', $selectedDomain);
+            }
             $planTitle = $titleQuery->value('title');
 
-            return view('plan.list', compact('plans', 'date', 'planTitle', 'sort', 'direction'));
+            // Determine dominant or single domain for the header
+            $headerDomain = $plans->pluck('production_domain')->unique()->count() === 1
+                ? $plans->first()?->production_domain
+                : ($selectedDomain !== 'ALL' ? $selectedDomain : null);
+
+            return view('plan.list', compact('plans', 'date', 'planTitle', 'sort', 'direction', 'selectedDomain', 'search', 'selectedStatus', 'headerDomain'));
         }
 
         // Summary View (Default)
@@ -55,12 +84,15 @@ class PlanController extends Controller
         $statsQuery = ProductionPlan::selectRaw("
                 DATE(created_at) as date, 
                 MAX(title) as title,
+                MAX(production_domain) as production_domain,
                 COUNT(*) as items_count, 
                 SUM(qty_planned) as total_planned, 
                 SUM(qty_remaining) as total_remaining,
                 COUNT(CASE WHEN status = 'planning' THEN 1 END) as planning_count,
                 COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
                 COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
+                COUNT(CASE WHEN production_domain = 'LOST_WAX' THEN 1 END) as lost_wax_count,
+                COUNT(CASE WHEN production_domain = 'SAND_CASTING' THEN 1 END) as sand_casting_count,
                 {$groupConcat} as unique_customers
             ");
 
@@ -68,11 +100,30 @@ class PlanController extends Controller
             $statsQuery->where('product_scope', $scope);
         }
 
+        if ($selectedDomain && $selectedDomain !== 'ALL') {
+            $statsQuery->where('production_domain', $selectedDomain);
+        }
+
+        if ($selectedStatus) {
+            $statsQuery->where('status', $selectedStatus);
+        }
+
+        if ($search !== '') {
+            $statsQuery->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('customer', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('item_code', 'like', "%{$search}%")
+                    ->orWhere('item_name', 'like', "%{$search}%")
+                    ->orWhere('po_number', 'like', "%{$search}%");
+            });
+        }
+
         $dailyStats = $statsQuery->groupBy('date')
             ->orderByDesc('date')
             ->get();
 
-        return view('plan.index', compact('dailyStats'));
+        return view('plan.index', compact('dailyStats', 'selectedDomain', 'search', 'selectedStatus'));
     }
 
     public function create()
@@ -87,7 +138,8 @@ class PlanController extends Controller
         $data = $request->validate([
             'date' => 'nullable|date',
             'title' => 'required|string|max:255',
-            'plans' => 'required|array',
+            'production_domain' => 'required|string|in:'.ProductionPlan::DOMAIN_LOST_WAX.','.ProductionPlan::DOMAIN_SAND_CASTING,
+            'plans' => 'required|array|min:1',
             'plans.*.code' => 'nullable|string',
             'plans.*.item_code' => 'required|string',
             'plans.*.item_name' => 'required|string',
@@ -104,6 +156,7 @@ class PlanController extends Controller
 
         $customDate = $data['date'] ?? null;
         $customTitle = $data['title'] ?? null;
+        $productionDomain = $data['production_domain'];
         $user = auth()->user();
         $userScope = $user->product_scope;
         $isPpic = $user->hasRole('ppic');
@@ -133,7 +186,7 @@ class PlanController extends Controller
                 $itemScope = $userScope;
             } else {
                 if (! $itemScope) {
-                    $itemScope = ProductionPlan::determineProductScopeFromItem($plan['item_name'], $plan['aisi']);
+                    $itemScope = ProductionPlan::determineProductScopeFromItem($plan['item_name'], $plan['aisi'] ?? null);
                 }
             }
 
@@ -152,6 +205,7 @@ class PlanController extends Controller
                 'line_number' => $lineNumber,
                 'customer' => $plan['customer'] ?? null,
                 'product_scope' => $itemScope,
+                'production_domain' => $productionDomain,
                 'status' => 'planning',
             ];
 
@@ -183,7 +237,9 @@ class PlanController extends Controller
             abort(403, 'Unauthorized.');
         }
 
-        return view('plan.edit', compact('plan'));
+        $isDomainLocked = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists() || $plan->status !== 'planning';
+
+        return view('plan.edit', compact('plan', 'isDomainLocked'));
     }
 
     public function update(Request $request, ProductionPlan $plan)
@@ -206,10 +262,19 @@ class PlanController extends Controller
             'qty_planned' => 'required|integer|min:1',
             'status' => 'required|in:planning,active,completed',
             'product_scope' => 'nullable|string|in:FLANGE_STAINLESS,FLANGE_BESI,FITTING_STAINLESS',
+            'production_domain' => 'nullable|string|in:'.ProductionPlan::DOMAIN_LOST_WAX.','.ProductionPlan::DOMAIN_SAND_CASTING,
         ]);
 
         if ($user->hasRole('ppic') && $user->product_scope) {
             $data['product_scope'] = $user->product_scope;
+        }
+
+        // Domain lock guard: prevent changing domain if transactions exist or plan is not in planning
+        if (isset($data['production_domain']) && $data['production_domain'] !== $plan->production_domain) {
+            $hasTransactions = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists() || $plan->status !== 'planning';
+            if ($hasTransactions) {
+                return back()->withInput()->with('error', 'Domain produksi tidak dapat diubah karena rencana produksi ini sudah memiliki transaksi atau telah dimulai.');
+            }
         }
 
         // Calculate new qty_remaining if qty_planned changed

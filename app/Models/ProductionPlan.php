@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductionPlan extends Model
 {
+    public const DOMAIN_LOST_WAX = 'LOST_WAX';
+
+    public const DOMAIN_SAND_CASTING = 'SAND_CASTING';
+
     protected $fillable = [
         'code',
         'title',
@@ -21,6 +25,7 @@ class ProductionPlan extends Model
         'line_number',
         'customer',
         'product_scope',
+        'production_domain',
         'status',
         'is_closed',
         'closure_reason',
@@ -71,6 +76,29 @@ class ProductionPlan extends Model
     public function printOrderLines()
     {
         return $this->hasMany(LostWaxPrintOrderLine::class, 'production_plan_id');
+    }
+
+    public function castingOrderLines()
+    {
+        return $this->hasMany(SandCastingCastingOrderLine::class, 'production_plan_id');
+    }
+
+    public function getQtyCastingScheduledAttribute(): int
+    {
+        if (array_key_exists('qty_casting_scheduled', $this->attributes)) {
+            return (int) $this->attributes['qty_casting_scheduled'];
+        }
+
+        return (int) $this->castingOrderLines()
+            ->whereHas('castingOrder', function ($query) {
+                $query->whereIn('status', ['DRAFT', 'ISSUED']);
+            })
+            ->sum('qty_ordered');
+    }
+
+    public function getQtyRemainingCastingScheduledAttribute(): int
+    {
+        return max(0, $this->qty_planned - $this->qty_casting_scheduled);
     }
 
     public function getQtyScheduledAttribute(): int
@@ -124,5 +152,15 @@ class ProductionPlan extends Model
     public function getQtyRemainingToProduceAttribute(): int
     {
         return max(0, $this->qty_planned - $this->qty_produced);
+    }
+
+    public function isLostWax(): bool
+    {
+        return ($this->production_domain ?? self::DOMAIN_LOST_WAX) === self::DOMAIN_LOST_WAX;
+    }
+
+    public function isSandCasting(): bool
+    {
+        return $this->production_domain === self::DOMAIN_SAND_CASTING;
     }
 }

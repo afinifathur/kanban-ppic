@@ -38,6 +38,7 @@ class ProductionPlanDetachmentTest extends TestCase
         $payload = [
             'date' => '2026-08-28',
             'title' => 'Rencana Lost Wax Flange 304',
+            'production_domain' => 'LOST_WAX',
             'plans' => [
                 [
                     'code' => 'LW-001',
@@ -89,6 +90,7 @@ class ProductionPlanDetachmentTest extends TestCase
 
         $payload = [
             'title' => 'Rencana Baru Lost Wax',
+            'production_domain' => 'LOST_WAX',
             'plans' => [
                 [
                     'code' => 'LW-001',
@@ -158,6 +160,7 @@ class ProductionPlanDetachmentTest extends TestCase
     {
         $payload = [
             'title' => 'Rencana PO Persistence',
+            'production_domain' => 'LOST_WAX',
             'plans' => [
                 [
                     'code' => 'LW-PO-TEST',
@@ -231,6 +234,7 @@ class ProductionPlanDetachmentTest extends TestCase
     {
         $payload = [
             'title' => 'Rencana PO Qty Separation',
+            'production_domain' => 'LOST_WAX',
             'plans' => [
                 [
                     'code' => 'LW-SEP-01',
