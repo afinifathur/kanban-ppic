@@ -2154,3 +2154,60 @@ mysqldump: [Warning] Using a password on the command line interface can be insec
 [2026-09-10 17:00:06] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
 [2026-09-10 17:00:06] [INFO] ============================================
 [2026-09-10 17:00:06] [INFO] 
+[2026-09-11 17:00:01] [INFO] ============================================
+[2026-09-11 17:00:01] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-09-11 17:00:01] [INFO] ============================================
+[2026-09-11 17:00:01] [INFO] 
+[2026-09-11 17:00:01] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-09-11 17:00:01] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-09-11 17:00:02] [INFO] Mendownload prod_kanban_ppic_20260911_170001.sql...
+[2026-09-11 17:00:03] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-09-11 17:00:03] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-09-11 17:00:05] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-09-11 17:00:05] [INFO] Membersihkan file temporary di server...
+[2026-09-11 17:00:05] [INFO] 
+[2026-09-11 17:00:05] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-09-11 17:00:05] [INFO] 
+[2026-09-11 17:00:05] [INFO] ============================================
+[2026-09-11 17:00:05] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-09-11 17:00:05] [INFO] ============================================
+[2026-09-11 17:00:05] [INFO] 
+[2026-09-14 17:00:02] [INFO] ============================================
+[2026-09-14 17:00:02] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-09-14 17:00:02] [INFO] ============================================
+[2026-09-14 17:00:02] [INFO] 
+[2026-09-14 17:00:02] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-09-14 17:00:02] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-09-14 17:00:03] [INFO] Mendownload prod_kanban_ppic_20260914_170002.sql...
+[2026-09-14 17:00:04] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-09-14 17:00:04] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-09-14 17:00:07] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-09-14 17:00:07] [INFO] Membersihkan file temporary di server...
+[2026-09-14 17:00:07] [INFO] 
+[2026-09-14 17:00:07] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-09-14 17:00:07] [INFO] 
+[2026-09-14 17:00:07] [INFO] ============================================
+[2026-09-14 17:00:07] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-09-14 17:00:07] [INFO] ============================================
+[2026-09-14 17:00:07] [INFO] 
+[2026-09-14 18:31:35] [INFO] ============================================
+[2026-09-14 18:31:35] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-09-14 18:31:35] [INFO] ============================================
+[2026-09-14 18:31:35] [INFO] 
+[2026-09-14 18:31:35] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-09-14 18:31:35] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-09-14 18:31:36] [INFO] Mendownload prod_kanban_ppic_20260914_183135.sql...
+[2026-09-14 18:31:37] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-09-14 18:31:37] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-09-14 18:31:40] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-09-14 18:31:40] [INFO] Membersihkan file temporary di server...
+[2026-09-14 18:31:40] [INFO] 
+[2026-09-14 18:31:40] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-09-14 18:31:40] [INFO] 
+[2026-09-14 18:31:40] [INFO] ============================================
+[2026-09-14 18:31:40] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-09-14 18:31:40] [INFO] ============================================
+[2026-09-14 18:31:40] [INFO] 
