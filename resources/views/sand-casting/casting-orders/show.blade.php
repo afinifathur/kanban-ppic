@@ -27,6 +27,12 @@
                 <i class="fas fa-print"></i> Cetak Instruksi
             </a>
 
+            @if(in_array($castingOrder->status, ['ISSUED', 'COMPLETED']))
+                <a href="{{ route('sand-casting.casting-results.create', ['casting_order_id' => $castingOrder->id]) }}" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition">
+                    <i class="fas fa-fire"></i> Input Hasil Cor
+                </a>
+            @endif
+
             @if($castingOrder->status === 'DRAFT')
                 <a href="{{ route('sand-casting.casting-orders.edit', $castingOrder) }}" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition">
                     <i class="fas fa-edit"></i> Edit Draft
@@ -213,6 +219,77 @@
                     </tfoot>
                 </table>
             </div>
+        </div>
+
+        <!-- Recorded Casting Results (Heats) Section -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="fas fa-fire text-orange-600"></i> Riwayat Hasil Cor &amp; Heat Number
+                </h3>
+                @if(in_array($castingOrder->status, ['ISSUED', 'COMPLETED']))
+                    <a href="{{ route('sand-casting.casting-results.create', ['casting_order_id' => $castingOrder->id]) }}" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                        <i class="fas fa-plus-circle"></i> Catat Hasil Cor Baru
+                    </a>
+                @endif
+            </div>
+
+            @if($castingOrder->results->isNotEmpty())
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
+                            <tr>
+                                <th class="p-3 text-center w-12">No</th>
+                                <th class="p-3 text-left">Heat Number</th>
+                                <th class="p-3 text-left">Tgl Cor</th>
+                                <th class="p-3 text-left">Furnace / Shift</th>
+                                <th class="p-3 text-left">Operator</th>
+                                <th class="p-3 text-center">Item Dicor</th>
+                                <th class="p-3 text-center font-bold text-emerald-700">Hasil Good</th>
+                                <th class="p-3 text-center font-bold text-red-600">Reject</th>
+                                <th class="p-3 text-center font-bold text-slate-800">Total Berat</th>
+                                <th class="p-3 text-right w-28">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            @foreach($castingOrder->results as $rIdx => $result)
+                                <tr class="hover:bg-slate-50 transition">
+                                    <td class="p-3 text-center font-mono text-slate-400">{{ $rIdx + 1 }}</td>
+                                    <td class="p-3 font-mono font-bold text-base text-slate-900">
+                                        <a href="{{ route('sand-casting.casting-results.show', $result) }}" class="hover:text-blue-600 underline decoration-slate-300">
+                                            {{ $result->heat_number }}
+                                        </a>
+                                    </td>
+                                    <td class="p-3 font-medium">{{ $result->cast_date ? $result->cast_date->format('d/m/Y') : '-' }}</td>
+                                    <td class="p-3 text-slate-600">{{ $result->furnace ?: '-' }} {{ $result->shift ? '('.$result->shift.')' : '' }}</td>
+                                    <td class="p-3 text-slate-600">{{ $result->operator_name ?: '-' }}</td>
+                                    <td class="p-3 text-center font-mono font-bold text-slate-700">{{ $result->lines->count() }} line</td>
+                                    <td class="p-3 text-center font-bold text-emerald-700 text-sm">{{ number_format($result->total_qty_good) }} pcs</td>
+                                    <td class="p-3 text-center font-bold text-red-600 text-sm">{{ number_format($result->total_qty_reject) }} pcs</td>
+                                    <td class="p-3 text-center font-mono font-bold text-slate-800">{{ number_format($result->total_weight_kg, 2) }} kg</td>
+                                    <td class="p-3 text-right">
+                                        <a href="{{ route('sand-casting.casting-results.show', $result) }}" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-2.5 py-1.5 rounded text-xs transition">
+                                            <i class="fas fa-eye"></i> Detail
+                                        </a>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="p-8 text-center text-slate-400">
+                    <i class="fas fa-clipboard-list text-3xl mb-2 text-slate-300 block"></i>
+                    <p class="text-xs font-medium text-slate-500">Belum ada hasil cor aktual yang dicatat untuk Perintah Cor ini.</p>
+                    @if(in_array($castingOrder->status, ['ISSUED', 'COMPLETED']))
+                        <div class="mt-3">
+                            <a href="{{ route('sand-casting.casting-results.create', ['casting_order_id' => $castingOrder->id]) }}" class="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm transition">
+                                <i class="fas fa-fire"></i> Input Hasil Cor Sekarang
+                            </a>
+                        </div>
+                    @endif
+                </div>
+            @endif
         </div>
     </div>
 @endsection

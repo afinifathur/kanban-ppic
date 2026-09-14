@@ -12,10 +12,12 @@
             </a>
             <span class="text-gray-300">/</span>
             <span class="text-gray-700 text-xs font-bold">Rencana</span>
+            @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
             <a href="{{ route('plan.create') }}"
                 class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded shadow text-xs flex items-center gap-2 ml-4">
                 <i class="fas fa-plus"></i> Tambah Rencana Baru
             </a>
+            @endif
         </div>
     </div>
 @endsection

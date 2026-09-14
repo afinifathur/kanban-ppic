@@ -15,6 +15,24 @@ class ProductionPlanDomainTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected User $ppicUser;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $accessPlanning = \Spatie\Permission\Models\Permission::findOrCreate('access_planning');
+        $accessExecution = \Spatie\Permission\Models\Permission::findOrCreate('access_execution');
+
+        $ppicRole = Role::findOrCreate('ppic');
+        $ppicRole->syncPermissions([$accessPlanning, $accessExecution]);
+
+        $this->ppicUser = User::factory()->create([
+            'product_scope' => 'FLANGE_STAINLESS',
+        ]);
+        $this->ppicUser->assignRole('ppic');
+    }
+
     public function test_new_production_plan_does_not_silently_default_to_lost_wax(): void
     {
         $plan = new ProductionPlan;
@@ -40,7 +58,7 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_creating_lost_wax_planning_group_assigns_lost_wax_domain_to_all_rows(): void
     {
-        $user = User::factory()->create();
+        $user = $this->ppicUser;
 
         $payload = [
             'title' => 'Rencana A06',
@@ -91,7 +109,7 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_creating_sand_casting_planning_group_assigns_sand_casting_domain_to_all_rows(): void
     {
-        $user = User::factory()->create();
+        $user = $this->ppicUser;
 
         $payload = [
             'title' => 'Rencana B12 Sand Casting',
@@ -142,7 +160,7 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_missing_production_domain_is_rejected(): void
     {
-        $user = User::factory()->create();
+        $user = $this->ppicUser;
 
         $payload = [
             'title' => 'Rencana Tanpa Domain',
@@ -167,7 +185,7 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_empty_string_production_domain_is_rejected(): void
     {
-        $user = User::factory()->create();
+        $user = $this->ppicUser;
 
         $payload = [
             'title' => 'Rencana Empty Domain',
@@ -193,7 +211,7 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_null_production_domain_is_rejected(): void
     {
-        $user = User::factory()->create();
+        $user = $this->ppicUser;
 
         $payload = [
             'title' => 'Rencana Null Domain',
@@ -219,7 +237,7 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_invalid_production_domain_is_rejected(): void
     {
-        $user = User::factory()->create();
+        $user = $this->ppicUser;
 
         $payload = [
             'title' => 'Rencana Invalid Domain',
@@ -321,8 +339,6 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_domain_edit_allowed_when_plan_is_unstarted_and_has_no_transactions(): void
     {
-        $user = User::factory()->create();
-
         $plan = ProductionPlan::create([
             'code' => 'FRESH-01',
             'title' => 'Fresh Plan',
@@ -333,10 +349,11 @@ class ProductionPlanDomainTest extends TestCase
             'qty_remaining' => 50,
             'line_number' => 1,
             'status' => 'planning',
+            'product_scope' => 'FLANGE_STAINLESS',
             'production_domain' => 'LOST_WAX',
         ]);
 
-        $response = $this->actingAs($user)->put(route('plan.update', $plan->id), [
+        $response = $this->actingAs($this->ppicUser)->put(route('plan.update', $plan->id), [
             'line_number' => 1,
             'po_number' => 'PO-FRESH',
             'item_code' => 'ITM-01',
@@ -352,8 +369,6 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_domain_edit_blocked_when_plan_has_print_order_lines(): void
     {
-        $user = User::factory()->create();
-
         $plan = ProductionPlan::create([
             'code' => 'LOCKED-01',
             'title' => 'Locked Plan',
@@ -364,6 +379,7 @@ class ProductionPlanDomainTest extends TestCase
             'qty_remaining' => 50,
             'line_number' => 1,
             'status' => 'planning',
+            'product_scope' => 'FLANGE_STAINLESS',
             'production_domain' => 'LOST_WAX',
         ]);
 
@@ -372,7 +388,7 @@ class ProductionPlanDomainTest extends TestCase
             'print_order_number' => 'PO-PRINT-01',
             'scheduled_date' => now(),
             'status' => 'ISSUED',
-            'created_by' => $user->id,
+            'created_by' => $this->ppicUser->id,
         ]);
 
         LostWaxPrintOrderLine::create([
@@ -384,7 +400,7 @@ class ProductionPlanDomainTest extends TestCase
             'item_name' => 'Locked Flange',
         ]);
 
-        $response = $this->actingAs($user)->put(route('plan.update', $plan->id), [
+        $response = $this->actingAs($this->ppicUser)->put(route('plan.update', $plan->id), [
             'line_number' => 1,
             'po_number' => 'PO-LOCKED',
             'item_code' => 'ITM-01',
@@ -400,8 +416,6 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_domain_edit_blocked_when_plan_is_active_or_completed(): void
     {
-        $user = User::factory()->create();
-
         $plan = ProductionPlan::create([
             'code' => 'ACTIVE-01',
             'title' => 'Active Plan',
@@ -412,10 +426,11 @@ class ProductionPlanDomainTest extends TestCase
             'qty_remaining' => 30,
             'line_number' => 1,
             'status' => 'active',
+            'product_scope' => 'FLANGE_STAINLESS',
             'production_domain' => 'LOST_WAX',
         ]);
 
-        $response = $this->actingAs($user)->put(route('plan.update', $plan->id), [
+        $response = $this->actingAs($this->ppicUser)->put(route('plan.update', $plan->id), [
             'line_number' => 1,
             'po_number' => 'PO-ACT',
             'item_code' => 'ITM-01',
@@ -431,8 +446,6 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_domain_edit_blocked_when_plan_has_production_items(): void
     {
-        $user = User::factory()->create();
-
         $plan = ProductionPlan::create([
             'code' => 'ITEM-LOCK-01',
             'title' => 'Item Locked Plan',
@@ -443,6 +456,7 @@ class ProductionPlanDomainTest extends TestCase
             'qty_remaining' => 50,
             'line_number' => 1,
             'status' => 'planning',
+            'product_scope' => 'FLANGE_STAINLESS',
             'production_domain' => 'SAND_CASTING',
         ]);
 
@@ -457,7 +471,7 @@ class ProductionPlanDomainTest extends TestCase
             'dept_entry_at' => now(),
         ]);
 
-        $response = $this->actingAs($user)->put(route('plan.update', $plan->id), [
+        $response = $this->actingAs($this->ppicUser)->put(route('plan.update', $plan->id), [
             'line_number' => 1,
             'po_number' => 'PO-ITM-LOCK',
             'item_code' => 'ITM-01',
@@ -515,8 +529,6 @@ class ProductionPlanDomainTest extends TestCase
 
     public function test_delete_plan_allowed_for_fresh_unstarted_plan(): void
     {
-        $user = User::factory()->create();
-
         $plan = ProductionPlan::create([
             'code' => 'DELETE-ME',
             'title' => 'Delete Test',
@@ -527,10 +539,11 @@ class ProductionPlanDomainTest extends TestCase
             'qty_remaining' => 10,
             'line_number' => 1,
             'status' => 'planning',
+            'product_scope' => 'FLANGE_STAINLESS',
             'production_domain' => 'SAND_CASTING',
         ]);
 
-        $response = $this->actingAs($user)->delete(route('plan.destroy', $plan->id));
+        $response = $this->actingAs($this->ppicUser)->delete(route('plan.destroy', $plan->id));
         $response->assertRedirect();
         $this->assertDatabaseMissing('production_plans', ['id' => $plan->id]);
     }

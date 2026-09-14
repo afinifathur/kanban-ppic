@@ -128,6 +128,11 @@ class PlanController extends Controller
 
     public function create()
     {
+        $user = auth()->user();
+        if (! $user->hasRole('ppic') || ! $user->product_scope) {
+            abort(403, 'Hanya user PPIC dengan product scope yang dapat membuat rencana produksi.');
+        }
+
         $customers = \App\Models\Customer::where('is_active', true)->orderBy('name')->get();
 
         return view('plan.create', compact('customers'));
@@ -135,6 +140,11 @@ class PlanController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if (! $user->hasRole('ppic') || ! $user->product_scope) {
+            abort(403, 'Hanya user PPIC dengan product scope yang dapat membuat rencana produksi.');
+        }
+
         $data = $request->validate([
             'date' => 'nullable|date',
             'title' => 'required|string|max:255',
@@ -157,9 +167,7 @@ class PlanController extends Controller
         $customDate = $data['date'] ?? null;
         $customTitle = $data['title'] ?? null;
         $productionDomain = $data['production_domain'];
-        $user = auth()->user();
         $userScope = $user->product_scope;
-        $isPpic = $user->hasRole('ppic');
 
         $skippedCount = 0;
         foreach ($data['plans'] as $plan) {
@@ -180,15 +188,8 @@ class PlanController extends Controller
                 continue;
             }
 
-            // Determine or force scope
-            $itemScope = $plan['product_scope'] ?? null;
-            if ($isPpic && $userScope) {
-                $itemScope = $userScope;
-            } else {
-                if (! $itemScope) {
-                    $itemScope = ProductionPlan::determineProductScopeFromItem($plan['item_name'], $plan['aisi'] ?? null);
-                }
-            }
+            // Always force authenticated user's product_scope
+            $itemScope = $userScope;
 
             $newPlan = [
                 'code' => $code,
@@ -233,7 +234,7 @@ class PlanController extends Controller
     public function edit(ProductionPlan $plan)
     {
         $user = auth()->user();
-        if ($user->hasRole('ppic') && $user->product_scope && $plan->product_scope !== $user->product_scope) {
+        if (! $user->hasRole('ppic') || ! $user->product_scope || $plan->product_scope !== $user->product_scope) {
             abort(403, 'Unauthorized.');
         }
 
@@ -245,7 +246,7 @@ class PlanController extends Controller
     public function update(Request $request, ProductionPlan $plan)
     {
         $user = auth()->user();
-        if ($user->hasRole('ppic') && $user->product_scope && $plan->product_scope !== $user->product_scope) {
+        if (! $user->hasRole('ppic') || ! $user->product_scope || $plan->product_scope !== $user->product_scope) {
             abort(403, 'Unauthorized.');
         }
 
@@ -265,9 +266,8 @@ class PlanController extends Controller
             'production_domain' => 'nullable|string|in:'.ProductionPlan::DOMAIN_LOST_WAX.','.ProductionPlan::DOMAIN_SAND_CASTING,
         ]);
 
-        if ($user->hasRole('ppic') && $user->product_scope) {
-            $data['product_scope'] = $user->product_scope;
-        }
+        // Always force user's own product scope
+        $data['product_scope'] = $user->product_scope;
 
         // Domain lock guard: prevent changing domain if transactions exist or plan is not in planning
         if (isset($data['production_domain']) && $data['production_domain'] !== $plan->production_domain) {
@@ -292,7 +292,7 @@ class PlanController extends Controller
     public function destroy(ProductionPlan $plan)
     {
         $user = auth()->user();
-        if ($user->hasRole('ppic') && $user->product_scope && $plan->product_scope !== $user->product_scope) {
+        if (! $user->hasRole('ppic') || ! $user->product_scope || $plan->product_scope !== $user->product_scope) {
             abort(403, 'Unauthorized.');
         }
 
@@ -318,16 +318,18 @@ class PlanController extends Controller
 
     public function updateTitle(Request $request)
     {
+        $user = auth()->user();
+        if (! $user->hasRole('ppic') || ! $user->product_scope) {
+            abort(403, 'Hanya user PPIC dengan product scope yang dapat memperbarui judul rencana.');
+        }
+
         $request->validate([
             'date' => 'required|date',
             'title' => 'required|string|max:255',
         ]);
 
-        $query = ProductionPlan::whereDate('created_at', $request->date);
-        $user = auth()->user();
-        if ($user->hasRole('ppic') && $user->product_scope) {
-            $query->where('product_scope', $user->product_scope);
-        }
+        $query = ProductionPlan::whereDate('created_at', $request->date)
+            ->where('product_scope', $user->product_scope);
 
         $query->update(['title' => $request->title]);
 

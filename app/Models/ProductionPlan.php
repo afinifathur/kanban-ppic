@@ -83,6 +83,11 @@ class ProductionPlan extends Model
         return $this->hasMany(SandCastingCastingOrderLine::class, 'production_plan_id');
     }
 
+    public function sandCastingResultLines()
+    {
+        return $this->hasMany(SandCastingCastingResultLine::class, 'production_plan_id');
+    }
+
     public function getQtyCastingScheduledAttribute(): int
     {
         if (array_key_exists('qty_casting_scheduled', $this->attributes)) {

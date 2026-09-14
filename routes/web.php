@@ -226,6 +226,18 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/casting-orders/{castingOrder}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'destroy'])->name('casting-orders.destroy');
             Route::post('/casting-orders/{castingOrder}/lines', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'storeLine'])->name('casting-orders.lines.store');
             Route::delete('/casting-orders/{castingOrder}/lines/{line}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'destroyLine'])->name('casting-orders.lines.destroy');
+
+            // Casting Results (Hasil Cor / Heat) - Standalone & Pool-oriented
+            Route::get('/casting-results', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'index'])->name('casting-results.index');
+            Route::get('/casting-results/create', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'create'])->name('casting-results.create');
+            Route::post('/casting-results', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'store'])->name('casting-results.store');
+            Route::get('/casting-results/{castingResult}', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'show'])->name('casting-results.show');
+            Route::get('/casting-results/{castingResult}/lines/{line}/kitir', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'kitir'])->name('casting-results.kitir');
+
+            // Backward compatibility shortcut: redirect /casting-orders/{castingOrder}/results/create to pool create with filter
+            Route::get('/casting-orders/{castingOrder}/results/create', function (\App\Models\SandCastingCastingOrder $castingOrder) {
+                return redirect()->route('sand-casting.casting-results.create', ['casting_order_id' => $castingOrder->id]);
+            });
         });
     });
 });

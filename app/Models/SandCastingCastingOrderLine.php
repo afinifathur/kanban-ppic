@@ -31,4 +31,29 @@ class SandCastingCastingOrderLine extends Model
     {
         return $this->belongsTo(ProductionPlan::class, 'production_plan_id');
     }
+
+    public function resultLines()
+    {
+        return $this->hasMany(SandCastingCastingResultLine::class, 'sand_casting_casting_order_line_id');
+    }
+
+    public function getQtyCastGoodAttribute(): int
+    {
+        return (int) $this->resultLines->sum('qty_good');
+    }
+
+    public function getQtyCastRejectAttribute(): int
+    {
+        return (int) $this->resultLines->sum('qty_reject');
+    }
+
+    public function getQtyCastTotalAttribute(): int
+    {
+        return $this->qty_cast_good + $this->qty_cast_reject;
+    }
+
+    public function getQtyRemainingToCastAttribute(): int
+    {
+        return max(0, $this->qty_ordered - $this->qty_cast_good);
+    }
 }

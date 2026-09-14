@@ -29,15 +29,21 @@
         @if(isset($planTitle) && $planTitle)
         <div class="flex items-center gap-2 bg-blue-50 px-4 py-1.5 rounded-full border border-blue-200 group">
             <span class="text-sm font-bold text-blue-800"><i class="fas fa-clipboard-check mr-1 opacity-70"></i> {{ $planTitle }}</span>
+            @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
             <button onclick="editTitle('{{ $date }}', '{{ $planTitle }}')" class="text-blue-400 hover:text-blue-600 ml-1" title="Edit Judul">
                 <i class="fas fa-edit"></i>
             </button>
+            @endif
         </div>
         @else
         <div class="flex items-center gap-2 bg-gray-50 px-4 py-1.5 rounded-full border border-gray-200 group">
+            @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope)
             <button onclick="editTitle('{{ $date }}', '')" class="text-sm font-bold text-gray-500 hover:text-blue-600" title="Tambah Judul">
                 <i class="fas fa-plus"></i> Tambah Judul
             </button>
+            @else
+            <span class="text-xs font-semibold text-gray-400 italic">Tanpa Judul</span>
+            @endif
         </div>
         @endif
 
@@ -131,28 +137,32 @@
                             <td class="border border-gray-200 px-3 py-2 font-bold text-blue-600 text-center text-lg">
                                 {{ $plan->line_number }}</td>
                             <td class="border border-gray-200 px-3 py-2 text-center">
-                                <div class="flex items-center justify-center gap-2">
-                                    <a href="{{ route('plan.edit', $plan->id) }}" class="text-blue-500 hover:text-blue-700" title="Edit Rencana">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    @php
-                                        $isFrozen = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists();
-                                    @endphp
-                                    @if($isFrozen)
-                                        <span class="text-gray-300 cursor-not-allowed" title="{{ $plan->is_closed ? 'Rencana sudah ditutup dan tidak dapat dihapus.' : ($plan->printOrderLines()->exists() ? 'Rencana sudah memiliki SPK cetak dan tidak dapat dihapus.' : 'Rencana sudah memiliki data produksi dan tidak dapat dihapus.') }}">
-                                            <i class="fas fa-trash"></i>
-                                        </span>
-                                    @else
-                                        <form action="{{ route('plan.destroy', $plan->id) }}" method="POST"
-                                            onsubmit="return confirm('Apakah yakin ingin data {{ $plan->item_name }} dihapus?')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="text-red-500 hover:text-red-700" title="Hapus Rencana">
+                                @if(auth()->user()->hasRole('ppic') && auth()->user()->product_scope && auth()->user()->product_scope === $plan->product_scope)
+                                    <div class="flex items-center justify-center gap-2">
+                                        <a href="{{ route('plan.edit', $plan->id) }}" class="text-blue-500 hover:text-blue-700" title="Edit Rencana">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        @php
+                                            $isFrozen = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists();
+                                        @endphp
+                                        @if($isFrozen)
+                                            <span class="text-gray-300 cursor-not-allowed" title="{{ $plan->is_closed ? 'Rencana sudah ditutup dan tidak dapat dihapus.' : ($plan->printOrderLines()->exists() ? 'Rencana sudah memiliki SPK cetak dan tidak dapat dihapus.' : 'Rencana sudah memiliki data produksi dan tidak dapat dihapus.') }}">
                                                 <i class="fas fa-trash"></i>
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
+                                            </span>
+                                        @else
+                                            <form action="{{ route('plan.destroy', $plan->id) }}" method="POST"
+                                                onsubmit="return confirm('Apakah yakin ingin data {{ $plan->item_name }} dihapus?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-red-500 hover:text-red-700" title="Hapus Rencana">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
+                                @else
+                                    <span class="text-gray-300 text-xs italic">-</span>
+                                @endif
                             </td>
                         </tr>
                     @empty

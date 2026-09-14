@@ -138,6 +138,118 @@ class CastingOrderTest extends TestCase
         $responseStore->assertStatus(403);
     }
 
+    public function test_store_line_with_lost_wax_plan_is_rejected_with_forbidden_403(): void
+    {
+        $scPlan = ProductionPlan::create([
+            'code' => 'SC-DRAFT-01',
+            'title' => 'Rencana SC Draft',
+            'item_code' => '4.101',
+            'item_name' => 'FLANGE BESI 1"',
+            'po_number' => 'PO-DRAFT-01',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'customer' => 'PT LOKAL',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        $lwPlan = ProductionPlan::create([
+            'code' => 'LW-INJECTION',
+            'title' => 'Rencana LW Malicious',
+            'item_code' => '4.102',
+            'item_name' => 'FLANGE BESI 2" LW',
+            'po_number' => 'PO-LW-01',
+            'qty_planned' => 50,
+            'qty_remaining' => 50,
+            'line_number' => 1,
+            'customer' => 'PT LOKAL',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_LOST_WAX,
+            'status' => 'planning',
+        ]);
+
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260914-0099',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'DRAFT',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        // Initial valid line
+        $order->lines()->create([
+            'production_plan_id' => $scPlan->id,
+            'qty_ordered' => 20,
+            'code' => $scPlan->code,
+            'item_name' => $scPlan->item_name,
+        ]);
+
+        // Attempt to dynamically add a LOST_WAX plan line to the draft PCOR
+        $response = $this->actingAs($this->ppicUser)
+            ->post(route('sand-casting.casting-orders.lines.store', $order), [
+                'production_plan_id' => $lwPlan->id,
+                'qty_ordered' => 15,
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertEquals(1, $order->lines()->count(), 'Draft order must still only have the initial valid line');
+    }
+
+    public function test_mixed_domain_post_store_fails_with_403_and_rolls_back_atomically(): void
+    {
+        $scPlan = ProductionPlan::create([
+            'code' => 'SC-VALID',
+            'title' => 'Rencana SC Valid',
+            'item_code' => '4.101',
+            'item_name' => 'FLANGE BESI 1"',
+            'po_number' => 'PO-001',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'customer' => 'PT LOKAL',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        $lwPlan = ProductionPlan::create([
+            'code' => 'LW-INVALID',
+            'title' => 'Rencana LW Invalid',
+            'item_code' => '4.102',
+            'item_name' => 'FLANGE BESI 2" LW',
+            'po_number' => 'PO-002',
+            'qty_planned' => 50,
+            'qty_remaining' => 50,
+            'line_number' => 1,
+            'customer' => 'PT LOKAL',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_LOST_WAX,
+            'status' => 'planning',
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->post(route('sand-casting.casting-orders.store'), [
+                'casting_order_number' => 'PCOR-20260914-0088',
+                'scheduled_date' => '2026-09-14',
+                'items' => [
+                    [
+                        'production_plan_id' => $scPlan->id,
+                        'qty_ordered' => 30,
+                    ],
+                    [
+                        'production_plan_id' => $lwPlan->id,
+                        'qty_ordered' => 20,
+                    ],
+                ],
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertEquals(0, SandCastingCastingOrder::where('casting_order_number', 'PCOR-20260914-0088')->count());
+        $this->assertEquals(0, SandCastingCastingOrder::count(), 'Atomic rollback: no casting order created');
+        $this->assertEquals(0, $scPlan->fresh()->qty_casting_scheduled, 'Quota of valid plan must not be locked');
+    }
+
     public function test_successful_creation_of_casting_order_and_proper_quantity_isolation(): void
     {
         $scPlan = ProductionPlan::create([

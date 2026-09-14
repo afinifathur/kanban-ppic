@@ -268,6 +268,14 @@
                                 <span class="text-sm sidebar-text">Perintah Cor</span>
                             </a>
                         </li>
+                        <li>
+                            <a href="{{ route('sand-casting.casting-results.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.casting-results.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                title="Hasil Cor">
+                                <i class="fas fa-fire-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Hasil Cor</span>
+                            </a>
+                        </li>
                         @endif
                         <li>
                             <a href="{{ route('kanban.index', 'rencana_cor') }}"

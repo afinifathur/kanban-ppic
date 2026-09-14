@@ -28,15 +28,37 @@ class SandCastingCastingOrder extends Model
         return $this->hasMany(SandCastingCastingOrderLine::class, 'sand_casting_casting_order_id');
     }
 
+    public function resultLines()
+    {
+        return $this->hasManyThrough(
+            SandCastingCastingResultLine::class,
+            SandCastingCastingOrderLine::class,
+            'sand_casting_casting_order_id',
+            'sand_casting_casting_order_line_id',
+            'id',
+            'id'
+        );
+    }
+
+    public function results()
+    {
+        return SandCastingCastingResult::whereHas('lines', function ($q) {
+            $q->whereIn('sand_casting_casting_order_line_id', $this->lines()->select('id'));
+        });
+    }
+
+    public function getResultsAttribute()
+    {
+        return $this->results()->with('lines')->get();
+    }
+
     /**
      * Safety guard for cancellation/deletion:
      * Check if downstream production facts (Hasil Cor) exist.
-     * Currently returns false since Hasil Cor is a future phase,
-     * but provides the canonical hook for future checks.
      */
     public function hasRecordedOutcomes(): bool
     {
-        return false;
+        return $this->lines()->whereHas('resultLines')->exists();
     }
 
     public function getQtyOrderedAttribute(): int
