@@ -105,14 +105,6 @@ class SandCastingCastingResultService
                     }
                 }
 
-                // Check over-casting against remaining ordered quota across ALL existing heats
-                $alreadyCastGood = (int) $orderLine->resultLines()->sum('qty_good');
-                $remainingQuota = max(0, $orderLine->qty_ordered - $alreadyCastGood);
-
-                if ($qtyGood > $remainingQuota) {
-                    throw new InvalidArgumentException("Jumlah hasil cor untuk item {$orderLine->code} ({$qtyGood} pcs) melebihi sisa perintah cor ({$remainingQuota} pcs).");
-                }
-
                 // Determine weight calculations
                 $defaultUnitWeight = $orderLine->productionPlan ? (float) ($orderLine->productionPlan->weight ?? 0) : 0;
                 $unitWeight = isset($itemData['unit_weight_kg']) && is_numeric($itemData['unit_weight_kg'])

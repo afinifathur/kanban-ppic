@@ -156,7 +156,7 @@ class MasterDataHeatNumberSyncTest extends TestCase
         $plan = $this->createPlan();
         $orderLine = $this->createIssuedOrderLine($plan, 50);
 
-        // Attempt over-casting (80 > 50) to trigger exception and rollback
+        // Attempt negative qty to trigger exception and rollback
         try {
             $this->service->recordResult(
                 [
@@ -166,7 +166,7 @@ class MasterDataHeatNumberSyncTest extends TestCase
                 [
                     [
                         'sand_casting_casting_order_line_id' => $orderLine->id,
-                        'qty_good' => 80, // Exceeds 50
+                        'qty_good' => -5,
                         'qty_reject' => 0,
                     ],
                 ],
@@ -174,7 +174,7 @@ class MasterDataHeatNumberSyncTest extends TestCase
             );
             $this->fail('Expected InvalidArgumentException was not thrown.');
         } catch (InvalidArgumentException $e) {
-            $this->assertStringContainsString('melebihi sisa perintah cor', $e->getMessage());
+            $this->assertStringContainsString('tidak boleh negatif', $e->getMessage());
         }
 
         Queue::assertNotPushed(SyncCastingResultToMasterDataJob::class);

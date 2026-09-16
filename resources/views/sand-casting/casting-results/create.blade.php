@@ -415,7 +415,7 @@
 
         const goodInput = document.getElementById('stage_qty_good');
         goodInput.value = remainingQuota;
-        goodInput.max = remainingQuota;
+        goodInput.removeAttribute('max');
         document.getElementById('stage_qty_reject').value = 0;
 
         stagingRow.classList.remove('hidden');
@@ -440,11 +440,6 @@
 
         if (good === 0 && reject === 0) {
             alert('Masukkan kuantitas Good atau Reject minimal 1 pcs.');
-            return;
-        }
-
-        if (good > remainingQuota) {
-            alert(`Kuantitas Good (${good} pcs) melebihi sisa kuota perintah cor (${remainingQuota} pcs).`);
             return;
         }
 
@@ -476,7 +471,11 @@
 
         // Reset search and temporary staging input area only (preserving all staged lines)
         document.getElementById('search_prod_code').value = '';
-        document.getElementById('candidateContainer').innerHTML = '<div class="text-xs text-emerald-300 font-semibold py-2"><i class="fas fa-check"></i> Item berhasil ditambahkan ke Heat. Silakan cari Production Code berikutnya.</div>';
+        if (good > remainingQuota) {
+            document.getElementById('candidateContainer').innerHTML = `<div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 font-semibold my-2"><i class="fas fa-exclamation-triangle mr-1"></i> Qty Good (${good} pcs) melebihi sisa kuota PCOR (${remainingQuota} pcs). Data tetap ditambahkan ke Heat dan dapat disimpan.</div>`;
+        } else {
+            document.getElementById('candidateContainer').innerHTML = '<div class="text-xs text-emerald-300 font-semibold py-2"><i class="fas fa-check"></i> Item berhasil ditambahkan ke Heat. Silakan cari Production Code berikutnya.</div>';
+        }
         document.getElementById('stagingInputRow').classList.add('hidden');
         selectedLineData = null;
         document.getElementById('search_prod_code').focus();
@@ -493,11 +492,19 @@
         if (field === 'qtyGood') {
             let val = parseInt(value) || 0;
             if (val < 0) val = 0;
-            if (val > stagedItems[index].remaining) {
-                alert(`Kuantitas Good melebihi sisa kuota perintah (${stagedItems[index].remaining} pcs).`);
-                val = stagedItems[index].remaining;
-            }
             stagedItems[index].qtyGood = val;
+            const elWarning = document.getElementById(`goodWarning_${index}`);
+            if (elWarning) {
+                if (val > stagedItems[index].remaining) {
+                    elWarning.innerHTML = `
+                        <div class="text-[10px] text-amber-700 font-semibold mt-1 text-center bg-amber-100/70 rounded px-1 py-0.5" title="Qty Good (${val} pcs) melebihi sisa kuota PCOR (${stagedItems[index].remaining} pcs). Data tetap dapat disimpan.">
+                            <i class="fas fa-exclamation-triangle mr-0.5"></i> +${val - stagedItems[index].remaining} over kuota
+                        </div>
+                    `;
+                } else {
+                    elWarning.innerHTML = '';
+                }
+            }
         } else if (field === 'qtyReject') {
             let val = parseInt(value) || 0;
             if (val < 0) val = 0;
@@ -555,9 +562,16 @@
                             ${(item.remaining || 0).toLocaleString()}
                         </td>
                         <td class="p-2 bg-emerald-50/30">
-                            <input type="number" name="items[${index}][qty_good]" value="${item.qtyGood}" min="0" max="${item.remaining}"
+                            <input type="number" name="items[${index}][qty_good]" value="${item.qtyGood}" min="0"
                                    class="w-full text-center font-mono font-bold text-emerald-800 bg-white border border-emerald-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                                    onchange="updateStagedItem(${index}, 'qtyGood', this.value)">
+                            <div id="goodWarning_${index}">
+                                ${item.qtyGood > item.remaining ? `
+                                    <div class="text-[10px] text-amber-700 font-semibold mt-1 text-center bg-amber-100/70 rounded px-1 py-0.5" title="Qty Good (${item.qtyGood} pcs) melebihi sisa kuota PCOR (${item.remaining} pcs). Data tetap dapat disimpan.">
+                                        <i class="fas fa-exclamation-triangle mr-0.5"></i> +${item.qtyGood - item.remaining} over kuota
+                                    </div>
+                                ` : ''}
+                            </div>
                         </td>
                         <td class="p-2 bg-red-50/30">
                             <input type="number" name="items[${index}][qty_reject]" value="${item.qtyReject}" min="0"
