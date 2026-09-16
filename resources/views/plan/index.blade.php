@@ -3,8 +3,8 @@
 @section('top_bar')
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-2">
         <div>
-            <h1 class="text-lg font-bold text-gray-800 leading-tight">Rencana Produksi</h1>
-            <p class="text-gray-500 text-[10px]">Daftar rencana produksi (PPIC Planning) per tanggal & kelompok kerja</p>
+            <h1 class="text-lg font-bold text-gray-800 leading-tight">Production Plan Control Tower</h1>
+            <p class="text-gray-500 text-[10px]">Monitoring pencapaian target rencana produksi PPIC terhadap eksekusi awal domain</p>
         </div>
         <div class="flex items-center gap-2">
             <a href="{{ route('dashboard') }}" class="text-gray-500 hover:text-gray-700 text-xs">
@@ -61,9 +61,9 @@
                     <select name="status" onchange="this.form.submit()"
                         class="text-xs border-gray-300 rounded-md py-1.5 pl-2.5 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white">
                         <option value="">Semua Status</option>
-                        <option value="planning" {{ $selectedStatus === 'planning' ? 'selected' : '' }}>Planning (Not Started)</option>
-                        <option value="active" {{ $selectedStatus === 'active' ? 'selected' : '' }}>Active (In Progress)</option>
-                        <option value="completed" {{ $selectedStatus === 'completed' ? 'selected' : '' }}>Completed</option>
+                        <option value="NOT_STARTED" {{ in_array($selectedStatus, ['NOT_STARTED', 'planning']) ? 'selected' : '' }}>Not Started (0%)</option>
+                        <option value="IN_PROGRESS" {{ in_array($selectedStatus, ['IN_PROGRESS', 'active']) ? 'selected' : '' }}>In Progress (1% - 99%)</option>
+                        <option value="COMPLETED" {{ in_array($selectedStatus, ['COMPLETED', 'completed']) ? 'selected' : '' }}>Completed (100%+)</option>
                     </select>
 
                     <button type="submit" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-md text-xs border border-gray-300">
@@ -79,109 +79,122 @@
             </form>
         </div>
 
-        <!-- Planning Groups List -->
+        <!-- Planning Groups (Control Tower Cards) -->
         <div class="space-y-3">
             @forelse($dailyStats as $stat)
                 @php
-                    $agingDays = \Carbon\Carbon::parse($stat->date)->diffInDays(now()->startOfDay());
-                    $agingColor = $agingDays < 7 ? 'blue' : ($agingDays < 14 ? 'yellow' : 'red');
-
-                    // Determine domain presentation
-                    $hasLostWax = ($stat->lost_wax_count ?? 0) > 0;
-                    $hasSandCasting = ($stat->sand_casting_count ?? 0) > 0;
-                    $primaryDomain = $stat->production_domain;
+                    $detailParams = array_filter([
+                        'date' => $stat->plan_date,
+                        'title' => $stat->title,
+                        'production_domain' => $stat->production_domain,
+                        'product_scope' => $stat->product_scope,
+                    ]);
                 @endphp
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-{{ $agingColor }}-500 hover:shadow-md transition-shadow">
-                    <a href="{{ route('plan.index', array_filter(['date' => $stat->date, 'production_domain' => $selectedDomain !== 'ALL' ? $selectedDomain : null])) }}" class="block p-4">
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                            <div class="flex-1 pr-4">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                        @if($stat->title)
-                                            <i class="fas fa-tags text-blue-500 opacity-80"></i>
-                                            {{ $stat->title }}
-                                        @else
-                                            <i class="far fa-calendar-alt text-gray-400"></i>
-                                            {{ \Carbon\Carbon::parse($stat->date)->isoFormat('dddd, D MMMM Y') }}
-                                        @endif
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-{{ $stat->aging_color }}-500 hover:shadow-md transition-shadow group">
+                    <a href="{{ route('plan.index', $detailParams) }}" class="block p-4">
+                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                            
+                            <!-- ZONE 1: IDENTITY (~30% / 4 cols) -->
+                            <div class="lg:col-span-4 border-b lg:border-b-0 lg:border-r border-gray-100 pb-3 lg:pb-0 lg:pr-4 space-y-1.5">
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    @if($stat->production_domain === 'LOST_WAX')
+                                        <span class="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                                            <i class="fas fa-fire text-amber-600 text-[9px]"></i> LOST WAX
+                                        </span>
+                                    @elseif($stat->production_domain === 'SAND_CASTING')
+                                        <span class="text-[10px] bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                                            <i class="fas fa-cubes text-indigo-600 text-[9px]"></i> SAND CASTING
+                                        </span>
+                                    @endif
+
+                                    @if($stat->product_scope)
+                                        <span class="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-semibold px-2 py-0.5 rounded">
+                                            {{ str_replace('_', ' ', $stat->product_scope) }}
+                                        </span>
+                                    @endif
+
+                                    @if($stat->aging_days > 0)
+                                        <span class="text-[10px] bg-{{ $stat->aging_color }}-50 text-{{ $stat->aging_color }}-700 px-1.5 py-0.5 rounded font-bold border border-{{ $stat->aging_color }}-200">
+                                            {{ $stat->aging_days }} Hari
+                                        </span>
+                                    @endif
+                                </div>
+
+                                <div class="text-base font-bold text-gray-800 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                                    <i class="fas fa-clipboard-list text-blue-500 opacity-80 text-xs"></i>
+                                    <span>{{ $stat->title ?: 'Rencana Kerja' }}</span>
+                                </div>
+
+                                <div class="text-xs text-gray-500 flex flex-wrap items-center gap-2 pt-0.5">
+                                    <span class="flex items-center gap-1 text-gray-600">
+                                        <i class="far fa-calendar-alt text-gray-400"></i>
+                                        {{ \Carbon\Carbon::parse($stat->plan_date)->isoFormat('dddd, D MMMM Y') }}
+                                    </span>
+                                    <span class="text-gray-300">•</span>
+                                    <span class="flex items-center gap-1 text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[11px] font-medium">
+                                        <i class="fas fa-user-tie text-[10px] opacity-70"></i>
+                                        {{ $stat->unique_customers ?: 'Tanpa Customer' }}
+                                    </span>
+                                    <span class="text-gray-300">•</span>
+                                    <span class="text-gray-500 text-[11px]">
+                                        {{ $stat->total_items }} item
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- ZONE 2: EXECUTION PROGRESS (~50% / 6 cols) -->
+                            <div class="lg:col-span-6 px-0 lg:px-4 py-1 space-y-2">
+                                <div class="flex items-baseline justify-between">
+                                    <div>
+                                        <span class="text-xl font-extrabold text-gray-900 tracking-tight">{{ number_format($stat->total_actual_good) }}</span>
+                                        <span class="text-xs text-gray-500 font-semibold">/ {{ number_format($stat->total_planned) }} pcs</span>
+                                    </div>
+                                    <div class="flex items-baseline gap-1">
+                                        <span class="text-xs text-gray-400 font-medium">Target:</span>
+                                        <span class="text-sm font-extrabold {{ $stat->is_over_target ? 'text-emerald-600' : 'text-blue-600' }}">
+                                            {{ $stat->achievement_percentage }}%
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden shadow-inner">
+                                    <div class="h-2.5 rounded-full transition-all duration-500 {{ $stat->execution_status === 'COMPLETED' ? 'bg-emerald-500' : ($stat->execution_status === 'IN_PROGRESS' ? 'bg-blue-600' : 'bg-gray-400') }}"
+                                        style="width: {{ $stat->progress_percentage }}%"></div>
+                                </div>
+
+                                <!-- Progress Subtitle Details -->
+                                <div class="flex items-center justify-between text-[11px] pt-0.5">
+                                    <span class="text-gray-500 font-medium flex items-center gap-1">
+                                        <i class="fas {{ $stat->production_domain === 'SAND_CASTING' ? 'fa-fire-alt text-amber-500' : 'fa-print text-blue-500' }} text-[10px]"></i>
+                                        {{ $stat->production_domain === 'SAND_CASTING' ? 'Good Hasil Cor' : 'Good Hasil Cetak' }}
                                     </span>
 
-                                    <!-- Domain Badge -->
-                                    @if($hasLostWax && !$hasSandCasting)
-                                        <span class="text-[11px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
-                                            <i class="fas fa-fire text-amber-600 text-[10px]"></i> LOST WAX
+                                    @if($stat->is_over_target)
+                                        <span class="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                            +{{ number_format($stat->over_target_qty) }} pcs Over Target
                                         </span>
-                                    @elseif($hasSandCasting && !$hasLostWax)
-                                        <span class="text-[11px] bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
-                                            <i class="fas fa-cubes text-indigo-600 text-[10px]"></i> SAND CASTING
+                                    @else
+                                        <span class="text-gray-600">
+                                            Sisa target: <strong class="text-gray-800">{{ number_format($stat->remaining_qty) }}</strong> pcs
                                         </span>
-                                    @elseif($hasLostWax && $hasSandCasting)
-                                        <span class="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 font-semibold px-2 py-0.5 rounded">LOST WAX: {{ $stat->lost_wax_count }}</span>
-                                        <span class="text-[10px] bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold px-2 py-0.5 rounded">SAND CASTING: {{ $stat->sand_casting_count }}</span>
-                                    @elseif($primaryDomain)
-                                        <span class="text-[11px] bg-gray-100 text-gray-800 border border-gray-300 font-bold px-2.5 py-0.5 rounded-md uppercase">
-                                            {{ str_replace('_', ' ', $primaryDomain) }}
-                                        </span>
-                                    @endif
-
-                                    @if($agingDays > 0)
-                                        <span class="text-[10px] bg-{{ $agingColor }}-100 text-{{ $agingColor }}-700 px-2 py-0.5 rounded-full font-bold uppercase border border-{{ $agingColor }}-200">
-                                            {{ $agingDays }} Hari
-                                        </span>
-                                    @endif
-                                </div>
-
-                                <div class="text-xs text-gray-600 mt-2 flex flex-wrap gap-4">
-                                    <span><i class="fas fa-clipboard-list text-blue-500 w-4"></i> Total Rencana:
-                                        <strong class="text-gray-800">{{ number_format($stat->total_planned) }}</strong> pcs</span>
-                                    <span><i class="fas fa-hourglass-half text-orange-500 w-4"></i> Sisa:
-                                        <strong class="text-orange-600">{{ number_format($stat->total_remaining) }}</strong> pcs</span>
-                                </div>
-
-                                <div class="mt-2 text-xs flex items-center flex-wrap gap-3">
-                                    <div class="text-blue-800 font-medium flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                                        <i class="fas fa-user-tie opacity-70"></i>
-                                        {{ $stat->unique_customers ?: 'No Customer' }}
-                                    </div>
-                                    <div class="text-gray-500 flex items-center gap-1">
-                                        <i class="fas fa-layer-group text-gray-400"></i> {{ $stat->items_count }} item dalam antrian
-                                    </div>
-                                    @if($stat->title)
-                                        <div class="text-gray-400 text-[11px] font-medium flex items-center gap-1">
-                                            <i class="far fa-calendar-alt opacity-70"></i>
-                                            {{ \Carbon\Carbon::parse($stat->date)->isoFormat('dddd, D MMMM Y') }}
-                                        </div>
                                     @endif
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-4 self-end md:self-center">
-                                @php
-                                    if ($stat->active_count > 0) {
-                                        $overallStatus = 'In Progress';
-                                        $statusClass = 'bg-blue-100 text-blue-700 border-blue-200';
-                                        $statusIcon = 'fa-sync fa-spin';
-                                    } elseif ($stat->completed_count > 0 && $stat->planning_count == 0 && $stat->active_count == 0) {
-                                        $overallStatus = 'Completed';
-                                        $statusClass = 'bg-green-100 text-green-700 border-green-200';
-                                        $statusIcon = 'fa-check-double';
-                                    } elseif ($stat->planning_count > 0) {
-                                        $overallStatus = 'Not Started';
-                                        $statusClass = 'bg-gray-100 text-gray-600 border-gray-200';
-                                        $statusIcon = 'fa-clock';
-                                    } else {
-                                        $overallStatus = 'Unknown';
-                                        $statusClass = 'bg-gray-100 text-gray-400 border-gray-200';
-                                        $statusIcon = 'fa-question-circle';
-                                    }
-                                @endphp
-                                <div class="{{ $statusClass }} px-3 py-1 rounded-full text-[10px] font-bold uppercase border flex items-center gap-1.5 shadow-sm">
-                                    <i class="fas {{ $statusIcon }}"></i> {{ $overallStatus }}
+                            <!-- ZONE 3: STATUS & ACTION (~20% / 2 cols) -->
+                            <div class="lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2.5 border-t lg:border-t-0 pt-2 lg:pt-0">
+                                <div class="{{ $stat->status_class }} px-3 py-1 rounded-full text-[10px] font-bold uppercase border flex items-center gap-1.5 shadow-sm">
+                                    <i class="fas {{ $stat->status_icon }}"></i>
+                                    <span>{{ $stat->status_label }}</span>
                                 </div>
-                                <div class="text-gray-300">
-                                    <i class="fas fa-chevron-right fa-lg"></i>
-                                </div>
+
+                                <span class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center gap-1 transition-colors">
+                                    Buka Detail
+                                    <i class="fas fa-arrow-right text-[10px] transition-transform group-hover:translate-x-1"></i>
+                                </span>
                             </div>
+
                         </div>
                     </a>
                 </div>

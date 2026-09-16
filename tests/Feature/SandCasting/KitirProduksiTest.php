@@ -119,9 +119,9 @@ class KitirProduksiTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('KITIR PRODUKSI');
-        $response->assertSee('SAND CASTING');
         $response->assertSee('PERONI');
-        $response->assertSee('CASTING THE FUTURE');
+        $response->assertDontSee('SAND CASTING');
+        $response->assertDontSee('CASTING THE FUTURE');
     }
 
     public function test_result_and_mismatched_result_line_is_rejected(): void

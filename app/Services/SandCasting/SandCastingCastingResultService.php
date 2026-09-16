@@ -2,6 +2,7 @@
 
 namespace App\Services\SandCasting;
 
+use App\Jobs\SyncCastingResultToMasterDataJob;
 use App\Models\SandCastingCastingOrderLine;
 use App\Models\SandCastingCastingResult;
 use App\Models\User;
@@ -44,8 +45,10 @@ class SandCastingCastingResultService
 
         $user = User::find($recordedBy);
 
-        return DB::transaction(function () use ($headerData, $linesData, $recordedBy, $heatNumber, $castDate, $user) {
+        $result = DB::transaction(function () use ($headerData, $linesData, $recordedBy, $heatNumber, $castDate, $user) {
             $validLines = [];
+
+            $seenLineIds = [];
 
             foreach ($linesData as $index => $itemData) {
                 $lineId = (int) ($itemData['sand_casting_casting_order_line_id'] ?? 0);
@@ -60,6 +63,11 @@ class SandCastingCastingResultService
                 if ($qtyGood === 0 && $qtyReject === 0) {
                     continue;
                 }
+
+                if (in_array($lineId, $seenLineIds, true)) {
+                    throw new InvalidArgumentException("Baris Perintah Cor ID {$lineId} tidak boleh dimasukkan lebih dari satu kali dalam satu Heat.");
+                }
+                $seenLineIds[] = $lineId;
 
                 // Lock the individual order line
                 $orderLine = SandCastingCastingOrderLine::lockForUpdate()->find($lineId);
@@ -115,13 +123,17 @@ class SandCastingCastingResultService
                     ? (float) $itemData['total_weight_kg']
                     : round($qtyGood * $unitWeight, 2);
 
+                $resolvedNotes = ! empty($itemData['notes'])
+                    ? $itemData['notes']
+                    : ($orderLine->notes ?: ($orderLine->productionPlan ? $orderLine->productionPlan->title : null));
+
                 $validLines[] = [
                     'order_line' => $orderLine,
                     'qty_good' => $qtyGood,
                     'qty_reject' => $qtyReject,
                     'unit_weight_kg' => $unitWeight,
                     'total_weight_kg' => $totalWeight,
-                    'notes' => $itemData['notes'] ?? null,
+                    'notes' => $resolvedNotes,
                 ];
             }
 
@@ -158,5 +170,10 @@ class SandCastingCastingResultService
 
             return $result->load(['lines.castingOrderLine.castingOrder', 'lines.productionPlan', 'recorder']);
         });
+
+        // Dispatch asynchronous sync job to Master Data KPI after commit
+        SyncCastingResultToMasterDataJob::dispatch($result->id)->afterCommit();
+
+        return $result;
     }
 }

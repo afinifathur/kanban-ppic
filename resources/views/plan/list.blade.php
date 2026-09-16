@@ -24,6 +24,12 @@
                     </span>
                 @endif
             @endif
+
+            @if(isset($headerScope) && $headerScope)
+                <span class="text-xs bg-slate-100 text-slate-800 border border-slate-300 font-bold px-2.5 py-1 rounded-full uppercase">
+                    {{ str_replace('_', ' ', $headerScope) }}
+                </span>
+            @endif
         </div>
         
         @if(isset($planTitle) && $planTitle)
@@ -83,8 +89,10 @@
                         <th class="border border-gray-200 px-3 py-2 text-left">{!! sortLink('item_name', 'Item Name') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('production_domain', 'Domain', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('qty_planned', 'Planned', 'center') !!}</th>
-                        <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('hasil_cor', 'Hasil Cor', 'center') !!}</th>
-                        <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('qty_remaining', 'Remaining', 'center') !!}</th>
+                        <th class="border border-gray-200 px-3 py-2 text-center">
+                            {!! sortLink('actual_execution', ($headerDomain === 'SAND_CASTING' ? 'Hasil Cor (Good)' : ($headerDomain === 'LOST_WAX' ? 'Hasil Cetak (Good)' : 'Actual Good')), 'center') !!}
+                        </th>
+                        <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('remaining_target', 'Sisa Target', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('status', 'Status', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">{!! sortLink('line_number', 'Line', 'center') !!}</th>
                         <th class="border border-gray-200 px-3 py-2 text-center">Action</th>
@@ -95,7 +103,7 @@
                         <tr class="hover:bg-gray-50 text-[12px]">
                             <td class="border border-gray-200 px-3 py-2 text-center text-gray-400">
                                 {{ $index + 1 }}</td>
-                            <td class="border border-gray-200 px-3 py-2 font-mono text-xs text-center">
+                            <td class="border border-gray-200 px-3 py-2 font-mono text-xs text-center font-bold">
                                 {{ $plan->code }}</td>
                             <td class="border border-gray-200 px-3 py-2">
                                 <div class="uppercase font-semibold text-slate-700">{{ $plan->customer ?: '-' }}</div>
@@ -123,16 +131,31 @@
                             </td>
                             <td class="border border-gray-200 px-3 py-2 text-center font-bold">
                                 {{ number_format($plan->qty_planned) }}</td>
-                            <td class="border border-gray-200 px-3 py-2 text-center font-bold text-green-600">
-                                {{ number_format($plan->qty_planned - $plan->qty_remaining) }}</td>
-                            <td class="border border-gray-200 px-3 py-2 text-center font-bold text-orange-600">
-                                {{ number_format($plan->qty_remaining) }}</td>
+                            <td class="border border-gray-200 px-3 py-2 text-center font-bold {{ $plan->actual_execution > 0 ? ($plan->actual_execution >= $plan->qty_planned ? 'text-emerald-600' : 'text-blue-600') : 'text-gray-400' }}">
+                                {{ number_format($plan->actual_execution) }}</td>
                             <td class="border border-gray-200 px-3 py-2 text-center">
-                                <span
-                                    class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase 
-                                    {{ $plan->status == 'planning' ? 'bg-gray-100 text-gray-600' : ($plan->status == 'active' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600') }}">
-                                    {{ $plan->status }}
-                                </span>
+                                @if($plan->over_target > 0)
+                                    <span class="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                        +{{ number_format($plan->over_target) }} Over
+                                    </span>
+                                @else
+                                    <span class="font-bold text-gray-700">{{ number_format($plan->remaining_target) }}</span>
+                                @endif
+                            </td>
+                            <td class="border border-gray-200 px-3 py-2 text-center">
+                                @if($plan->execution_status === 'COMPLETED')
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center gap-1">
+                                        <i class="fas fa-check-double text-[9px]"></i> Completed
+                                    </span>
+                                @elseif($plan->execution_status === 'IN_PROGRESS')
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-800 border border-blue-300 flex items-center justify-center gap-1">
+                                        <i class="fas fa-sync-alt fa-spin text-[9px]"></i> In Progress
+                                    </span>
+                                @else
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-gray-700 border border-gray-300 flex items-center justify-center gap-1">
+                                        <i class="fas fa-clock text-[9px]"></i> Not Started
+                                    </span>
+                                @endif
                             </td>
                             <td class="border border-gray-200 px-3 py-2 font-bold text-blue-600 text-center text-lg">
                                 {{ $plan->line_number }}</td>

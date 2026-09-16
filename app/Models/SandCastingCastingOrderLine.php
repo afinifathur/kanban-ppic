@@ -22,6 +22,13 @@ class SandCastingCastingOrderLine extends Model
         'qty_ordered' => 'integer',
     ];
 
+    protected $appends = [
+        'qty_cast_good',
+        'qty_cast_reject',
+        'qty_cast_total',
+        'qty_remaining_to_cast',
+    ];
+
     public function castingOrder()
     {
         return $this->belongsTo(SandCastingCastingOrder::class, 'sand_casting_casting_order_id');

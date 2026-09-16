@@ -200,7 +200,7 @@ class CastingResultController extends Controller
         ]);
 
         $generator = new BarcodeGeneratorPNG;
-        $barcodeBase64 = base64_encode($generator->getBarcode($line->traveler_number, $generator::TYPE_CODE_128, 2, 55));
+        $barcodeBase64 = base64_encode($generator->getBarcode($line->traveler_number, $generator::TYPE_CODE_128, 3, 90));
 
         return view('sand-casting.casting-results.kitir', compact('castingResult', 'line', 'barcodeBase64'));
     }

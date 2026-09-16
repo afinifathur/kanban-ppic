@@ -519,4 +519,123 @@ class CastingResultServiceAndControllerTest extends TestCase
             ],
         ], $this->otherScopeUser->id);
     }
+
+    public function test_duplicate_order_line_in_same_heat_is_rejected(): void
+    {
+        $plan = $this->createPlan();
+
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260914-0012',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('tidak boleh dimasukkan lebih dari satu kali');
+
+        $this->service->recordResult([
+            'heat_number' => 'A213092601',
+            'cast_date' => '2026-09-14',
+        ], [
+            [
+                'sand_casting_casting_order_line_id' => $line->id,
+                'qty_good' => 20,
+            ],
+            [
+                'sand_casting_casting_order_line_id' => $line->id,
+                'qty_good' => 30,
+            ],
+        ], $this->ppicUser->id);
+    }
+
+    public function test_multi_line_heat_creates_one_heat_with_multiple_result_lines_and_distinct_travelers(): void
+    {
+        $plan1 = $this->createPlan(['code' => '268ET001', 'item_name' => 'Item 268ET001', 'title' => 'Rencana 268ET001']);
+        $plan2 = $this->createPlan(['code' => '268AB002', 'item_name' => 'Item 268AB002', 'title' => 'Rencana 268AB002']);
+
+        $order1 = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-001',
+            'scheduled_date' => '2026-09-15',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        $order2 = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-002',
+            'scheduled_date' => '2026-09-15',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        $line1 = $order1->lines()->create([
+            'production_plan_id' => $plan1->id,
+            'qty_ordered' => 300,
+            'code' => '268ET001',
+            'item_name' => 'Item 268ET001',
+        ]);
+
+        $line2 = $order2->lines()->create([
+            'production_plan_id' => $plan2->id,
+            'qty_ordered' => 100,
+            'code' => '268AB002',
+            'item_name' => 'Item 268AB002',
+        ]);
+
+        $payload = [
+            'heat_number' => 'A214092601',
+            'cast_date' => '2026-09-15',
+            'furnace' => 'F-01',
+            'shift' => '1',
+            'items' => [
+                [
+                    'sand_casting_casting_order_line_id' => $line1->id,
+                    'qty_good' => 100,
+                    'qty_reject' => 5,
+                ],
+                [
+                    'sand_casting_casting_order_line_id' => $line2->id,
+                    'qty_good' => 50,
+                    'qty_reject' => 2,
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($this->ppicUser)->post(route('sand-casting.casting-results.store'), $payload);
+
+        // Exactly 1 Heat created
+        $this->assertEquals(1, SandCastingCastingResult::where('heat_number', 'A214092601')->count());
+        $heat = SandCastingCastingResult::where('heat_number', 'A214092601')->firstOrFail();
+
+        $response->assertRedirect(route('sand-casting.casting-results.show', $heat));
+
+        // Exactly 2 ResultLines belong to this one Heat
+        $this->assertCount(2, $heat->lines);
+
+        $resultLine1 = $heat->lines->where('sand_casting_casting_order_line_id', $line1->id)->first();
+        $resultLine2 = $heat->lines->where('sand_casting_casting_order_line_id', $line2->id)->first();
+
+        $this->assertNotNull($resultLine1);
+        $this->assertNotNull($resultLine2);
+
+        $this->assertEquals(100, $resultLine1->qty_good);
+        $this->assertEquals(5, $resultLine1->qty_reject);
+        $this->assertEquals('Rencana 268ET001', $resultLine1->notes);
+
+        $this->assertEquals(50, $resultLine2->qty_good);
+        $this->assertEquals(2, $resultLine2->qty_reject);
+        $this->assertEquals('Rencana 268AB002', $resultLine2->notes);
+
+        // Unique Travelers
+        $this->assertNotEmpty($resultLine1->traveler_number);
+        $this->assertNotEmpty($resultLine2->traveler_number);
+        $this->assertNotEquals($resultLine1->traveler_number, $resultLine2->traveler_number);
+    }
 }

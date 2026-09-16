@@ -155,17 +155,20 @@
 
             <!-- Staging input controls if selected line -->
             <div id="stagingInputRow" class="hidden mt-4 pt-4 border-t border-slate-700 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-end">
-                <div class="md:col-span-4">
-                    <div class="text-[11px] font-bold text-slate-300 uppercase">Item Terpilih:</div>
-                    <div class="text-xs font-semibold text-white truncate" id="selectedItemTitle">-</div>
-                    <div class="text-[11px] font-mono text-amber-300" id="selectedItemSubtitle">-</div>
+                <div class="md:col-span-6 space-y-1">
+                    <div class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Item Terpilih:</div>
+                    <div class="text-xs font-bold text-white truncate" id="selectedItemTitle">-</div>
+                    <div class="text-[11px] font-mono text-amber-300 flex flex-wrap gap-x-2" id="selectedItemSubtitle">-</div>
+                    <div class="text-[11px] text-slate-300">
+                        <span class="text-slate-400 font-medium">Keterangan:</span> <span id="selectedItemKeterangan" class="font-semibold text-slate-200">-</span>
+                    </div>
                 </div>
 
                 <div class="md:col-span-2">
                     <label class="block text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1">
                         Qty Good (Pcs) <span class="text-red-400">*</span>
                     </label>
-                    <input type="number" id="stage_qty_good" min="1" placeholder="0"
+                    <input type="number" id="stage_qty_good" min="0" placeholder="0"
                            class="w-full text-center text-xs font-mono font-bold bg-white text-emerald-800 px-2 py-2 rounded-lg border border-emerald-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                            onkeydown="if(event.key==='Enter'){ event.preventDefault(); addStagedLineToHeat(); }">
                 </div>
@@ -176,15 +179,6 @@
                     </label>
                     <input type="number" id="stage_qty_reject" min="0" placeholder="0"
                            class="w-full text-center text-xs font-mono font-bold bg-white text-red-700 px-2 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-400 focus:outline-none"
-                           onkeydown="if(event.key==='Enter'){ event.preventDefault(); addStagedLineToHeat(); }">
-                </div>
-
-                <div class="md:col-span-2">
-                    <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                        Keterangan Line
-                    </label>
-                    <input type="text" id="stage_notes" placeholder="Catatan..."
-                           class="w-full text-xs bg-white text-slate-900 px-2.5 py-2 rounded-lg border border-slate-300 focus:outline-none"
                            onkeydown="if(event.key==='Enter'){ event.preventDefault(); addStagedLineToHeat(); }">
                 </div>
 
@@ -268,6 +262,21 @@
     let stagedItems = [];
     let selectedLineData = null;
 
+    // Helper to resolve remaining quota
+    function getRemainingQuota(line) {
+        if (typeof line.qty_remaining_to_cast === 'number') {
+            return line.qty_remaining_to_cast;
+        }
+        const ordered = parseInt(line.qty_ordered) || 0;
+        const good = parseInt(line.qty_cast_good) || 0;
+        return Math.max(0, ordered - good);
+    }
+
+    // Helper to resolve automatic line description
+    function getAutoKeterangan(line) {
+        return line.notes || (line.production_plan ? line.production_plan.title : '') || '-';
+    }
+
     // Populate Datalist
     document.addEventListener('DOMContentLoaded', () => {
         const datalist = document.getElementById('availableCodesList');
@@ -283,8 +292,8 @@
         if (preselectedOrderId) {
             const orderLines = AVAILABLE_LINES.filter(l => l.sand_casting_casting_order_id === preselectedOrderId);
             if (orderLines.length > 0) {
-                // Auto-add all lines from preselected order with default 0 so operator can adjust directly
                 orderLines.forEach(l => {
+                    const rem = getRemainingQuota(l);
                     stagedItems.push({
                         lineId: l.id,
                         orderNumber: l.casting_order ? l.casting_order.casting_order_number : '-',
@@ -292,12 +301,12 @@
                         itemName: l.item_name,
                         sizeAisi: (l.size || '') + (l.aisi ? ' (' + l.aisi + ')' : ''),
                         customer: l.customer || '-',
-                        ordered: l.qty_ordered,
-                        remaining: l.qty_remaining_to_cast,
+                        ordered: l.qty_ordered || 0,
+                        remaining: rem,
                         unitWeight: l.production_plan ? (parseFloat(l.production_plan.weight) || 0) : 0,
-                        qtyGood: l.qty_remaining_to_cast,
+                        qtyGood: rem,
                         qtyReject: 0,
-                        notes: ''
+                        notes: getAutoKeterangan(l)
                     });
                 });
                 renderStagedTable();
@@ -329,12 +338,13 @@
         if (matches.length === 1) {
             // Exactly 1 line found
             selectCandidateLine(matches[0]);
+            const rem = getRemainingQuota(matches[0]);
             container.innerHTML = `
                 <div class="bg-indigo-900/60 border border-indigo-500/40 p-2.5 rounded-lg flex items-center justify-between">
                     <div>
                         <span class="text-xs font-bold text-white">${matches[0].code}</span> &bull;
                         <span class="text-xs text-amber-300 font-mono">${matches[0].casting_order ? matches[0].casting_order.casting_order_number : '-'}</span> &bull;
-                        <span class="text-xs text-slate-300">Sisa: <strong>${matches[0].qty_remaining_to_cast} pcs</strong></span>
+                        <span class="text-xs text-slate-300">Sisa: <strong>${rem} pcs</strong></span>
                     </div>
                     <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">Otomatis Terpilih</span>
                 </div>
@@ -351,12 +361,13 @@
 
             matches.forEach(m => {
                 const orderNum = m.casting_order ? m.casting_order.casting_order_number : '-';
+                const rem = getRemainingQuota(m);
                 html += `
                     <button type="button" onclick='selectCandidateLineById(${m.id})'
                             class="text-left bg-slate-900/90 hover:bg-indigo-900 border border-slate-600 hover:border-amber-400 p-2.5 rounded-lg transition group">
                         <div class="flex items-center justify-between">
                             <span class="font-mono font-bold text-amber-300 text-xs">${orderNum}</span>
-                            <span class="text-[10px] text-emerald-400 font-bold bg-emerald-950 px-1.5 py-0.5 rounded">Sisa: ${m.qty_remaining_to_cast} pcs</span>
+                            <span class="text-[10px] text-emerald-400 font-bold bg-emerald-950 px-1.5 py-0.5 rounded">Sisa: ${rem} pcs</span>
                         </div>
                         <div class="text-[11px] text-slate-300 truncate mt-1">${m.item_name}</div>
                         <div class="text-[10px] text-slate-400">Order: ${m.qty_ordered} pcs &bull; Customer: ${m.customer || '-'}</div>
@@ -377,12 +388,13 @@
             selectCandidateLine(line);
             const container = document.getElementById('candidateContainer');
             const orderNum = line.casting_order ? line.casting_order.casting_order_number : '-';
+            const rem = getRemainingQuota(line);
             container.innerHTML = `
                 <div class="bg-indigo-900/60 border border-indigo-500/40 p-2.5 rounded-lg flex items-center justify-between">
                     <div>
                         <span class="text-xs font-bold text-white">${line.code}</span> &bull;
                         <span class="text-xs text-amber-300 font-mono">${orderNum}</span> &bull;
-                        <span class="text-xs text-slate-300">Sisa: <strong>${line.qty_remaining_to_cast} pcs</strong></span>
+                        <span class="text-xs text-slate-300">Sisa: <strong>${rem} pcs</strong></span>
                     </div>
                     <button type="button" onclick="lookupProductionCode()" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-2 py-0.5 rounded">Ganti Pilihan</button>
                 </div>
@@ -394,15 +406,17 @@
         selectedLineData = line;
         const stagingRow = document.getElementById('stagingInputRow');
         const orderNum = line.casting_order ? line.casting_order.casting_order_number : '-';
+        const remainingQuota = getRemainingQuota(line);
+        const autoKeterangan = getAutoKeterangan(line);
 
         document.getElementById('selectedItemTitle').innerText = `${line.code} - ${line.item_name}`;
-        document.getElementById('selectedItemSubtitle').innerText = `${orderNum} | Sisa Kuota: ${line.qty_remaining_to_cast} pcs | Cust: ${line.customer || '-'}`;
+        document.getElementById('selectedItemSubtitle').innerText = `${orderNum} | Sisa Kuota: ${remainingQuota} pcs | Cust: ${line.customer || '-'}`;
+        document.getElementById('selectedItemKeterangan').innerText = autoKeterangan;
 
         const goodInput = document.getElementById('stage_qty_good');
-        goodInput.value = line.qty_remaining_to_cast;
-        goodInput.max = line.qty_remaining_to_cast;
+        goodInput.value = remainingQuota;
+        goodInput.max = remainingQuota;
         document.getElementById('stage_qty_reject').value = 0;
-        document.getElementById('stage_notes').value = '';
 
         stagingRow.classList.remove('hidden');
         goodInput.focus();
@@ -415,52 +429,57 @@
             return;
         }
 
+        const remainingQuota = getRemainingQuota(selectedLineData);
         const good = parseInt(document.getElementById('stage_qty_good').value) || 0;
         const reject = parseInt(document.getElementById('stage_qty_reject').value) || 0;
-        const notes = document.getElementById('stage_notes').value.trim();
-        const maxQuota = selectedLineData.qty_remaining_to_cast;
 
-        if (good <= 0 && reject <= 0) {
+        if (good < 0 || reject < 0) {
+            alert('Kuantitas tidak boleh bernilai negatif.');
+            return;
+        }
+
+        if (good === 0 && reject === 0) {
             alert('Masukkan kuantitas Good atau Reject minimal 1 pcs.');
             return;
         }
 
-        if (good > maxQuota) {
-            alert(`Kuantitas Good (${good} pcs) melebihi sisa kuota perintah cor (${maxQuota} pcs).`);
+        if (good > remainingQuota) {
+            alert(`Kuantitas Good (${good} pcs) melebihi sisa kuota perintah cor (${remainingQuota} pcs).`);
             return;
         }
 
-        // Check if line already in table
-        const existingIdx = stagedItems.findIndex(item => item.lineId === selectedLineData.id);
-        if (existingIdx >= 0) {
-            stagedItems[existingIdx].qtyGood = good;
-            stagedItems[existingIdx].qtyReject = reject;
-            stagedItems[existingIdx].notes = notes;
-        } else {
-            stagedItems.push({
-                lineId: selectedLineData.id,
-                orderNumber: selectedLineData.casting_order ? selectedLineData.casting_order.casting_order_number : '-',
-                code: selectedLineData.code,
-                itemName: selectedLineData.item_name,
-                sizeAisi: (selectedLineData.size || '') + (selectedLineData.aisi ? ' (' + selectedLineData.aisi + ')' : ''),
-                customer: selectedLineData.customer || '-',
-                ordered: selectedLineData.qty_ordered,
-                remaining: selectedLineData.qty_remaining_to_cast,
-                unitWeight: selectedLineData.production_plan ? (parseFloat(selectedLineData.production_plan.weight) || 0) : 0,
-                qtyGood: good,
-                qtyReject: reject,
-                notes: notes
-            });
+        // Duplicate line protection: check if exact PCOR line already staged
+        const isAlreadyStaged = stagedItems.some(item => item.lineId === selectedLineData.id);
+        if (isAlreadyStaged) {
+            alert(`Item dari Perintah Cor ini (${selectedLineData.code}) sudah ditambahkan ke dalam Heat. Silakan ubah kuantitas langsung pada tabel di bawah.`);
+            return;
         }
+
+        const autoKeterangan = getAutoKeterangan(selectedLineData);
+
+        stagedItems.push({
+            lineId: selectedLineData.id,
+            orderNumber: selectedLineData.casting_order ? selectedLineData.casting_order.casting_order_number : '-',
+            code: selectedLineData.code,
+            itemName: selectedLineData.item_name,
+            sizeAisi: (selectedLineData.size || '') + (selectedLineData.aisi ? ' (' + selectedLineData.aisi + ')' : ''),
+            customer: selectedLineData.customer || '-',
+            ordered: selectedLineData.qty_ordered || 0,
+            remaining: remainingQuota,
+            unitWeight: selectedLineData.production_plan ? (parseFloat(selectedLineData.production_plan.weight) || 0) : 0,
+            qtyGood: good,
+            qtyReject: reject,
+            notes: autoKeterangan
+        });
 
         renderStagedTable();
 
-        // Reset search inputs for next item
+        // Reset search and temporary staging input area only (preserving all staged lines)
         document.getElementById('search_prod_code').value = '';
-        document.getElementById('search_prod_code').focus();
-        document.getElementById('candidateContainer').innerHTML = '<div class="text-xs text-emerald-300 font-semibold py-2"><i class="fas fa-check"></i> Item berhasil ditambahkan ke Heat. Silakan cari kode berikutnya.</div>';
+        document.getElementById('candidateContainer').innerHTML = '<div class="text-xs text-emerald-300 font-semibold py-2"><i class="fas fa-check"></i> Item berhasil ditambahkan ke Heat. Silakan cari Production Code berikutnya.</div>';
         document.getElementById('stagingInputRow').classList.add('hidden');
         selectedLineData = null;
+        document.getElementById('search_prod_code').focus();
     }
 
     function removeStagedItem(index) {
@@ -483,8 +502,6 @@
             let val = parseInt(value) || 0;
             if (val < 0) val = 0;
             stagedItems[index].qtyReject = val;
-        } else if (field === 'notes') {
-            stagedItems[index].notes = value;
         }
 
         renderStagedTable(false);
@@ -511,7 +528,7 @@
         if (rebuildHtml) {
             let html = '';
             stagedItems.forEach((item, index) => {
-                const subtotalWeight = (item.qtyGood * item.unitWeight).toFixed(2);
+                const subtotalWeight = ((parseInt(item.qtyGood) || 0) * (parseFloat(item.unitWeight) || 0)).toFixed(2);
                 html += `
                     <tr class="hover:bg-slate-50/80 transition" id="row_${index}">
                         <td class="p-3 text-center font-mono text-slate-400">
@@ -519,6 +536,7 @@
                             <input type="hidden" name="items[${index}][sand_casting_casting_order_line_id]" value="${item.lineId}">
                             <input type="hidden" name="items[${index}][unit_weight_kg]" value="${item.unitWeight}">
                             <input type="hidden" name="items[${index}][total_weight_kg]" value="${subtotalWeight}">
+                            <input type="hidden" name="items[${index}][notes]" value="${item.notes}">
                         </td>
                         <td class="p-3 font-mono font-semibold text-slate-600 text-xs">
                             ${item.orderNumber}
@@ -534,7 +552,7 @@
                             ${item.customer}
                         </td>
                         <td class="p-3 text-center font-mono font-bold text-indigo-700 text-xs">
-                            ${item.remaining.toLocaleString()}
+                            ${(item.remaining || 0).toLocaleString()}
                         </td>
                         <td class="p-2 bg-emerald-50/30">
                             <input type="number" name="items[${index}][qty_good]" value="${item.qtyGood}" min="0" max="${item.remaining}"
@@ -549,13 +567,11 @@
                         <td class="p-3 text-center font-mono font-bold text-slate-800" id="subtotalWeight_${index}">
                             ${subtotalWeight} kg
                         </td>
-                        <td class="p-2">
-                            <input type="text" name="items[${index}][notes]" value="${item.notes || ''}" placeholder="Keterangan..."
-                                   class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none"
-                                   onchange="updateStagedItem(${index}, 'notes', this.value)">
+                        <td class="p-3 text-xs text-slate-700">
+                            <div class="truncate max-w-[200px]" title="${item.notes}">${item.notes}</div>
                         </td>
                         <td class="p-3 text-center">
-                            <button type="button" onclick="removeStagedItem(${index})" class="text-red-500 hover:text-red-700 font-bold text-sm" title="Hapus dari Heat">
+                            <button type="button" onclick="removeStagedItem(${index})" class="text-red-500 hover:text-red-700 font-bold text-sm transition" title="Hapus dari Heat">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
                         </td>
@@ -565,7 +581,7 @@
             tbody.innerHTML = html;
         } else {
             stagedItems.forEach((item, index) => {
-                const subtotalWeight = (item.qtyGood * item.unitWeight).toFixed(2);
+                const subtotalWeight = ((parseInt(item.qtyGood) || 0) * (parseFloat(item.unitWeight) || 0)).toFixed(2);
                 const elWeight = document.getElementById(`subtotalWeight_${index}`);
                 if (elWeight) elWeight.innerText = `${subtotalWeight} kg`;
             });

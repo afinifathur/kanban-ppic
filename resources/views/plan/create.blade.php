@@ -167,24 +167,30 @@
             const rawData = hot.getData();
             const plans = [];
 
-            rawData.forEach(row => {
-                // Check if Item Code, Item Name, PO Number, Qty Plan, and Line are filled
-                if (row[1] && row[2] && row[6] && row[8] && row[9]) {
-                    plans.push({
-                        code: row[0],
-                        item_code: row[1],
-                        item_name: row[2],
-                        aisi: row[3],
-                        size: row[4],
-                        weight: row[5],
-                        po_number: row[6],
-                        po_quantity: row[7] !== null && row[7] !== '' && !isNaN(row[7]) ? Number(row[7]) : null,
-                        qty_planned: row[8],
-                        line_number: row[9],
-                        customer: row[10]
-                    });
+            for (let i = 0; i < rawData.length; i++) {
+                const row = rawData[i];
+                // Check if the row is entirely blank
+                const isEntirelyBlank = row.every(cell => cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === ''));
+                if (isEntirelyBlank) {
+                    continue; // Safely ignore intentionally empty spreadsheet rows
                 }
-            });
+
+                // Row has at least one cell populated -> submit for server validation
+                plans.push({
+                    row_number: i + 1,
+                    code: row[0] !== null && row[0] !== undefined ? String(row[0]).trim() : null,
+                    item_code: row[1] !== null && row[1] !== undefined ? String(row[1]).trim() : null,
+                    item_name: row[2] !== null && row[2] !== undefined ? String(row[2]).trim() : null,
+                    aisi: row[3] !== null && row[3] !== undefined ? String(row[3]).trim() : null,
+                    size: row[4] !== null && row[4] !== undefined ? String(row[4]).trim() : null,
+                    weight: row[5] !== null && row[5] !== '' && !isNaN(row[5]) ? Number(row[5]) : null,
+                    po_number: row[6] !== null && row[6] !== undefined ? String(row[6]).trim() : null,
+                    po_quantity: row[7] !== null && row[7] !== '' && !isNaN(row[7]) ? Number(row[7]) : null,
+                    qty_planned: row[8] !== null && row[8] !== '' && !isNaN(row[8]) ? Number(row[8]) : null,
+                    line_number: row[9] !== null && row[9] !== '' ? row[9] : null,
+                    customer: row[10] !== null && row[10] !== undefined ? String(row[10]).trim() : null
+                });
+            }
 
             // Priority 4: Handsontable Rows
             if (plans.length === 0) {
@@ -192,12 +198,12 @@
                     Swal.fire({
                         icon: 'warning',
                         title: 'Data Rencana Kosong',
-                        text: 'Silakan masukkan minimal satu baris data rencana yang lengkap (Item Code, Name, PO, Qty, Line).',
+                        text: 'Silakan masukkan minimal satu baris data rencana pada tabel.',
                         confirmButtonText: 'OK',
                         confirmButtonColor: '#2563eb'
                     });
                 } else {
-                    alert('Silakan masukkan minimal satu baris data rencana yang lengkap (Item Code, Name, PO, Qty, Line).');
+                    alert('Silakan masukkan minimal satu baris data rencana pada tabel.');
                 }
                 return;
             }
@@ -239,16 +245,40 @@
                 })
                 .catch(err => {
                     console.error(err);
-                    const msg = err.response && err.response.data && err.response.data.message ? err.response.data.message : 'Terjadi kesalahan saat menyimpan data. Periksa konsol.';
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Gagal Menyimpan',
-                            text: msg,
-                            confirmButtonColor: '#2563eb'
+                    const data = err.response && err.response.data;
+                    const msg = data && data.message ? data.message : 'Terjadi kesalahan saat menyimpan data. Periksa konsol.';
+
+                    if (data && data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+                        let errorHtml = '<div class="text-left text-xs max-h-64 overflow-y-auto space-y-1.5 my-3">';
+                        data.errors.forEach(e => {
+                            errorHtml += `<div class="p-2 bg-red-50 border border-red-200 rounded text-red-800">
+                                <span class="font-bold">Baris ${e.row || '-'}:</span> ${e.code ? `[<strong>${e.code}</strong>] ` : ''}${e.reason}
+                            </div>`;
                         });
+                        errorHtml += '</div>';
+
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Validasi Rencana Gagal',
+                                html: `<div class="text-sm text-gray-700 font-medium mb-1">${msg}</div>` + errorHtml,
+                                confirmButtonColor: '#2563eb',
+                                width: '600px'
+                            });
+                        } else {
+                            alert(msg);
+                        }
                     } else {
-                        alert(msg);
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gagal Menyimpan',
+                                text: msg,
+                                confirmButtonColor: '#2563eb'
+                            });
+                        } else {
+                            alert(msg);
+                        }
                     }
                     saveBtn.disabled = false;
                     saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Simpan Rencana';

@@ -522,4 +522,31 @@ class CastingResultUiTest extends TestCase
         $this->assertEquals(2, $result->lines->count());
         $this->assertEquals(70, $result->total_qty_good);
     }
+
+    public function test_create_page_contains_auto_keterangan_and_no_manual_notes_input(): void
+    {
+        $plan = $this->createPlan(['title' => 'Rencana Khusus Flange']);
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260915-0001',
+            'scheduled_date' => '2026-09-15',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.create'));
+
+        $response->assertOk();
+        // Check that manual stage_notes input was removed
+        $response->assertDontSee('id="stage_notes"', false);
+        // Check that auto-keterangan element is present
+        $response->assertSee('id="selectedItemKeterangan"', false);
+        $response->assertSee('Rencana Khusus Flange');
+        $response->assertSee('qty_remaining_to_cast');
+    }
 }

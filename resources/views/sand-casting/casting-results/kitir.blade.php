@@ -23,32 +23,35 @@
         .sheet-container {
             width: 281mm;
             min-height: 196mm;
-            max-height: 197mm;
             margin: 15px auto;
             background: #fff;
-            padding: 5mm;
+            padding: 36mm 5mm 20mm 5mm;
             box-sizing: border-box;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
         }
 
         .kitir-border {
-            border: 2.5px solid #000;
+            border: 2px solid #000;
         }
 
         .border-b-black-solid {
-            border-bottom: 2px solid #000;
+            border-bottom: 1.5px solid #000;
         }
 
         .border-r-black-solid {
-            border-right: 2px solid #000;
-        }
-
-        .border-t-black-solid {
-            border-top: 1.5px solid #000;
+            border-right: 1.5px solid #000;
         }
 
         .process-row {
-            height: 14.5mm;
+            height: 12mm;
+        }
+
+        .item-name-wrap {
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         @media print {
@@ -64,13 +67,13 @@
                 width: 100% !important;
                 height: 100% !important;
                 min-height: 196mm !important;
-                max-height: 197mm !important;
                 margin: 0 !important;
-                padding: 0 !important;
+                padding: 36mm 0 0 0 !important;
                 box-shadow: none !important;
                 page-break-after: avoid !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+                display: block !important;
             }
 
             .no-print {
@@ -93,208 +96,180 @@
 
     <!-- Printable A4 Landscape Sheet -->
     <div class="sheet-container">
-        <div class="kitir-border h-full flex flex-col justify-between">
+        <div class="kitir-border bg-white">
 
             <!-- 1. Header Section -->
             <div class="grid grid-cols-12 border-b-black-solid">
                 <!-- Left: Peroni Brand -->
-                <div class="col-span-3 p-3 flex flex-col justify-center border-r-black-solid">
-                    <div class="text-2xl font-black tracking-wider text-black leading-none">PERONI</div>
-                    <div class="text-[9px] font-extrabold tracking-widest text-slate-800 uppercase mt-1">CASTING THE FUTURE</div>
+                <div class="col-span-3 p-1.5 px-3 flex items-center border-r-black-solid">
+                    <span class="text-2xl font-black tracking-wider text-black leading-none">PERONI</span>
                 </div>
 
                 <!-- Center: Kitir Produksi Title -->
-                <div class="col-span-6 p-2.5 text-center flex flex-col justify-center border-r-black-solid bg-slate-50/50">
-                    <div class="text-2xl font-black tracking-widest text-black uppercase leading-tight">KITIR PRODUKSI</div>
-                    <div class="text-xs font-black tracking-widest text-slate-700 uppercase mt-0.5">SAND CASTING</div>
+                <div class="col-span-6 p-1.5 text-center flex items-center justify-center border-r-black-solid bg-slate-50/50">
+                    <span class="text-2xl font-black tracking-widest text-black uppercase leading-none">KITIR PRODUKSI</span>
                 </div>
 
                 <!-- Right: Print Metadata -->
-                <div class="col-span-3 p-3 flex flex-col justify-center text-right text-[11px] font-mono leading-tight">
-                    <div><span class="text-slate-500 font-sans font-bold text-[10px]">TGL CETAK :</span> <strong class="text-black">{{ now()->format('d-m-Y') }}</strong></div>
-                    <div class="mt-1"><span class="text-slate-500 font-sans font-bold text-[10px]">JAM :</span> <strong class="text-black">{{ now()->format('H:i') }} WIB</strong></div>
+                <div class="col-span-3 p-1.5 px-3 flex items-center justify-end text-[10px] font-mono leading-none gap-3">
+                    <div><span class="text-slate-500 font-sans font-bold text-[9px]">TGL CETAK :</span> <strong class="text-black">{{ now()->format('d-m-Y') }}</strong></div>
+                    <div><span class="text-slate-500 font-sans font-bold text-[9px]">JAM :</span> <strong class="text-black">{{ now()->format('H:i') }} WIB</strong></div>
                 </div>
             </div>
 
-            <!-- 2. Product Information Section (3 Columns) -->
-            <div class="grid grid-cols-12 border-b-black-solid">
-                <!-- Col 1: Nama Item -->
-                <div class="col-span-5 p-3 border-r-black-solid flex flex-col justify-between">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-0.5">NAMA ITEM :</div>
-                    <div class="font-black text-base text-black uppercase leading-snug">
-                        {{ $line->castingOrderLine->item_name ?? $line->productionPlan->item_name ?? '-' }}
-                    </div>
-                    @if($line->castingOrderLine && ($line->castingOrderLine->size || $line->castingOrderLine->aisi))
-                        <div class="text-xs font-mono font-bold text-slate-700 mt-1">
-                            {{ $line->castingOrderLine->size }} {{ $line->castingOrderLine->aisi ? '('.$line->castingOrderLine->aisi.')' : '' }}
+            <!-- 2. Product Information Section (Customer | Kode Produksi | Hasil Cor - Typography Scaled Up) -->
+            <div class="grid grid-cols-12 border-b-black-solid bg-slate-50/40 items-center">
+                <!-- Col 1: Customer -->
+                <div class="col-span-4 p-2 px-3 border-r-black-solid flex items-center overflow-hidden">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-slate-600 mr-2 shrink-0">CUSTOMER :</span>
+                    <span class="font-black text-base text-black uppercase truncate">{{ $line->castingOrderLine->customer ?? $line->productionPlan->customer ?? '-' }}</span>
+                </div>
+
+                <!-- Col 2: Kode Produksi -->
+                <div class="col-span-4 p-2 px-3 border-r-black-solid flex items-center overflow-hidden">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-slate-600 mr-2 shrink-0">KODE PRODUKSI :</span>
+                    <span class="font-mono font-black text-base text-black uppercase tracking-wider truncate">{{ $line->castingOrderLine->code ?? $line->productionPlan->code ?? '-' }}</span>
+                </div>
+
+                <!-- Col 3: Hasil Cor -->
+                <div class="col-span-4 p-2 px-3 flex items-center justify-between">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-slate-600 mr-2 shrink-0">HASIL COR :</span>
+                    <span class="font-mono font-black text-xl text-black whitespace-nowrap">{{ number_format($line->qty_good) }} PCS</span>
+                </div>
+            </div>
+
+            <!-- 3. Main Section: Left Panel (Heat/Barcode/Item/PCOR/KTR) & Right Panel (Full-height Process Table) -->
+            <div class="flex flex-row w-full items-stretch">
+
+                <!-- Left Panel: Heat Number, Horizontal Barcode, Prominently Scaled Wrapped Item Name, PCOR & KITIR -->
+                <div class="w-[76mm] shrink-0 border-r-black-solid p-2.5 flex flex-col justify-between bg-white">
+                    <div>
+                        <!-- Heat Number -->
+                        <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 leading-none">HEAT NUMBER :</div>
+                        <div class="font-mono font-black text-3xl tracking-wider text-black my-1 leading-none">
+                            {{ $castingResult->heat_number }}
                         </div>
-                    @endif
-                </div>
-
-                <!-- Col 2: Customer -->
-                <div class="col-span-4 p-3 border-r-black-solid flex flex-col justify-between">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-0.5">CUSTOMER :</div>
-                    <div class="font-black text-lg text-black uppercase leading-tight truncate">
-                        {{ $line->castingOrderLine->customer ?? $line->productionPlan->customer ?? '-' }}
-                    </div>
-                </div>
-
-                <!-- Col 3: Kode Produksi -->
-                <div class="col-span-3 p-3 bg-slate-50/70 flex flex-col justify-between">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-0.5">KODE PRODUKSI :</div>
-                    <div class="font-mono font-black text-2xl text-black tracking-wider">
-                        {{ $line->castingOrderLine->code ?? $line->productionPlan->code ?? '-' }}
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3. Heat / Barcode / Output Section -->
-            <div class="grid grid-cols-12 border-b-black-solid">
-                <!-- Left: Heat Number -->
-                <div class="col-span-4 p-3 border-r-black-solid flex flex-col justify-between">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-0.5">HEAT NUMBER :</div>
-                    <div class="font-mono font-black text-2xl text-black tracking-wider">
-                        {{ $castingResult->heat_number }}
-                    </div>
-                    <div class="text-[10px] font-mono text-slate-600 mt-1">
-                        Tgl: {{ $castingResult->cast_date ? $castingResult->cast_date->format('d/m/Y') : '-' }} | F: {{ $castingResult->furnace ?: '-' }} | Shift: {{ $castingResult->shift ?: '-' }}
-                    </div>
-                </div>
-
-                <!-- Center: Code 128 Barcode & Traveler -->
-                <div class="col-span-4 p-2.5 text-center flex flex-col items-center justify-center border-r-black-solid">
-                    <img src="data:image/png;base64,{{ $barcodeBase64 }}" alt="Barcode" class="h-10 max-w-full object-contain mx-auto">
-                    <div class="font-mono font-black text-sm tracking-widest text-black mt-1">
-                        {{ $line->traveler_number }}
-                    </div>
-                </div>
-
-                <!-- Right: Hasil Cor (Good Quantity) -->
-                <div class="col-span-4 p-3 bg-slate-50/70 flex flex-col justify-between text-right">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-0.5">HASIL COR :</div>
-                    <div class="font-mono font-black text-3xl text-black leading-none">
-                        {{ number_format($line->qty_good) }} <span class="text-lg font-bold">PCS</span>
-                    </div>
-                    @if($line->total_weight_kg > 0)
-                        <div class="text-xs font-mono font-bold text-slate-700 mt-1">
-                            Est. Berat: {{ number_format($line->total_weight_kg, 2) }} kg
+                        <div class="text-[9px] font-mono text-slate-700 leading-snug border-b border-slate-200 pb-1 mb-2">
+                            Tgl : {{ $castingResult->cast_date ? $castingResult->cast_date->format('d/m/Y') : '-' }} | F : {{ $castingResult->furnace ?: '-' }} | Shift : {{ $castingResult->shift ?: '-' }}
                         </div>
-                    @endif
-                </div>
-            </div>
 
-            <!-- 4. Process Table (7 Strict Rows) -->
-            <div class="w-full border-b-black-solid">
-                <table class="w-full text-xs text-left border-collapse">
-                    <thead>
-                        <tr class="bg-slate-100 text-black font-black uppercase text-[10px] tracking-wider">
-                            <th class="p-2 text-center w-10 border-r-black-solid">NO.</th>
-                            <th class="p-2 text-left w-56 border-r-black-solid">PROSES / DEPARTEMEN</th>
-                            <th class="p-2 text-center w-28 border-r-black-solid">HASIL (PCS)</th>
-                            <th class="p-2 text-center w-28 border-r-black-solid">RUSAK (PCS)</th>
-                            <th class="p-2 text-center w-28 border-r-black-solid">TANGGAL</th>
-                            <th class="p-2 text-center w-36 border-r-black-solid">OPERATOR / SPV</th>
-                            <th class="p-2 text-left">KETERANGAN</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-black">
-                        <!-- 1. NETTO (POTONG) -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">1</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">NETTO (POTONG)</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
+                        <!-- Horizontal Barcode in Left Panel -->
+                        <div class="bg-slate-50/70 border border-slate-300 rounded p-1.5 mb-2.5 flex flex-col items-center justify-center">
+                            <img src="data:image/png;base64,{{ $barcodeBase64 }}" alt="Barcode" class="h-8 w-full max-w-[220px] object-fill">
+                            <div class="font-mono font-black text-xs tracking-widest text-black mt-0.5 leading-none">
+                                {{ $line->traveler_number }}
+                            </div>
+                        </div>
 
-                        <!-- 2. BUBUT OD -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">2</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">BUBUT OD</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
+                        <!-- Item Name (Prominent & Flexible multi-line wrapping) -->
+                        <div class="mb-2">
+                            <div class="text-[11px] font-black uppercase tracking-wider text-slate-600 leading-none mb-1">NAMA ITEM :</div>
+                            <div class="font-black text-lg text-black uppercase leading-tight item-name-wrap tracking-wide">
+                                {{ $line->castingOrderLine->item_name ?? $line->productionPlan->item_name ?? '-' }}
+                            </div>
+                        </div>
+                    </div>
 
-                        <!-- 3. MARKING -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">3</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">MARKING</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- 4. BUBUT CNC -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">4</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">BUBUT CNC</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- 5. BOR -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">5</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">BOR</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- 6. QC (FINAL INSPECTION) -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">6</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">QC (FINAL INSPECTION)</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- 7. GUDANG JADI -->
-                        <tr class="process-row border-t-black-solid">
-                            <td class="text-center font-bold font-mono border-r-black-solid">7</td>
-                            <td class="font-black border-r-black-solid pl-2 text-[11px]">GUDANG JADI</td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td class="border-r-black-solid"></td>
-                            <td></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- 5. Notes & Traceability Footer -->
-            <div class="grid grid-cols-12 p-3 bg-white items-center">
-                <!-- Left: Standard Instructions -->
-                <div class="col-span-8">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-black mb-0.5">CATATAN :</div>
-                    <ol class="list-decimal pl-4 text-[10px] font-semibold text-slate-800 space-y-0.5">
-                        <li>Isi hasil dan rusak dengan jelas menggunakan spidol.</li>
-                        <li>Pastikan jumlah hasil + rusak = jumlah sebelumnya.</li>
-                        <li>Jaga kebersihan dan kondisi kitir produksi ini.</li>
-                    </ol>
+                    <!-- PCOR & KITIR Identifiers -->
+                    <div class="space-y-1 text-[10px] font-mono pt-1">
+                        <div class="bg-slate-50/80 border border-slate-300 rounded p-1.5">
+                            <div class="text-[8px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5">PCOR :</div>
+                            <div class="font-bold text-black text-xs truncate leading-tight">{{ $line->castingOrderLine->castingOrder->casting_order_number ?? '-' }}</div>
+                        </div>
+                        <div class="bg-slate-50/80 border border-slate-300 rounded p-1.5">
+                            <div class="text-[8px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5">KITIR :</div>
+                            <div class="font-bold text-black text-xs truncate leading-tight">{{ $line->traveler_number }}</div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Right: Document References -->
-                <div class="col-span-4 text-right text-[10px] font-mono text-slate-500 leading-tight">
-                    <div>PCOR: <strong class="text-black">{{ $line->castingOrderLine->castingOrder->casting_order_number ?? '-' }}</strong></div>
-                    <div class="mt-0.5">KITIR: <strong class="text-black">{{ $line->traveler_number }}</strong></div>
+                <!-- Right Panel: Full-height 7-Row Process Table -->
+                <div class="flex-1 flex flex-col bg-white">
+                    <table class="w-full text-xs text-left border-collapse h-full">
+                        <thead>
+                            <tr class="bg-slate-100 text-black font-black uppercase text-[10px] tracking-wider border-b-black-solid">
+                                <th class="p-2 text-center w-10 border-r-black-solid">NO.</th>
+                                <th class="p-2 text-left w-48 border-r-black-solid">PROSES / DEPT</th>
+                                <th class="p-2 text-center w-28 border-r-black-solid">HASIL (PCS)</th>
+                                <th class="p-2 text-center w-28 border-r-black-solid">RUSAK (PCS)</th>
+                                <th class="p-2 text-center w-32 border-r-black-solid">TANGGAL</th>
+                                <th class="p-2 text-center">OPERATOR / SPV</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-black font-mono">
+                            <!-- 1. NETTO (POTONG) -->
+                            <tr class="process-row border-b-black-solid">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">1</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">NETTO (POTONG)</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+
+                            <!-- 2. BUBUT OD -->
+                            <tr class="process-row border-b-black-solid">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">2</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT OD</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+
+                            <!-- 3. MARKING -->
+                            <tr class="process-row border-b-black-solid">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">3</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">MARKING</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+
+                            <!-- 4. BUBUT CNC -->
+                            <tr class="process-row border-b-black-solid">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">4</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT CNC</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+
+                            <!-- 5. BOR -->
+                            <tr class="process-row border-b-black-solid">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">5</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BOR</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+
+                            <!-- 6. QC (FINAL INSPECTION) -->
+                            <tr class="process-row border-b-black-solid">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">6</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">QC (FINAL INSPECTION)</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+
+                            <!-- 7. GUDANG JADI -->
+                            <tr class="process-row">
+                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">7</td>
+                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">GUDANG JADI</td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td class="border-r-black-solid"></td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
+
             </div>
 
         </div>
