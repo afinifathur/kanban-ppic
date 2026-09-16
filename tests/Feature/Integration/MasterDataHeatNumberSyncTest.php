@@ -46,6 +46,7 @@ class MasterDataHeatNumberSyncTest extends TestCase
         Schema::connection('masterdata_kpi')->dropIfExists('md_heat_numbers');
         Schema::connection('masterdata_kpi')->create('md_heat_numbers', function ($table) {
             $table->id();
+            $table->string('traveler_number', 60)->nullable()->unique();
             $table->string('kode_produksi', 50)->nullable();
             $table->date('heat_date')->nullable();
             $table->string('item_code', 50);
@@ -57,7 +58,8 @@ class MasterDataHeatNumberSyncTest extends TestCase
             $table->string('line', 20)->nullable();
             $table->string('status', 20)->default('active');
             $table->timestamps();
-            $table->unique(['heat_number', 'item_code']);
+            $table->index('heat_number');
+            $table->index('item_code');
         });
 
         $permission = Permission::firstOrCreate(['name' => 'access_planning']);
@@ -231,6 +233,8 @@ class MasterDataHeatNumberSyncTest extends TestCase
         $this->assertEquals(35, $row->cor_qty);
         $this->assertEquals('2026-09-15', $row->heat_date);
         $this->assertEquals('active', $row->status);
+        $this->assertNotEmpty($row->traveler_number);
+        $this->assertStringStartsWith('KTR-', $row->traveler_number);
     }
 
     public function test_publisher_is_idempotent_on_repeated_sync(): void
@@ -310,7 +314,7 @@ class MasterDataHeatNumberSyncTest extends TestCase
         $this->assertEquals('LINE 2', $rows[1]->line);
     }
 
-    public function test_same_heat_and_same_item_across_multiple_lines_aggregates_cor_qty(): void
+    public function test_same_heat_and_same_item_across_multiple_lines_creates_distinct_traveler_rows(): void
     {
         // Two separate PCOR order lines for the SAME production plan item
         $plan = $this->createPlan(['code' => 'ET001', 'item_code' => 'ITEM-SPLIT', 'line_number' => 3]);
@@ -341,12 +345,19 @@ class MasterDataHeatNumberSyncTest extends TestCase
 
         $rows = DB::connection('masterdata_kpi')->table('md_heat_numbers')
             ->where('heat_number', 'HEAT-SPLIT-01')
+            ->orderBy('cor_qty', 'desc')
             ->get();
 
-        // Must be aggregated into exactly 1 row because md_heat_numbers is UNIQUE(heat_number, item_code)
-        $this->assertCount(1, $rows);
+        // Exactly 2 distinct rows created (one per traveler)
+        $this->assertCount(2, $rows);
         $this->assertEquals('ITEM-SPLIT', $rows[0]->item_code);
-        $this->assertEquals(75, $rows[0]->cor_qty); // 40 + 35
+        $this->assertEquals(40, $rows[0]->cor_qty);
+        $this->assertNotEmpty($rows[0]->traveler_number);
+
+        $this->assertEquals('ITEM-SPLIT', $rows[1]->item_code);
+        $this->assertEquals(35, $rows[1]->cor_qty);
+        $this->assertNotEmpty($rows[1]->traveler_number);
+        $this->assertNotEquals($rows[0]->traveler_number, $rows[1]->traveler_number);
     }
 
     public function test_reconciliation_command_syncs_records_by_date_and_heat(): void
@@ -470,5 +481,53 @@ class MasterDataHeatNumberSyncTest extends TestCase
         ])
             ->expectsOutputToContain('No matching Sand Casting Casting Result records found.')
             ->assertExitCode(0);
+    }
+
+    public function test_publisher_handles_historical_null_traveler_payloads_without_overwriting_travelers(): void
+    {
+        // 1. Insert a historical record with traveler_number = null
+        $payloadHistorical = [
+            'traveler_number' => null,
+            'heat_number' => 'HN-LEGACY-01',
+            'item_code' => 'ITEM-LEGACY-A',
+            'kode_produksi' => 'KD-LEGACY-1',
+            'heat_date' => '2026-09-10',
+            'item_name' => 'Legacy Item',
+            'size' => '1"',
+            'customer' => 'CUST_LEGACY',
+            'line' => 'LINE 1',
+            'cor_qty' => 50,
+            'status' => 'active',
+        ];
+
+        $outcome1 = $this->publisher->publishPayloads([$payloadHistorical]);
+        $this->assertTrue($outcome1['success']);
+
+        // 2. Insert a new traveler record with the same heat_number and item_code
+        $payloadNewTraveler = [
+            'traveler_number' => 'KTR-20260915-9999',
+            'heat_number' => 'HN-LEGACY-01',
+            'item_code' => 'ITEM-LEGACY-A',
+            'kode_produksi' => 'KD-LEGACY-1',
+            'heat_date' => '2026-09-15',
+            'item_name' => 'Legacy Item',
+            'size' => '1"',
+            'customer' => 'CUST_LEGACY',
+            'line' => 'LINE 1',
+            'cor_qty' => 60,
+            'status' => 'active',
+        ];
+
+        $outcome2 = $this->publisher->publishPayloads([$payloadNewTraveler]);
+        $this->assertTrue($outcome2['success']);
+
+        // Both rows must exist independently without overwriting each other
+        $rows = DB::connection('masterdata_kpi')->table('md_heat_numbers')
+            ->where('heat_number', 'HN-LEGACY-01')
+            ->get();
+
+        $this->assertCount(2, $rows);
+        $this->assertTrue($rows->contains(fn ($r) => is_null($r->traveler_number) && $r->cor_qty == 50));
+        $this->assertTrue($rows->contains(fn ($r) => $r->traveler_number === 'KTR-20260915-9999' && $r->cor_qty == 60));
     }
 }

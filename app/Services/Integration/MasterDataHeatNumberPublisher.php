@@ -79,13 +79,11 @@ class MasterDataHeatNumberPublisher
     }
 
     /**
-     * Build target payload rows grouped by (heat_number, item_code).
+     * Build target payload rows per Casting Result Line (Traveler).
      *
-     * A single Heat may contain multiple distinct item codes (multi-item Heat),
-     * or multiple result lines with the same item code (split Kitirs).
-     *
-     * In md_heat_numbers, (heat_number, item_code) is UNIQUE, so lines with
-     * the same item code are aggregated into a single row with summed cor_qty.
+     * Each CastingResultLine represents a physical Traveler (Kitir) with a unique traveler_number.
+     * Multiple lines within the same Heat may share the same item_code (e.g. split Kitirs),
+     * and each line is published as a distinct physical record.
      */
     public function buildPayloadsFromCastingResult(SandCastingCastingResult $result): array
     {
@@ -99,8 +97,7 @@ class MasterDataHeatNumberPublisher
         $heatNumber = trim((string) $result->heat_number);
         $castDate = $result->cast_date ? Carbon::parse($result->cast_date)->format('Y-m-d') : null;
 
-        // Group lines by item_code
-        $groupedLines = [];
+        $payloads = [];
 
         foreach ($result->lines as $line) {
             $plan = $line->productionPlan ?? $line->castingOrderLine?->productionPlan;
@@ -116,33 +113,31 @@ class MasterDataHeatNumberPublisher
                 continue;
             }
 
-            if (! isset($groupedLines[$itemCode])) {
-                $lineVal = $plan?->line_number;
-                $formattedLine = null;
-                if ($lineVal !== null && $lineVal !== '') {
-                    $strLine = (string) $lineVal;
-                    $formattedLine = str_starts_with(strtoupper($strLine), 'LINE') ? $strLine : 'LINE '.$strLine;
-                }
-
-                $groupedLines[$itemCode] = [
-                    'heat_number' => $heatNumber,
-                    'item_code' => $itemCode,
-                    'kode_produksi' => $plan?->code ?? $orderLine?->code ?? null,
-                    'heat_date' => $castDate,
-                    'item_name' => $plan?->item_name ?? $orderLine?->item_name ?? null,
-                    'size' => $plan?->size ?? $orderLine?->size ?? null,
-                    'customer' => $plan?->customer ?? $orderLine?->customer ?? null,
-                    'line' => $formattedLine,
-                    'cor_qty' => 0,
-                    'status' => 'active',
-                ];
+            $lineVal = $plan?->line_number;
+            $formattedLine = null;
+            if ($lineVal !== null && $lineVal !== '') {
+                $strLine = (string) $lineVal;
+                $formattedLine = str_starts_with(strtoupper($strLine), 'LINE') ? $strLine : 'LINE '.$strLine;
             }
 
-            // Aggregate good qty
-            $groupedLines[$itemCode]['cor_qty'] += (int) $line->qty_good;
+            $travelerNumber = trim((string) ($line->traveler_number ?? ''));
+
+            $payloads[] = [
+                'traveler_number' => $travelerNumber !== '' ? $travelerNumber : null,
+                'heat_number' => $heatNumber,
+                'item_code' => $itemCode,
+                'kode_produksi' => $plan?->code ?? $orderLine?->code ?? null,
+                'heat_date' => $castDate,
+                'item_name' => $plan?->item_name ?? $orderLine?->item_name ?? null,
+                'size' => $plan?->size ?? $orderLine?->size ?? null,
+                'customer' => $plan?->customer ?? $orderLine?->customer ?? null,
+                'line' => $formattedLine,
+                'cor_qty' => (int) $line->qty_good,
+                'status' => 'active',
+            ];
         }
 
-        return array_values($groupedLines);
+        return $payloads;
     }
 
     /**
@@ -161,6 +156,7 @@ class MasterDataHeatNumberPublisher
             $startTime = microtime(true);
             $heatNumber = $payload['heat_number'] ?? '';
             $itemCode = $payload['item_code'] ?? '';
+            $travelerNumber = $payload['traveler_number'] ?? null;
 
             if ($heatNumber === '' || $itemCode === '') {
                 $errors[] = 'Invalid payload: heat_number and item_code are required.';
@@ -168,12 +164,23 @@ class MasterDataHeatNumberPublisher
                 continue;
             }
 
-            $match = [
-                'heat_number' => $heatNumber,
-                'item_code' => $itemCode,
-            ];
+            // Primary match by traveler_number if available; fallback to (heat_number, item_code, traveler_number=null) for historical rows
+            if (! empty($travelerNumber)) {
+                $match = [
+                    'traveler_number' => $travelerNumber,
+                ];
+            } else {
+                $match = [
+                    'heat_number' => $heatNumber,
+                    'item_code' => $itemCode,
+                    'traveler_number' => null,
+                ];
+            }
 
             $values = [
+                'traveler_number' => $travelerNumber,
+                'heat_number' => $heatNumber,
+                'item_code' => $itemCode,
                 'kode_produksi' => $payload['kode_produksi'] ?? null,
                 'heat_date' => $payload['heat_date'] ?? null,
                 'item_name' => $payload['item_name'] ?? null,
@@ -194,6 +201,7 @@ class MasterDataHeatNumberPublisher
                 $syncedCount++;
 
                 Log::info('[SyncHeatNumber:SUCCESS]', [
+                    'traveler_number' => $travelerNumber,
                     'heat_number' => $heatNumber,
                     'item_code' => $itemCode,
                     'cor_qty' => $values['cor_qty'],
@@ -204,19 +212,21 @@ class MasterDataHeatNumberPublisher
 
                 if ($isConnectionError) {
                     Log::warning('[SyncHeatNumber:OFFLINE] Master Data KPI connection failed: '.$e->getMessage(), [
+                        'traveler_number' => $travelerNumber,
                         'heat_number' => $heatNumber,
                         'item_code' => $itemCode,
                         'connection' => $this->connectionName,
                     ]);
                 } else {
                     Log::error('[SyncHeatNumber:FAILED] Failed to sync heat number: '.$e->getMessage(), [
+                        'traveler_number' => $travelerNumber,
                         'heat_number' => $heatNumber,
                         'item_code' => $itemCode,
                         'exception' => get_class($e),
                     ]);
                 }
 
-                $errors[] = "Failed ({$heatNumber}, {$itemCode}): ".$e->getMessage();
+                $errors[] = "Failed ({$travelerNumber} / {$heatNumber}, {$itemCode}): ".$e->getMessage();
                 throw $e;
             }
         }
