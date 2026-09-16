@@ -34,11 +34,40 @@ return new class extends Migration
                 DB::statement('CREATE INDEX idx_sc_results_heat_number ON sand_casting_casting_results (heat_number)');
                 Schema::enableForeignKeyConstraints();
             } else {
-                Schema::table('sand_casting_casting_results', function (Blueprint $table) {
-                    $table->dropForeign(['sand_casting_casting_order_id']);
-                    $table->dropIndex('idx_sc_results_order_heat');
-                    $table->dropColumn('sand_casting_casting_order_id');
-                });
+                // Drop Foreign Key safely by checking existing constraint name in MySQL
+                $foreignKeys = DB::select("
+                    SELECT CONSTRAINT_NAME
+                    FROM information_schema.TABLE_CONSTRAINTS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'sand_casting_casting_results'
+                      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+                ");
+                $fkNames = array_column($foreignKeys, 'CONSTRAINT_NAME');
+
+                if (in_array('fk_sc_results_order_id', $fkNames)) {
+                    Schema::table('sand_casting_casting_results', function (Blueprint $table) {
+                        $table->dropForeign('fk_sc_results_order_id');
+                    });
+                } elseif (in_array('sand_casting_casting_results_sand_casting_casting_order_id_foreign', $fkNames)) {
+                    Schema::table('sand_casting_casting_results', function (Blueprint $table) {
+                        $table->dropForeign(['sand_casting_casting_order_id']);
+                    });
+                }
+
+                // Drop index safely if exists
+                $indexes = DB::select("SHOW INDEX FROM sand_casting_casting_results WHERE Key_name = 'idx_sc_results_order_heat'");
+                if (! empty($indexes)) {
+                    Schema::table('sand_casting_casting_results', function (Blueprint $table) {
+                        $table->dropIndex('idx_sc_results_order_heat');
+                    });
+                }
+
+                // Drop column safely if exists
+                if (Schema::hasColumn('sand_casting_casting_results', 'sand_casting_casting_order_id')) {
+                    Schema::table('sand_casting_casting_results', function (Blueprint $table) {
+                        $table->dropColumn('sand_casting_casting_order_id');
+                    });
+                }
             }
         }
     }
