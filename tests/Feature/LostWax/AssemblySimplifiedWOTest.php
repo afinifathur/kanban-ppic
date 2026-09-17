@@ -393,10 +393,18 @@ class AssemblySimplifiedWOTest extends TestCase
 
         $response = $this->actingAs($user)->get(route('lost-wax.assemblies.work-orders.print', $wo));
         $response->assertOk();
-        $response->assertSee('A4 portrait');
+        $response->assertSee('215mm 330mm');
+        $response->assertSee('110mm');
+        $response->assertDontSee('A4 portrait');
         $response->assertDontSee('A5 landscape');
         $response->assertSee('Perintah Rangkai');
         $response->assertSee($wo->rangkai_order_number);
+        $response->assertSee('AISI:');
+        $response->assertDontSee('AISI & Ukuran:');
+        $response->assertSee('20 pcs');
+        $response->assertSee('REFERENSI GAMBAR');
+        $response->assertDontSee('TAMPAK DEPAN');
+        $response->assertDontSee('TAMPAK SAMPING');
     }
 
     /**

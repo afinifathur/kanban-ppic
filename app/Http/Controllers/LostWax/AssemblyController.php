@@ -258,8 +258,7 @@ class AssemblyController extends Controller
         $productCode = $line->productionPlan?->item_code ?? $line->code;
         $productName = $line->item_name ?? $line->productionPlan?->item_name;
 
-        $photoService = app(\App\Services\AssemblyPhotoService::class);
-        $assemblyPhoto = $photoService->getCurrentPhoto($productCode, $productName);
+        $assemblyPhoto = $this->resolveAssemblyPhoto($line);
 
         // Fetch candidate print order lines with available physical balance for additional source selection
         $availableSourceLines = \App\Models\LostWaxPrintOrderLine::with('printOrder')
@@ -300,13 +299,44 @@ class AssemblyController extends Controller
         $line = $workOrder->printOrderLine;
         $availableQty = $line->qty_available_for_rangkai;
 
-        $productCode = $line->productionPlan?->item_code ?? $line->code;
-        $productName = $line->item_name ?? $line->productionPlan?->item_name;
-
-        $photoService = app(\App\Services\AssemblyPhotoService::class);
-        $assemblyPhoto = $photoService->getCurrentPhoto($productCode, $productName);
+        $assemblyPhoto = $this->resolveAssemblyPhoto($line);
 
         return view('lost-wax.assemblies.print_wo', compact('workOrder', 'line', 'availableQty', 'assemblyPhoto'));
+    }
+
+    /**
+     * Helper to resolve current active assembly photo across item_code, PO code, and item name.
+     */
+    protected function resolveAssemblyPhoto(\App\Models\LostWaxPrintOrderLine $line): ?\App\Models\LostWaxAssemblyPhoto
+    {
+        $photoService = app(\App\Services\AssemblyPhotoService::class);
+
+        $candidateCodes = array_filter(array_unique([
+            $line->productionPlan?->item_code,
+            $line->code,
+            $line->productionPlan?->code,
+        ]));
+
+        $candidateNames = array_filter(array_unique([
+            $line->item_name,
+            $line->productionPlan?->item_name,
+        ]));
+
+        foreach ($candidateCodes as $code) {
+            $photo = $photoService->getCurrentPhoto($code);
+            if ($photo) {
+                return $photo;
+            }
+        }
+
+        foreach ($candidateNames as $name) {
+            $photo = $photoService->getCurrentPhoto(null, $name);
+            if ($photo) {
+                return $photo;
+            }
+        }
+
+        return null;
     }
 
     /**
