@@ -132,7 +132,7 @@
                 </div>
 
                 <!-- Col 3: Hasil Cor -->
-                <div class="col-span-4 p-2 px-3 flex items-center justify-between">
+                <div class="col-span-4 p-2 px-3 flex items-center">
                     <span class="text-[11px] font-black uppercase tracking-wider text-slate-600 mr-2 shrink-0">HASIL COR :</span>
                     <span class="font-mono font-black text-xl text-black whitespace-nowrap">{{ number_format($line->qty_good) }} PCS</span>
                 </div>

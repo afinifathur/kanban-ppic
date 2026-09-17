@@ -222,6 +222,26 @@
                                         <i class="fas fa-barcode text-[10px] mr-1 text-slate-500"></i>
                                         {{ $line->traveler_number }}
                                     </span>
+                                    <div class="mt-1">
+                                        @if(($line->print_count ?? 0) === 0)
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                                BELUM CETAK
+                                            </span>
+                                        @elseif($line->print_count === 1)
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                <i class="fas fa-check text-[9px] mr-1"></i> SUDAH CETAK
+                                            </span>
+                                        @else
+                                            <div class="flex flex-col items-center">
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                    {{ $line->print_count }}x CETAK
+                                                </span>
+                                                <span class="text-[9px] text-amber-600 font-semibold mt-0.5">
+                                                    {{ $line->print_count - 1 }}x REPRINT
+                                                </span>
+                                            </div>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="p-3 text-center font-mono font-bold text-emerald-700 text-sm">{{ number_format($line->qty_good) }}</td>
                                 <td class="p-3 text-center font-mono font-bold text-red-600">{{ number_format($line->qty_reject) }}</td>
@@ -232,7 +252,7 @@
                                 <td class="p-3 text-center">
                                     <a href="{{ route('sand-casting.casting-results.kitir', [$castingResult, $line]) }}" target="_blank"
                                        class="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-amber-200 font-bold px-2.5 py-1.5 rounded-lg text-xs transition shadow-sm">
-                                        <i class="fas fa-print text-[10px]"></i> Cetak Kitir
+                                        <i class="fas fa-print text-[10px]"></i> {{ ($line->print_count ?? 0) > 0 ? 'Cetak Ulang' : 'Cetak Kitir' }}
                                     </a>
                                 </td>
                             </tr>

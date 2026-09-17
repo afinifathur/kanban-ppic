@@ -80,7 +80,7 @@ class CastingOrderController extends Controller
         }
 
         $plans = $plansQuery->orderBy('id', 'desc')
-            ->paginate(50, ['*'], 'plans_page')
+            ->paginate(100, ['*'], 'plans_page')
             ->withQueryString();
 
         // 3. Dokumen Perintah Cor (Casting Orders)

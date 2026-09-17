@@ -193,6 +193,11 @@ class CastingResultController extends Controller
             abort(403, 'Item bukan bagian dari domain Sand Casting.');
         }
 
+        $line->increment('print_count', 1, [
+            'printed_at' => now(),
+            'last_printed_by' => auth()->id(),
+        ]);
+
         $line->load([
             'castingResult.recorder',
             'castingOrderLine.castingOrder.creator',

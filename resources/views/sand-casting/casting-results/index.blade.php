@@ -94,12 +94,18 @@
                         <th class="p-3.5 text-center w-24 font-bold text-red-600">Total Reject</th>
                         <th class="p-3.5 text-center w-28 font-bold text-slate-800">Total Weight</th>
                         <th class="p-3.5 text-center w-24">Jumlah Line</th>
+                        <th class="p-3.5 text-center w-28">Status Kitir</th>
                         <th class="p-3.5 text-left min-w-[140px]">Recorded By</th>
                         <th class="p-3.5 text-center w-24">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     @forelse($results as $result)
+                        @php
+                            $totalKitir = $result->lines->count();
+                            $printedKitir = $result->lines->where('print_count', '>', 0)->count();
+                            $totalPrint = $result->lines->sum('print_count');
+                        @endphp
                         <tr class="hover:bg-slate-50/80 transition">
                             <td class="p-3.5">
                                 <a href="{{ route('sand-casting.casting-results.show', $result) }}" class="font-mono font-bold text-blue-700 hover:text-blue-900 text-xs tracking-wider flex items-center gap-1.5">
@@ -134,8 +140,40 @@
                             </td>
                             <td class="p-3.5 text-center font-mono">
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700">
-                                    {{ $result->lines->count() }} line
+                                    {{ $totalKitir }} line
                                 </span>
+                            </td>
+                            <td class="p-3.5 text-center">
+                                @if($totalKitir === 0)
+                                    <span class="text-slate-400 font-mono text-[11px]">-</span>
+                                @elseif($printedKitir === 0)
+                                    <div class="flex flex-col items-center">
+                                        <span class="font-mono text-xs font-bold text-slate-600">0 / {{ $totalKitir }}</span>
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-500 border border-slate-200 mt-0.5">
+                                            BELUM CETAK
+                                        </span>
+                                    </div>
+                                @elseif($printedKitir < $totalKitir)
+                                    <div class="flex flex-col items-center">
+                                        <span class="font-mono text-xs font-bold text-amber-700">{{ $printedKitir }} / {{ $totalKitir }}</span>
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 mt-0.5">
+                                            BELUM LENGKAP
+                                        </span>
+                                        @if($totalPrint > $printedKitir)
+                                            <span class="text-[8px] text-slate-400 mt-0.5 font-mono font-medium">Total: {{ $totalPrint }} print</span>
+                                        @endif
+                                    </div>
+                                @else
+                                    <div class="flex flex-col items-center">
+                                        <span class="font-mono text-xs font-bold text-emerald-700">{{ $printedKitir }} / {{ $totalKitir }}</span>
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mt-0.5">
+                                            <i class="fas fa-check text-[8px] mr-1"></i> SUDAH CETAK
+                                        </span>
+                                        @if($totalPrint > $printedKitir)
+                                            <span class="text-[8px] text-slate-400 mt-0.5 font-mono font-medium">Total: {{ $totalPrint }} print</span>
+                                        @endif
+                                    </div>
+                                @endif
                             </td>
                             <td class="p-3.5 text-slate-600">
                                 <div class="font-medium truncate max-w-[150px]">{{ $result->recorder->name ?? 'User #'.$result->recorded_by }}</div>
@@ -149,7 +187,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="p-8 text-center text-slate-400">
+                            <td colspan="11" class="p-8 text-center text-slate-400">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <i class="fas fa-fire-extinguisher text-3xl text-slate-300"></i>
                                     <p class="font-medium text-slate-500">Belum ada riwayat Hasil Cor.</p>

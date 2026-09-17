@@ -16,6 +16,9 @@ class SandCastingCastingResultLine extends Model
         'unit_weight_kg',
         'total_weight_kg',
         'notes',
+        'printed_at',
+        'print_count',
+        'last_printed_by',
     ];
 
     protected $casts = [
@@ -23,6 +26,8 @@ class SandCastingCastingResultLine extends Model
         'qty_reject' => 'integer',
         'unit_weight_kg' => 'decimal:2',
         'total_weight_kg' => 'decimal:2',
+        'printed_at' => 'datetime',
+        'print_count' => 'integer',
     ];
 
     public function castingResult()
@@ -38,6 +43,11 @@ class SandCastingCastingResultLine extends Model
     public function productionPlan()
     {
         return $this->belongsTo(ProductionPlan::class, 'production_plan_id');
+    }
+
+    public function lastPrintedBy()
+    {
+        return $this->belongsTo(User::class, 'last_printed_by');
     }
 
     public function getQtyTotalAttribute(): int

@@ -311,7 +311,154 @@ class KitirProduksiTest extends TestCase
         $this->assertTrue($posQc < $posGudang, 'QC must precede GUDANG JADI');
     }
 
-    public function test_repeated_access_reprint_is_read_only_and_does_not_mutate_traveler_or_database(): void
+    public function test_new_result_line_defaults_to_unprinted(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-006', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+
+        $result = SandCastingCastingResult::create(['heat_number' => 'HEAT-006', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $resultLine = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-14'),
+            'qty_good' => 80,
+            'qty_reject' => 2,
+        ]);
+
+        $this->assertEquals(0, $resultLine->print_count);
+        $this->assertNull($resultLine->printed_at);
+        $this->assertNull($resultLine->last_printed_by);
+    }
+
+    public function test_kitir_route_increments_print_count_and_records_user_and_timestamp(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-007', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+
+        $result = SandCastingCastingResult::create(['heat_number' => 'HEAT-007', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $resultLine = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-14'),
+            'qty_good' => 80,
+        ]);
+
+        // First access
+        $response1 = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.kitir', [$result, $resultLine]));
+        $response1->assertOk();
+
+        $resultLine->refresh();
+        $this->assertEquals(1, $resultLine->print_count);
+        $this->assertNotNull($resultLine->printed_at);
+        $this->assertEquals($this->ppicUser->id, $resultLine->last_printed_by);
+
+        // Second access (reprint 1)
+        $response2 = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.kitir', [$result, $resultLine]));
+        $response2->assertOk();
+
+        $resultLine->refresh();
+        $this->assertEquals(2, $resultLine->print_count);
+
+        // Third access (reprint 2)
+        $response3 = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.kitir', [$result, $resultLine]));
+        $response3->assertOk();
+
+        $resultLine->refresh();
+        $this->assertEquals(3, $resultLine->print_count);
+    }
+
+    public function test_ownership_validation_prevents_incrementing_mismatched_result_line(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-008', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+
+        $resultA = SandCastingCastingResult::create(['heat_number' => 'HEAT-8A', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $resultB = SandCastingCastingResult::create(['heat_number' => 'HEAT-8B', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+
+        $lineOfB = $resultB->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-14'),
+            'qty_good' => 50,
+            'print_count' => 0,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.kitir', [$resultA, $lineOfB]));
+
+        $response->assertStatus(404);
+        $lineOfB->refresh();
+        $this->assertEquals(0, $lineOfB->print_count);
+        $this->assertNull($lineOfB->printed_at);
+    }
+
+    public function test_index_page_displays_aggregated_kitir_print_status(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-009', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+
+        // Case 1: All unprinted (0 / 2 BELUM CETAK)
+        $result1 = SandCastingCastingResult::create(['heat_number' => 'HEAT-UNPRINTED', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $result1->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-901', 'qty_good' => 50, 'print_count' => 0]);
+        $result1->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-902', 'qty_good' => 50, 'print_count' => 0]);
+
+        // Case 2: Partially printed (2 / 3 BELUM LENGKAP)
+        $result2 = SandCastingCastingResult::create(['heat_number' => 'HEAT-PARTIAL', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $result2->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-903', 'qty_good' => 50, 'print_count' => 1]);
+        $result2->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-904', 'qty_good' => 50, 'print_count' => 1]);
+        $result2->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-905', 'qty_good' => 50, 'print_count' => 0]);
+
+        // Case 3: Fully printed with reprints (3 / 3 SUDAH CETAK, Total: 5 print)
+        $result3 = SandCastingCastingResult::create(['heat_number' => 'HEAT-FULL-REPRINT', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $result3->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-906', 'qty_good' => 50, 'print_count' => 3]);
+        $result3->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-907', 'qty_good' => 50, 'print_count' => 1]);
+        $result3->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-908', 'qty_good' => 50, 'print_count' => 1]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index'));
+
+        $response->assertOk();
+        $response->assertSee('Status Kitir');
+        $response->assertSee('0 / 2');
+        $response->assertSee('BELUM CETAK');
+        $response->assertSee('2 / 3');
+        $response->assertSee('BELUM LENGKAP');
+        $response->assertSee('3 / 3');
+        $response->assertSee('SUDAH CETAK');
+        $response->assertSee('Total: 5 print');
+    }
+
+    public function test_show_page_displays_per_line_print_status_badges_and_actions(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-010', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+
+        $result = SandCastingCastingResult::create(['heat_number' => 'HEAT-SHOW', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $line1 = $result->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-SHOW-01', 'qty_good' => 50, 'print_count' => 0]);
+        $line2 = $result->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-SHOW-02', 'qty_good' => 50, 'print_count' => 1]);
+        $line3 = $result->lines()->create(['sand_casting_casting_order_line_id' => $orderLine->id, 'production_plan_id' => $plan->id, 'traveler_number' => 'KTR-SHOW-03', 'qty_good' => 50, 'print_count' => 3]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('BELUM CETAK');
+        $response->assertSee('SUDAH CETAK');
+        $response->assertSee('3x CETAK');
+        $response->assertSee('2x REPRINT');
+        $response->assertSee('Cetak Kitir');
+        $response->assertSee('Cetak Ulang');
+    }
+
+    public function test_repeated_access_reprint_is_safe_and_increments_counter(): void
     {
         $plan = $this->createPlan();
 
@@ -340,11 +487,12 @@ class KitirProduksiTest extends TestCase
             $response->assertSee($traveler);
         }
 
-        // Must remain exactly identical
+        // Must remain exactly identical rows in DB (no duplicates created)
         $this->assertEquals($initialResultCount, SandCastingCastingResult::count());
         $this->assertEquals($initialLineCount, SandCastingCastingResultLine::count());
         $resultLine->refresh();
         $this->assertEquals($traveler, $resultLine->traveler_number);
         $this->assertEquals(80, $resultLine->qty_good);
+        $this->assertEquals(5, $resultLine->print_count);
     }
 }
