@@ -19,6 +19,14 @@ class SandCastingCastingResultLine extends Model
         'printed_at',
         'print_count',
         'last_printed_by',
+        'current_stage',
+        'is_urgent',
+        'urgent_set_at',
+        'urgent_set_by',
+    ];
+
+    protected $attributes = [
+        'is_urgent' => false,
     ];
 
     protected $casts = [
@@ -28,6 +36,8 @@ class SandCastingCastingResultLine extends Model
         'total_weight_kg' => 'decimal:2',
         'printed_at' => 'datetime',
         'print_count' => 'integer',
+        'is_urgent' => 'boolean',
+        'urgent_set_at' => 'datetime',
     ];
 
     public function castingResult()
@@ -48,6 +58,16 @@ class SandCastingCastingResultLine extends Model
     public function lastPrintedBy()
     {
         return $this->belongsTo(User::class, 'last_printed_by');
+    }
+
+    public function urgentSetBy()
+    {
+        return $this->belongsTo(User::class, 'urgent_set_by');
+    }
+
+    public function stageExecutions()
+    {
+        return $this->hasMany(SandCastingStageExecution::class, 'sand_casting_casting_result_line_id');
     }
 
     public function getQtyTotalAttribute(): int

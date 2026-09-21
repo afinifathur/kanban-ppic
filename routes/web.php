@@ -239,6 +239,21 @@ Route::middleware(['auth'])->group(function () {
                 return redirect()->route('sand-casting.casting-results.create', ['casting_order_id' => $castingOrder->id]);
             });
         });
+
+        // Production Floor Scanner API Endpoints (Sand Casting)
+        Route::prefix('scan')->name('scan.')->group(function () {
+            Route::get('/netto', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'scanNetto'])->name('netto');
+            Route::get('/ktr/{travelerNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupKtr'])->name('ktr');
+            Route::get('/heat/{heatNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupHeat'])->name('heat');
+            Route::post('/{stage}/execute', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'execute'])->name('execute');
+        });
+    });
+
+    // Generic Scanner Endpoints (Direct alias)
+    Route::prefix('scan')->name('scan.')->group(function () {
+        Route::get('/ktr/{travelerNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupKtr']);
+        Route::get('/heat/{heatNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupHeat']);
+        Route::post('/{stage}/execute', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'execute']);
     });
 });
 

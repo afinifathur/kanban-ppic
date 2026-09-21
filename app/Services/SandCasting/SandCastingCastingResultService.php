@@ -156,6 +156,7 @@ class SandCastingCastingResultService
                     'qty_reject' => $item['qty_reject'],
                     'unit_weight_kg' => $item['unit_weight_kg'],
                     'total_weight_kg' => $item['total_weight_kg'],
+                    'current_stage' => 'netto',
                     'notes' => $item['notes'],
                 ]);
             }
