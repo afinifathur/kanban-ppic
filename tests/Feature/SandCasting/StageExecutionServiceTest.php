@@ -186,7 +186,9 @@ class StageExecutionServiceTest extends TestCase
         $line->refresh();
         $this->assertEquals('bubut_cnc', $line->current_stage);
 
-        // 4. BUBUT CNC (91 in, 0 defect -> 91 good)
+        // 4. BUBUT CNC (91 in, 0 defect -> 91 good across CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR)
+        $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
+        $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $line->refresh();
         $this->assertEquals('bor', $line->current_stage);
@@ -210,7 +212,7 @@ class StageExecutionServiceTest extends TestCase
 
         $line->refresh();
         $this->assertEquals('completed', $line->current_stage);
-        $this->assertCount(7, $line->stageExecutions);
+        $this->assertCount(9, $line->stageExecutions);
     }
 
     /**
@@ -380,7 +382,7 @@ class StageExecutionServiceTest extends TestCase
         $line->save();
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage("KTR {$line->traveler_number} sudah pernah dieksekusi pada tahap netto.");
+        $this->expectExceptionMessage("KTR {$line->traveler_number} tidak memiliki checkpoint aktif yang siap diproses.");
 
         $this->service->execute($line->traveler_number, 'netto', 2, $this->user->id);
     }
@@ -414,7 +416,6 @@ class StageExecutionServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage("Tahap target 'cor' tidak valid dalam alur eksekusi Sand Casting.");
-
         $this->service->execute($line->traveler_number, 'cor', 0, $this->user->id);
     }
 
@@ -427,7 +428,6 @@ class StageExecutionServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Operator dengan ID 99999 tidak ditemukan.');
-
         $this->service->execute($line->traveler_number, 'netto', 0, 99999);
     }
 
@@ -442,15 +442,17 @@ class StageExecutionServiceTest extends TestCase
         SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 0,
             'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_READY,
             'operator_id' => $this->user->id,
             'executed_at' => now(),
         ]);
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage("KTR {$line->traveler_number} sudah pernah dieksekusi pada tahap netto.");
+        $this->expectExceptionMessage("KTR {$line->traveler_number} sudah pernah dieksekusi pada checkpoint NETTO_CUT");
 
         $this->service->execute($line->traveler_number, 'netto', 5, $this->user->id);
     }

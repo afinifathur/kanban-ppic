@@ -3,6 +3,7 @@
 namespace App\Services\SandCasting;
 
 use App\Models\SandCastingCastingResultLine;
+use App\Models\SandCastingStageExecution;
 use Illuminate\Support\Collection;
 
 class SandCastingProductionFloorQueryService
@@ -30,7 +31,7 @@ class SandCastingProductionFloorQueryService
             'productionPlan',
             'castingOrderLine.castingOrder',
             'urgentSetBy',
-            'stageExecutions' => fn ($query) => $query->orderBy('executed_at', 'asc')->orderBy('id', 'asc')->with('operator'),
+            'stageExecutions' => fn ($query) => $query->orderBy('executed_at', 'asc')->orderBy('id', 'asc')->with(['operator', 'defectEnteredBy', 'qcVerifiedBy', 'defects.defectType']),
         ])->where('traveler_number', $travelerNumber)->first();
 
         if (! $line) {
@@ -59,7 +60,7 @@ class SandCastingProductionFloorQueryService
             'productionPlan',
             'castingOrderLine.castingOrder',
             'urgentSetBy',
-            'stageExecutions' => fn ($query) => $query->orderBy('executed_at', 'asc')->orderBy('id', 'asc')->with('operator'),
+            'stageExecutions' => fn ($query) => $query->orderBy('executed_at', 'asc')->orderBy('id', 'asc')->with(['operator', 'defectEnteredBy', 'qcVerifiedBy', 'defects.defectType']),
         ])
             ->orderBy('created_at', 'asc')
             ->orderBy('id', 'asc')
@@ -86,7 +87,7 @@ class SandCastingProductionFloorQueryService
         }
 
         return $line->stageExecutions()
-            ->with('operator')
+            ->with(['operator', 'defectEnteredBy', 'qcVerifiedBy', 'defects.defectType'])
             ->orderBy('executed_at', 'asc')
             ->orderBy('id', 'asc')
             ->get()
@@ -134,7 +135,7 @@ class SandCastingProductionFloorQueryService
     }
 
     /**
-     * Resolve the current input quantity available for the traveler's current stage.
+     * Resolve the current input quantity available for the traveler's active checkpoint.
      */
     protected function resolveCurrentInputQty(SandCastingCastingResultLine $line): ?int
     {
@@ -146,24 +147,53 @@ class SandCastingProductionFloorQueryService
             return 0;
         }
 
-        // If current stage has already been executed (e.g. halted with good_qty = 0)
-        $currentStageExec = $line->stageExecutions->firstWhere('stage', $line->current_stage);
-        if ($currentStageExec) {
-            return (int) $currentStageExec->good_qty;
+        $stageCheckpoints = SandCastingStageExecutionService::STAGE_CHECKPOINTS[$line->current_stage] ?? [];
+        if (empty($stageCheckpoints)) {
+            return 0;
         }
 
-        if ($line->current_stage === 'netto') {
+        $firstCheckpoint = $stageCheckpoints[0];
+
+        // If the first checkpoint is NETTO_CUT
+        if ($firstCheckpoint === 'NETTO_CUT') {
+            $exec = $line->stageExecutions->firstWhere('checkpoint_code', 'NETTO_CUT');
+            if ($exec) {
+                return (int) $exec->good_qty;
+            }
+
             return (int) $line->qty_good;
         }
 
-        if (isset(SandCastingStageExecutionService::PREVIOUS_STAGE[$line->current_stage])) {
-            $prevStage = SandCastingStageExecutionService::PREVIOUS_STAGE[$line->current_stage];
-            $prevExec = $line->stageExecutions->firstWhere('stage', $prevStage);
+        // Loop through checkpoints of current stage to find active unconfirmed or latest input
+        foreach ($stageCheckpoints as $chkCode) {
+            $exec = $line->stageExecutions->firstWhere('checkpoint_code', $chkCode);
 
-            return $prevExec ? (int) $prevExec->good_qty : 0;
+            if (! $exec || $exec->status !== SandCastingStageExecution::STATUS_CONFIRMED) {
+                // Input for this checkpoint comes from its immediately preceding checkpoint
+                $prevChkCode = SandCastingStageExecutionService::PREVIOUS_CHECKPOINT[$chkCode] ?? null;
+                if ($prevChkCode) {
+                    $prevExec = $line->stageExecutions
+                        ->where('checkpoint_code', $prevChkCode)
+                        ->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
+                        ->first();
+
+                    return $prevExec ? (int) $prevExec->good_qty : 0;
+                }
+
+                return 0;
+            }
+
+            // If this checkpoint is CONFIRMED and good_qty === 0, halted with 0
+            if ($exec->good_qty === 0) {
+                return 0;
+            }
         }
 
-        return 0;
+        // If all checkpoints in this stage are confirmed, return the good_qty of the last checkpoint
+        $lastChkCode = end($stageCheckpoints);
+        $lastExec = $line->stageExecutions->firstWhere('checkpoint_code', $lastChkCode);
+
+        return $lastExec ? (int) $lastExec->good_qty : 0;
     }
 
     /**
@@ -206,13 +236,29 @@ class SandCastingProductionFloorQueryService
         return [
             'id' => $exec->id,
             'stage' => $exec->stage,
+            'checkpoint_code' => $exec->checkpoint_code,
+            'status' => $exec->status,
             'input_qty' => (int) $exec->input_qty,
             'defect_qty' => (int) $exec->defect_qty,
             'good_qty' => (int) $exec->good_qty,
             'operator_id' => $exec->operator_id,
             'operator_name' => $exec->operator?->name,
             'executed_at' => $exec->executed_at,
+            'physical_done_at' => $exec->physical_done_at,
+            'defect_entered_at' => $exec->defect_entered_at,
+            'defect_entered_by' => $exec->defect_entered_by,
+            'defect_entered_by_name' => $exec->defectEnteredBy?->name,
+            'qc_verified_at' => $exec->qc_verified_at,
+            'qc_verified_by' => $exec->qc_verified_by,
+            'qc_verified_by_name' => $exec->qcVerifiedBy?->name,
             'notes' => $exec->notes,
+            'defects' => $exec->defects ? $exec->defects->map(fn ($d) => [
+                'id' => $d->id,
+                'defect_type_id' => $d->defect_type_id,
+                'defect_name' => $d->defectType?->name,
+                'qty' => (int) $d->qty,
+                'notes' => $d->notes,
+            ])->values()->all() : [],
         ];
     }
 }

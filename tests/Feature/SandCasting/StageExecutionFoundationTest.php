@@ -102,9 +102,11 @@ class StageExecutionFoundationTest extends TestCase
         $execution = SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 5,
             'good_qty' => 95,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now(),
             'notes' => 'Netto potong selesai 95 pcs bagus.',
@@ -119,6 +121,7 @@ class StageExecutionFoundationTest extends TestCase
         $this->assertDatabaseHas('sand_casting_stage_executions', [
             'id' => $execution->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 5,
             'good_qty' => 95,
@@ -133,9 +136,11 @@ class StageExecutionFoundationTest extends TestCase
         $exec1 = SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 5,
             'good_qty' => 95,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now(),
         ]);
@@ -143,9 +148,11 @@ class StageExecutionFoundationTest extends TestCase
         $exec2 = SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
             'input_qty' => 95,
             'defect_qty' => 3,
             'good_qty' => 92,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now()->addMinutes(30),
         ]);
@@ -186,29 +193,33 @@ class StageExecutionFoundationTest extends TestCase
         $this->assertNotNull($line->urgent_set_at);
     }
 
-    public function test_duplicate_ktr_and_stage_execution_is_rejected_by_unique_constraint(): void
+    public function test_duplicate_ktr_and_checkpoint_execution_is_rejected_by_unique_constraint(): void
     {
         $line = $this->createKtrLine();
 
         SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 5,
             'good_qty' => 95,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now(),
         ]);
 
-        // Attempting to record second execution on the SAME stage for the SAME KTR must trigger Unique Constraint violation
+        // Attempting to record second execution on the SAME checkpoint for the SAME KTR must trigger Unique Constraint violation
         $this->expectException(QueryException::class);
 
         SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 95,
             'defect_qty' => 0,
             'good_qty' => 95,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now()->addMinutes(10),
         ]);
@@ -221,9 +232,11 @@ class StageExecutionFoundationTest extends TestCase
         SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 5,
             'good_qty' => 95,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now(),
         ]);
@@ -246,9 +259,11 @@ class StageExecutionFoundationTest extends TestCase
         SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
             'defect_qty' => 10,
             'good_qty' => 90,
+            'status' => 'CONFIRMED',
             'operator_id' => $this->user->id,
             'executed_at' => now(),
         ]);
