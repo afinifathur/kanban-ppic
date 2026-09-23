@@ -20,6 +20,7 @@ class SandCastingCastingResultLine extends Model
         'print_count',
         'last_printed_by',
         'current_stage',
+        'queue_position',
         'is_urgent',
         'urgent_set_at',
         'urgent_set_by',
@@ -36,6 +37,7 @@ class SandCastingCastingResultLine extends Model
         'total_weight_kg' => 'decimal:2',
         'printed_at' => 'datetime',
         'print_count' => 'integer',
+        'queue_position' => 'integer',
         'is_urgent' => 'boolean',
         'urgent_set_at' => 'datetime',
     ];

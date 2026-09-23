@@ -5,6 +5,7 @@ namespace Tests\Feature\LostWax;
 use App\Models\LostWaxCoatingRack;
 use App\Models\LostWaxScanEvent;
 use App\Models\LostWaxTree;
+use App\Models\LostWaxTreeDefect;
 use App\Models\User;
 use App\Services\LostWax\RackMonitorService;
 use Carbon\Carbon;
@@ -18,10 +19,13 @@ class RackMonitorServiceTest extends TestCase
 
     private RackMonitorService $service;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->service = new RackMonitorService;
+        $this->user = User::factory()->create();
 
         // Create 35 coating racks
         for ($i = 1; $i <= 35; $i++) {
@@ -376,5 +380,252 @@ class RackMonitorServiceTest extends TestCase
 
         $detail = $this->service->getRackDetail($rack->id);
         $this->assertNull($detail, 'getRackDetail should return null for rack with only oven trees');
+    }
+
+    // ─── Test 13: Usable quantity semantics & full scrap exclusion ───
+    public function test_usable_quantity_semantics_and_full_scrap_exclusion(): void
+    {
+        $rack = LostWaxCoatingRack::first();
+
+        // Tree 1: Gross 20, Defect 0 -> Usable 20
+        $tree1 = $this->createTree([
+            'rack_id' => $rack->id,
+            'quantity' => 20,
+            'current_stage' => 'layer_1',
+            'last_scan_at' => now(),
+        ]);
+
+        // Tree 2: Gross 20, Defect 20 -> Usable 0 (Full Scrap)
+        $tree2 = $this->createTree([
+            'rack_id' => $rack->id,
+            'quantity' => 20,
+            'current_stage' => 'layer_1',
+            'last_scan_at' => now(),
+        ]);
+        LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $tree2->id,
+            'stage' => 'layer_1',
+            'defect_qty' => 20,
+            'defect_reason' => 'Broken pattern',
+            'recorded_by' => $this->user->id,
+            'occurred_at' => now(),
+        ]);
+
+        // Tree 3: Gross 11, Defect 4 -> Usable 7 (Partial Defect)
+        $tree3 = $this->createTree([
+            'rack_id' => $rack->id,
+            'quantity' => 11,
+            'current_stage' => 'layer_1',
+            'last_scan_at' => now(),
+        ]);
+        LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $tree3->id,
+            'stage' => 'layer_1',
+            'defect_qty' => 4,
+            'defect_reason' => 'Partial crack',
+            'recorded_by' => $this->user->id,
+            'occurred_at' => now(),
+        ]);
+
+        $activeRacks = $this->service->getActiveRacks();
+
+        $this->assertCount(1, $activeRacks);
+        $rackData = $activeRacks[0];
+
+        // Active tree count should be 2 (tree1 and tree3, tree2 excluded)
+        $this->assertEquals(2, $rackData['tree_count']);
+        // Total usable quantity: 20 + 7 = 27 pcs (not gross 20+20+11 = 51)
+        $this->assertEquals(27, $rackData['total_quantity']);
+
+        // Check tree details
+        $this->assertCount(2, $rackData['trees']);
+        $treeDetails = collect($rackData['trees'])->keyBy('id');
+
+        $this->assertArrayNotHasKey($tree2->id, $treeDetails);
+        $this->assertEquals(20, $treeDetails[$tree1->id]['quantity']);
+        $this->assertEquals(20, $treeDetails[$tree1->id]['gross_quantity']);
+        $this->assertEquals(7, $treeDetails[$tree3->id]['quantity']);
+        $this->assertEquals(11, $treeDetails[$tree3->id]['gross_quantity']);
+    }
+
+    // ─── Test 14: Mixed rack with full scrap ignores full scrap for dominant stage & mixed state ───
+    public function test_mixed_rack_with_full_scrap_ignores_scrap_stage(): void
+    {
+        $rack = LostWaxCoatingRack::where('rack_number', 11)->first();
+
+        // Tree A: Layer 6, Gross 20, Defect 0 -> Usable 20
+        $treeA = $this->createTree([
+            'rack_id' => $rack->id,
+            'quantity' => 20,
+            'current_stage' => 'layer_6',
+            'last_scan_at' => now()->subHours(2),
+        ]);
+
+        // Tree B: Layer 4, Gross 10, Defect 10 -> Usable 0 (Full scrap)
+        $treeB = $this->createTree([
+            'rack_id' => $rack->id,
+            'quantity' => 10,
+            'current_stage' => 'layer_4',
+            'last_scan_at' => now()->subHours(50),
+        ]);
+        LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $treeB->id,
+            'stage' => 'layer_3',
+            'defect_qty' => 10,
+            'defect_reason' => 'Total crack',
+            'recorded_by' => $this->user->id,
+            'occurred_at' => now()->subHours(55),
+        ]);
+
+        // Tree C: Layer 6, Gross 15, Defect 0 -> Usable 15
+        $treeC = $this->createTree([
+            'rack_id' => $rack->id,
+            'quantity' => 15,
+            'current_stage' => 'layer_6',
+            'last_scan_at' => now()->subHours(1),
+        ]);
+
+        $activeRacks = $this->service->getActiveRacks();
+
+        $this->assertCount(1, $activeRacks);
+        $rackData = $activeRacks[0];
+
+        $this->assertEquals(2, $rackData['tree_count']);
+        $this->assertEquals(35, $rackData['total_quantity']);
+        $this->assertEquals('layer_6', $rackData['dominant_stage']);
+        $this->assertFalse($rackData['is_mixed'], 'Tree B is full scrap so rack is NOT mixed');
+        $this->assertEquals(2, $rackData['stage_distribution']['layer_6']);
+        $this->assertEquals(0, $rackData['stage_distribution']['layer_4']);
+    }
+
+    // ─── Test 15: Rack with ONLY full-scrap trees has NO active rack workload ───
+    public function test_rack_with_only_full_scrap_trees_has_no_active_workload(): void
+    {
+        $rack = LostWaxCoatingRack::where('rack_number', 8)->first();
+
+        // 3 trees, all 100% defect
+        for ($i = 1; $i <= 3; $i++) {
+            $tree = $this->createTree([
+                'rack_id' => $rack->id,
+                'quantity' => 10,
+                'current_stage' => 'layer_2',
+                'last_scan_at' => now(),
+            ]);
+            LostWaxTreeDefect::create([
+                'lost_wax_tree_id' => $tree->id,
+                'stage' => 'layer_2',
+                'defect_qty' => 10,
+                'defect_reason' => 'Total drop',
+                'recorded_by' => $this->user->id,
+                'occurred_at' => now(),
+            ]);
+        }
+
+        $activeRacks = $this->service->getActiveRacks();
+        $this->assertEmpty($activeRacks);
+
+        $detail = $this->service->getRackDetail($rack->id);
+        $this->assertNull($detail);
+
+        // Rack record and status remain untouched
+        $this->assertDatabaseHas('lost_wax_coating_racks', [
+            'id' => $rack->id,
+            'status' => 'active',
+        ]);
+    }
+
+    // ─── Test 16: STSOR6 / Barcode 3150926008 Real Case Scenario ───
+    public function test_stsor6_full_scrap_real_case_scenario(): void
+    {
+        $rack11 = LostWaxCoatingRack::where('rack_number', 11)->first();
+
+        // Tree STSOR6: Barcode 3150926008, Gross 11, Defect 11 @ L3, current_stage layer_4
+        $treeSTSOR6 = $this->createTree([
+            'barcode' => '3150926008',
+            'rack_id' => $rack11->id,
+            'quantity' => 11,
+            'current_stage' => 'layer_4',
+            'last_scan_at' => now()->subHours(100), // 100 hours ago
+        ]);
+        LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $treeSTSOR6->id,
+            'stage' => 'layer_3',
+            'defect_qty' => 11,
+            'defect_reason' => 'Rontok L3',
+            'recorded_by' => $this->user->id,
+            'occurred_at' => now()->subHours(105),
+        ]);
+
+        // Another valid active tree on RAK-11: Layer 4, Gross 20, Defect 0, scanned 2 hours ago
+        $treeActive = $this->createTree([
+            'barcode' => '3150926009',
+            'rack_id' => $rack11->id,
+            'quantity' => 20,
+            'current_stage' => 'layer_4',
+            'last_scan_at' => now()->subHours(2),
+        ]);
+
+        $activeRacks = $this->service->getActiveRacks();
+
+        $this->assertCount(1, $activeRacks);
+        $rackData = $activeRacks[0];
+
+        // Tree count should be 1, total_qty should be 20
+        $this->assertEquals(1, $rackData['tree_count']);
+        $this->assertEquals(20, $rackData['total_quantity']);
+        $this->assertEquals('layer_4', $rackData['dominant_stage']);
+        $this->assertFalse($rackData['is_mixed']);
+
+        // Aging should be based on treeActive (2 hours ago = 120 minutes), NOT treeSTSOR6 (100 hours ago)
+        $this->assertEquals(120, $rackData['rack_age_minutes']);
+        $this->assertEquals('normal', $rackData['aging_status']);
+
+        // Verify STSOR6 scan and defect records remain intact in database
+        $this->assertDatabaseHas('lost_wax_trees', [
+            'id' => $treeSTSOR6->id,
+            'barcode' => '3150926008',
+            'current_stage' => 'layer_4',
+        ]);
+        $this->assertDatabaseHas('lost_wax_tree_defects', [
+            'lost_wax_tree_id' => $treeSTSOR6->id,
+            'defect_qty' => 11,
+        ]);
+    }
+
+    // ─── Test 17: Unassigned full scrap tree is excluded from unassigned count ───
+    public function test_unassigned_full_scrap_is_excluded_from_unassigned_count(): void
+    {
+        // 1 active unassigned tree
+        $this->createTree([
+            'rack_id' => null,
+            'quantity' => 15,
+            'current_stage' => 'layer_1',
+        ]);
+
+        // 1 full-scrap unassigned tree
+        $treeScrap = $this->createTree([
+            'rack_id' => null,
+            'quantity' => 10,
+            'current_stage' => 'layer_1',
+        ]);
+        LostWaxTreeDefect::create([
+            'lost_wax_tree_id' => $treeScrap->id,
+            'stage' => 'layer_1',
+            'defect_qty' => 10,
+            'defect_reason' => 'Total drop',
+            'recorded_by' => $this->user->id,
+            'occurred_at' => now(),
+        ]);
+
+        $unassignedCount = $this->service->getUnassignedTreeCount();
+        $this->assertEquals(1, $unassignedCount);
+    }
+
+    // ─── Test 18: Auto refresh script is set to 600000 ms in index view ───
+    public function test_auto_refresh_interval_is_600000_ms(): void
+    {
+        $viewContent = file_get_contents(resource_path('views/lost-wax/rack-monitor/index.blade.php'));
+        $this->assertStringContainsString('600000', $viewContent);
+        $this->assertMatchesRegularExpression('/setInterval\(function\(\)\s*\{\s*window\.location\.reload\(\);\s*\}\s*,\s*600000\);/', $viewContent);
     }
 }

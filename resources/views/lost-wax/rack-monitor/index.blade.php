@@ -483,10 +483,10 @@
         let currentFilter = 'all';
         let splitOnly = false;
 
-        // Auto Refresh every 60 seconds
+        // Auto Refresh every 10 minutes
         setInterval(function() {
             window.location.reload();
-        }, 60000);
+        }, 600000);
 
         function setFilter(state) {
             currentFilter = state;

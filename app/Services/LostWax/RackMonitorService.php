@@ -32,15 +32,18 @@ class RackMonitorService
             ->whereHas('coatingRack', function ($query) {
                 $query->where('status', 'active');
             })
-            ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference'])
+            ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference', 'defects'])
             ->get();
 
-        if ($trees->isEmpty()) {
+        // Filter out trees with no remaining usable quantity (full scrap / afkir)
+        $activeTrees = $trees->filter(fn ($tree) => $tree->usable_quantity > 0);
+
+        if ($activeTrees->isEmpty()) {
             return [];
         }
 
-        // Group trees by rack_id
-        $grouped = $trees->groupBy('rack_id');
+        // Group active trees by rack_id
+        $grouped = $activeTrees->groupBy('rack_id');
 
         $result = [];
 
@@ -87,13 +90,15 @@ class RackMonitorService
 
         $trees = LostWaxTree::where('rack_id', $rackId)
             ->whereIn('current_stage', self::RACK_STAGES)
-            ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference'])
+            ->with(['coatingRack', 'printOrderLine', 'workOrder.itemReference', 'defects'])
             ->get();
-        if ($trees->isEmpty()) {
+
+        $activeTrees = $trees->filter(fn ($tree) => $tree->usable_quantity > 0);
+        if ($activeTrees->isEmpty()) {
             return null;
         }
 
-        return $this->aggregateRack($rack, $trees);
+        return $this->aggregateRack($rack, $activeTrees);
     }
 
     /**
@@ -106,6 +111,9 @@ class RackMonitorService
                 $query->whereNull('current_stage')
                     ->orWhereIn('current_stage', self::RACK_STAGES);
             })
+            ->with('defects')
+            ->get()
+            ->filter(fn ($tree) => $tree->usable_quantity > 0)
             ->count();
     }
 
@@ -117,7 +125,7 @@ class RackMonitorService
     private function aggregateRack(LostWaxCoatingRack $rack, $treesInRack): array
     {
         $treeCount = $treesInRack->count();
-        $totalQuantity = $treesInRack->sum('quantity');
+        $totalQuantity = $treesInRack->sum(fn ($tree) => $tree->usable_quantity);
 
         // Build stage distribution for physical rack stages
         $distribution = [
@@ -234,7 +242,8 @@ class RackMonitorService
                 'id' => $tree->id,
                 'barcode' => $cleanBarcode,
                 'human_barcode' => $cleanBarcode,
-                'quantity' => $tree->quantity,
+                'quantity' => $tree->usable_quantity,
+                'gross_quantity' => $tree->quantity,
                 'current_stage' => $tree->current_stage,
                 'current_stage_label' => $tree->current_stage_label,
                 'last_scan_at' => $tree->last_scan_at ? $tree->last_scan_at->toIso8601String() : null,

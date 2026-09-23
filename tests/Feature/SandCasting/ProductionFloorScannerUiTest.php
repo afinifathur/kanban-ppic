@@ -133,7 +133,7 @@ class ProductionFloorScannerUiTest extends TestCase
     }
 
     /**
-     * TEST 4: End-to-end scanner flow: lookup -> execute NETTO -> state updated
+     * TEST 4: End-to-end scanner flow: lookup -> execute NETTO physical done -> WAITING_DEFECT
      */
     public function test_end_to_end_scanner_lookup_and_execution_flow(): void
     {
@@ -147,74 +147,44 @@ class ProductionFloorScannerUiTest extends TestCase
                 'data' => [
                     'traveler_number' => $line->traveler_number,
                     'current_stage' => 'netto',
+                    'active_checkpoint' => 'NETTO_CUT',
                     'current_input_qty' => 100,
                     'operational_status' => 'READY',
-                    'next_stage' => 'bubut_od',
                 ],
             ]);
 
-        // Step 2: Execute NETTO
+        // Step 2: Execute NETTO physical done
         $execRes = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
             'traveler_number' => $line->traveler_number,
-            'defect_qty' => 4,
             'notes' => 'Netto pilot test',
         ]);
 
         $execRes->assertStatus(200)
             ->assertJson([
                 'success' => true,
-                'message' => 'KTR berhasil diproses.',
                 'data' => [
                     'traveler_number' => $line->traveler_number,
                     'stage' => 'netto',
+                    'checkpoint_code' => 'NETTO_CUT',
                     'input_qty' => 100,
-                    'defect_qty' => 4,
-                    'good_qty' => 96,
-                    'current_stage' => 'bubut_od',
-                    'operational_status' => 'READY',
-                    'next_stage' => 'marking',
+                    'defect_qty' => 0,
+                    'good_qty' => 100,
+                    'status' => 'WAITING_DEFECT',
+                    'current_stage' => 'netto',
+                    'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
 
-        // Step 3: Verify subsequent lookup shows fresh stage
+        // Step 3: Verify subsequent lookup shows fresh status WAITING_DEFECT
         $subsequentLookup = $this->actingAs($this->user)->getJson("/sand-casting/scan/ktr/{$line->traveler_number}");
         $subsequentLookup->assertStatus(200)
             ->assertJson([
                 'data' => [
-                    'current_stage' => 'bubut_od',
-                    'current_input_qty' => 96,
-                    'operational_status' => 'READY',
-                ],
-            ]);
-    }
-
-    /**
-     * TEST 5: End-to-end scanner flow when all units are defect (good_qty = 0)
-     */
-    public function test_end_to_end_zero_good_qty_results_in_halted_status(): void
-    {
-        $line = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
-
-        $execRes = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
-            'traveler_number' => $line->traveler_number,
-            'defect_qty' => 50,
-            'notes' => 'Semua scrap saat potong',
-        ]);
-
-        $execRes->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-                'data' => [
-                    'input_qty' => 50,
-                    'defect_qty' => 50,
-                    'good_qty' => 0,
                     'current_stage' => 'netto',
-                    'operational_status' => 'HALTED',
+                    'current_input_qty' => 100,
+                    'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
-
-        $line->refresh();
-        $this->assertEquals('netto', $line->current_stage);
     }
 
     /**

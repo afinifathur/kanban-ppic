@@ -204,7 +204,7 @@ class ProductionFloorScanControllerTest extends TestCase
     }
 
     /**
-     * TEST 6: Valid NETTO execution via endpoint
+     * TEST 6: Valid NETTO physical completion execution via endpoint
      */
     public function test_valid_netto_execution_succeeds(): void
     {
@@ -212,44 +212,44 @@ class ProductionFloorScanControllerTest extends TestCase
 
         $response = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
             'traveler_number' => $line->traveler_number,
-            'defect_qty' => 5,
             'notes' => 'Netto potong selesai',
         ]);
 
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,
-                'message' => 'KTR berhasil diproses.',
                 'data' => [
                     'traveler_number' => $line->traveler_number,
                     'stage' => 'netto',
+                    'checkpoint_code' => 'NETTO_CUT',
                     'input_qty' => 100,
-                    'defect_qty' => 5,
-                    'good_qty' => 95,
-                    'current_stage' => 'bubut_od',
-                    'operational_status' => 'READY',
-                    'next_stage' => 'marking',
+                    'defect_qty' => 0,
+                    'good_qty' => 100,
+                    'status' => 'WAITING_DEFECT',
+                    'current_stage' => 'netto',
+                    'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
 
         $line->refresh();
-        $this->assertEquals('bubut_od', $line->current_stage);
+        $this->assertEquals('netto', $line->current_stage);
     }
 
     /**
-     * TEST 7: Valid downstream execution (bubut-od)
+     * TEST 7: Valid downstream physical completion (bubut-od)
      */
     public function test_valid_downstream_execution_succeeds(): void
     {
         $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
 
-        // Execute NETTO first
+        // Execute NETTO through full flow first to advance to bubut_od
         $this->executionService->execute($line->traveler_number, 'netto', 5, $this->user->id);
+        $line->refresh();
+        $this->assertEquals('bubut_od', $line->current_stage);
 
-        // Execute BUBUT-OD via endpoint
+        // Execute BUBUT-OD physical done via endpoint
         $response = $this->actingAs($this->user)->postJson('/sand-casting/scan/bubut-od/execute', [
             'traveler_number' => $line->traveler_number,
-            'defect_qty' => 3,
             'notes' => 'Bubut OD selesai',
         ]);
 
@@ -259,18 +259,19 @@ class ProductionFloorScanControllerTest extends TestCase
                 'data' => [
                     'traveler_number' => $line->traveler_number,
                     'stage' => 'bubut_od',
+                    'checkpoint_code' => 'OD_TURNING',
                     'input_qty' => 95,
-                    'defect_qty' => 3,
-                    'good_qty' => 92,
-                    'current_stage' => 'marking',
-                    'operational_status' => 'READY',
-                    'next_stage' => 'bubut_cnc',
+                    'defect_qty' => 0,
+                    'good_qty' => 95,
+                    'status' => 'WAITING_DEFECT',
+                    'current_stage' => 'bubut_od',
+                    'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
     }
 
     /**
-     * TEST 8: Execution with defect 0 -> good = input
+     * TEST 8: Execution records physical done and preserves input quantity
      */
     public function test_execution_with_zero_defect_produces_equal_good_qty(): void
     {
@@ -278,7 +279,6 @@ class ProductionFloorScanControllerTest extends TestCase
 
         $response = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
             'traveler_number' => $line->traveler_number,
-            'defect_qty' => 0,
         ]);
 
         $response->assertStatus(200)
@@ -288,54 +288,8 @@ class ProductionFloorScanControllerTest extends TestCase
                     'input_qty' => 80,
                     'defect_qty' => 0,
                     'good_qty' => 80,
+                    'status' => 'WAITING_DEFECT',
                 ],
-            ]);
-    }
-
-    /**
-     * TEST 9: Execution with defect = input -> good_qty = 0 and status HALTED
-     */
-    public function test_execution_with_all_defect_halts_stage(): void
-    {
-        $line = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
-
-        $response = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
-            'traveler_number' => $line->traveler_number,
-            'defect_qty' => 50,
-        ]);
-
-        $response->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-                'data' => [
-                    'input_qty' => 50,
-                    'defect_qty' => 50,
-                    'good_qty' => 0,
-                    'current_stage' => 'netto',
-                    'operational_status' => 'HALTED',
-                ],
-            ]);
-
-        $line->refresh();
-        $this->assertEquals('netto', $line->current_stage);
-    }
-
-    /**
-     * TEST 10: Reject defect > input
-     */
-    public function test_reject_defect_greater_than_input(): void
-    {
-        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
-
-        $response = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
-            'traveler_number' => $line->traveler_number,
-            'defect_qty' => 105,
-        ]);
-
-        $response->assertStatus(422)
-            ->assertJson([
-                'success' => false,
-                'message' => 'Jumlah defect (105) tidak boleh melebihi jumlah input (100).',
             ]);
     }
 
@@ -475,10 +429,10 @@ class ProductionFloorScanControllerTest extends TestCase
 
         $response = $this->actingAs($this->user)->postJson('/sand-casting/scan/netto/execute', [
             'traveler_number' => $line->traveler_number,
-            'defect_qty' => 10,
-            'input_qty' => 9999, // Should be ignored (actual is 100)
-            'good_qty' => 9999,  // Should be ignored (actual is 90)
-            'current_stage' => 'completed', // Should be ignored (actual next is bubut_od)
+            'input_qty' => 9999, // Should be ignored (actual server input is 100)
+            'good_qty' => 9999,  // Should be ignored
+            'defect_qty' => 9999, // Should be ignored by SPV physical done
+            'current_stage' => 'completed', // Should be ignored (actual remains netto in WAITING_DEFECT)
         ]);
 
         $response->assertStatus(200)
@@ -486,9 +440,11 @@ class ProductionFloorScanControllerTest extends TestCase
                 'success' => true,
                 'data' => [
                     'input_qty' => 100,
-                    'defect_qty' => 10,
-                    'good_qty' => 90,
-                    'current_stage' => 'bubut_od',
+                    'defect_qty' => 0,
+                    'good_qty' => 100,
+                    'status' => 'WAITING_DEFECT',
+                    'current_stage' => 'netto',
+                    'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
     }

@@ -240,9 +240,19 @@ Route::middleware(['auth'])->group(function () {
             });
         });
 
+        // Operational Kanban Routes (Sand Casting Floor)
+        Route::prefix('kanban')->name('kanban.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'index'])->name('index');
+            Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'reorder'])->name('reorder');
+            Route::get('/stage/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'show'])->name('stage');
+            Route::get('/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'show'])->name('show');
+        });
+
         // Production Floor Scanner API Endpoints (Sand Casting)
         Route::prefix('scan')->name('scan.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'index'])->name('index');
             Route::get('/netto', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'scanNetto'])->name('netto');
+            Route::get('/stage/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'scanStage'])->name('stage');
             Route::get('/ktr/{travelerNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupKtr'])->name('ktr');
             Route::get('/heat/{heatNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupHeat'])->name('heat');
             Route::post('/{stage}/execute', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'execute'])->name('execute');

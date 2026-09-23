@@ -4,11 +4,11 @@
     <div class="flex items-center justify-between w-full">
         <div>
             <h1 class="text-lg font-bold text-slate-800 leading-tight">SCANNER PRODUKSI &mdash; {{ $stageLabel }}</h1>
-            <p class="text-gray-500 text-[10px]">Pindai Barcode KTR atau cari Heat Number untuk eksekusi tahap {{ $stageLabel }}</p>
+            <p class="text-gray-500 text-[10px]">SCANNER OPERASIONAL &bull; Pindai Barcode KTR untuk konfirmasi penyelesaian fisik tahap {{ $stageLabel }}</p>
         </div>
         <div>
-            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                <i class="fas fa-layer-group mr-1.5"></i> TAHAP: {{ $stageLabel }}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm">
+                <i class="fas fa-layer-group mr-1.5 text-emerald-600"></i> {{ $stageLabel }}
             </span>
         </div>
     </div>
@@ -20,15 +20,15 @@
     {{-- 1. STAGE CONTEXT BANNER --}}
     <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-4 text-white shadow-md border border-slate-700 flex items-center justify-between">
         <div>
-            <span class="text-xs uppercase tracking-widest text-slate-400 font-semibold">Stasiun Kerja</span>
-            <div class="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            <span class="text-[11px] uppercase tracking-widest text-slate-400 font-semibold block">Stasiun Kerja Sand Casting</span>
+            <div class="text-2xl font-black tracking-tight text-white flex items-center gap-2 mt-0.5">
                 <span>{{ $stageLabel }}</span>
-                <span class="text-xs font-normal px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Aktif</span>
+                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Aktif</span>
             </div>
         </div>
         <div class="text-right">
-            <span class="text-[11px] text-slate-400 block">Operator</span>
-            <span class="text-sm font-semibold text-slate-200">{{ Auth::user()->name }}</span>
+            <span class="text-[11px] text-slate-400 block">Supervisor / Operator</span>
+            <span class="text-sm font-bold text-slate-200">{{ Auth::user()->name }}</span>
         </div>
     </div>
 
@@ -47,7 +47,7 @@
             <button
                 type="button"
                 id="btnOpenScanCamera"
-                class="w-full min-h-[52px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-base touch-manipulation">
+                class="w-full min-h-[54px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 text-base touch-manipulation">
                 <i class="fas fa-camera text-lg"></i>
                 <span>BUKA KAMERA SCANNER</span>
             </button>
@@ -55,8 +55,8 @@
             <button
                 type="button"
                 id="btnOpenHeatModal"
-                class="w-full min-h-[46px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm touch-manipulation">
-                <i class="fas fa-search text-amber-600"></i>
+                class="w-full min-h-[46px] bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-xs touch-manipulation">
+                <i class="fas fa-search text-amber-700"></i>
                 <span>BARCODE TIDAK TERBACA / CARI HEAT</span>
             </button>
         </div>
@@ -69,12 +69,12 @@
                     id="manualKtrInput"
                     name="traveler_number"
                     placeholder="KTR-YYYYMMDD-XXXX"
-                    class="flex-1 min-h-[44px] px-3.5 text-center font-mono text-sm tracking-wider uppercase border-2 border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-emerald-500 outline-none"
+                    class="flex-1 min-h-[46px] px-3.5 text-center font-mono font-bold text-sm tracking-wider uppercase border-2 border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-emerald-500 outline-none"
                     autocomplete="off"
                 >
                 <button
                     type="submit"
-                    class="min-h-[44px] px-4 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-xl text-sm transition-colors touch-manipulation">
+                    class="min-h-[46px] px-5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-sm transition-colors touch-manipulation shadow-sm">
                     CARI
                 </button>
             </form>
@@ -99,7 +99,7 @@
 
             {{-- Scanning Reticle Overlay --}}
             <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-                <div class="w-64 h-40 border-2 border-emerald-400 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+                <div class="w-64 h-40 border-2 border-emerald-400 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
                     <div class="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-400 -mt-1 -ml-1"></div>
                     <div class="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-emerald-400 -mt-1 -mr-1"></div>
                     <div class="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-emerald-400 -mb-1 -ml-1"></div>
@@ -107,7 +107,7 @@
                     {{-- Laser Scan Line --}}
                     <div class="w-full h-0.5 bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse my-auto absolute inset-0"></div>
                 </div>
-                <p class="text-white text-xs font-semibold bg-black/60 px-3 py-1 rounded-full mt-4 backdrop-blur-sm">
+                <p class="text-white text-xs font-semibold bg-black/70 px-3 py-1 rounded-full mt-4 backdrop-blur-sm">
                     Arahkan barcode KTR ke dalam kotak
                 </p>
             </div>
@@ -115,7 +115,7 @@
 
         {{-- Camera Footer --}}
         <div class="w-full max-w-md pb-4 text-center">
-            <button type="button" id="btnCancelCamera" class="w-full min-h-[48px] bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl text-sm touch-manipulation">
+            <button type="button" id="btnCancelCamera" class="w-full min-h-[48px] bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm touch-manipulation">
                 TUTUP KAMERA
             </button>
         </div>
@@ -140,7 +140,7 @@
                         type="text"
                         id="heatSearchInput"
                         placeholder="Contoh: A214092001"
-                        class="flex-1 min-h-[44px] px-3.5 uppercase font-mono text-sm border-2 border-slate-300 rounded-xl focus:border-amber-500 focus:ring-amber-500 outline-none"
+                        class="flex-1 min-h-[44px] px-3.5 uppercase font-mono font-bold text-sm border-2 border-slate-300 rounded-xl focus:border-amber-500 focus:ring-amber-500 outline-none"
                     >
                     <button
                         type="submit"
@@ -157,253 +157,223 @@
         </div>
     </div>
 
-    {{-- 5. KTR CONFIRMATION CARD & EXECUTION FORM --}}
+    {{-- 5. KTR IDENTITY CARD & PHYSICAL EXECUTION ACTION --}}
     <div id="ktrDetailCard" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden space-y-0">
         {{-- Card Header --}}
         <div class="bg-slate-900 text-white p-4 flex items-center justify-between">
             <div>
-                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Identitas Traveler</span>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Identitas Traveler KTR</span>
                 <div id="cardTravelerNumber" class="text-xl font-mono font-black tracking-wider text-emerald-400">KTR-XXXX</div>
             </div>
             <div id="cardUrgentBadge" class="hidden">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-extrabold bg-red-600 text-white animate-pulse">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-600 text-white animate-pulse shadow-sm">
                     <i class="fas fa-exclamation-triangle mr-1"></i> URGENT
                 </span>
             </div>
         </div>
 
         {{-- Details Grid --}}
-        <div class="p-4 bg-slate-50/50 border-b border-slate-100 grid grid-cols-2 gap-3 text-xs">
+        <div class="p-4 bg-slate-50/70 border-b border-slate-200 grid grid-cols-2 gap-3 text-xs">
             <div>
-                <span class="text-slate-500 block">Heat Number</span>
-                <span id="cardHeatNumber" class="font-bold text-slate-800 font-mono text-sm">-</span>
+                <span class="text-slate-500 block text-[11px]">Heat Number</span>
+                <span id="cardHeatNumber" class="font-black text-slate-800 font-mono text-sm">-</span>
             </div>
             <div>
-                <span class="text-slate-500 block">Kode Produksi</span>
-                <span id="cardProductionCode" class="font-bold text-slate-800 font-mono text-sm">-</span>
+                <span class="text-slate-500 block text-[11px]">Kode Produksi</span>
+                <span id="cardProductionCode" class="font-black text-slate-800 font-mono text-sm">-</span>
             </div>
             <div class="col-span-2">
-                <span class="text-slate-500 block">Nama Produk</span>
-                <span id="cardItemName" class="font-bold text-slate-800 text-sm">-</span>
+                <span class="text-slate-500 block text-[11px]">Nama Produk / Item</span>
+                <span id="cardItemName" class="font-black text-slate-900 text-sm">-</span>
             </div>
             <div>
-                <span class="text-slate-500 block">Customer</span>
-                <span id="cardCustomer" class="font-semibold text-slate-700">-</span>
+                <span class="text-slate-500 block text-[11px]">Customer</span>
+                <span id="cardCustomer" class="font-bold text-slate-700">-</span>
             </div>
             <div>
-                <span class="text-slate-500 block">Tgl Cor / Shift</span>
-                <span id="cardCastInfo" class="font-semibold text-slate-700">-</span>
+                <span class="text-slate-500 block text-[11px]">Tgl Cor / Shift</span>
+                <span id="cardCastInfo" class="font-bold text-slate-700">-</span>
             </div>
         </div>
 
-        {{-- Quantity & Stage Summary --}}
-        <div class="p-4 bg-emerald-50/40 border-b border-emerald-100 flex items-center justify-between">
+        {{-- Active Checkpoint & Input Qty Section --}}
+        <div class="p-4 bg-emerald-50/50 border-b border-emerald-100 flex items-center justify-between">
             <div>
-                <span class="text-xs text-slate-500 block">Qty Masuk (Input {{ $stageLabel }})</span>
-                <span id="cardInputQty" class="text-2xl font-black text-emerald-700">0 <span class="text-sm font-semibold">PCS</span></span>
+                <span class="text-xs text-slate-500 font-medium block">Kuantitas Masuk (Input Server)</span>
+                <span id="cardInputQty" class="text-3xl font-black text-emerald-700">0 <span class="text-sm font-bold text-emerald-800">PCS</span></span>
             </div>
             <div class="text-right">
-                <span class="text-xs text-slate-500 block">Tahap Saat Ini</span>
-                <span id="cardCurrentStageBadge" class="inline-block font-bold text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
-                    {{ $stageLabel }}
+                <span class="text-xs text-slate-500 font-medium block mb-1">Checkpoint Aktif</span>
+                <span id="cardActiveCheckpointBadge" class="inline-block font-mono font-black text-xs px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 uppercase shadow-sm">
+                    -
                 </span>
             </div>
         </div>
 
-        {{-- Stage Mismatch / Validation Warning (If invalid for NETTO) --}}
-        <div id="stageMismatchAlert" class="p-4 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs hidden">
-            <div class="flex items-start gap-2">
+        {{-- State Mismatch Alert (If invalid for user stage) --}}
+        <div id="stageMismatchAlert" class="p-4 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs hidden">
+            <div class="flex items-start gap-2.5">
                 <i class="fas fa-exclamation-circle text-amber-600 text-base mt-0.5"></i>
-                <div id="stageMismatchMessage" class="font-semibold">
-                    KTR ini tidak dapat diproses di {{ $stageLabel }}.
+                <div id="stageMismatchMessage" class="font-semibold leading-relaxed">
+                    KTR ini tidak dapat diproses di stasiun {{ $stageLabel }}.
+                </div>
+            </div>
+        </div>
+
+        {{-- Lifecycle Status Alert (If already WAITING_DEFECT / WAITING_QC / CONFIRMED) --}}
+        <div id="statusAlert" class="p-4 bg-blue-50 border-b border-blue-200 text-blue-900 text-xs hidden">
+            <div class="flex items-start gap-2.5">
+                <i class="fas fa-info-circle text-blue-600 text-base mt-0.5"></i>
+                <div id="statusAlertMessage" class="font-semibold leading-relaxed">
+                    Status KTR saat ini.
                 </div>
             </div>
         </div>
 
         {{-- Halted State Alert (If input = 0 / halted) --}}
-        <div id="haltedAlert" class="p-4 bg-red-50 border-b border-red-200 text-red-800 text-xs hidden">
-            <div class="flex items-start gap-2">
+        <div id="haltedAlert" class="p-4 bg-red-50 border-b border-red-200 text-red-900 text-xs hidden">
+            <div class="flex items-start gap-2.5">
                 <i class="fas fa-ban text-red-600 text-base mt-0.5"></i>
                 <div>
-                    <div class="font-bold text-sm text-red-700">⚠ KTR TERHENTI (HALTED)</div>
-                    <p class="mt-1 text-red-600">Tidak ada kuantitas bagus yang tersedia untuk proses berikutnya. Hubungi SPV / Admin.</p>
+                    <div class="font-bold text-sm text-red-800">⚠ KTR TERHENTI (HALTED)</div>
+                    <p class="mt-1 text-red-700 leading-snug">Tidak ada kuantitas bagus yang tersedia untuk proses berikutnya. Hubungi Supervisor / Admin.</p>
                 </div>
             </div>
         </div>
 
-        {{-- 6. DEFECT INPUT & EXECUTION SECTION (Visible only if READY) --}}
+        {{-- 6. PRIMARY PHYSICAL COMPLETION ACTION SECTION (Visible only if READY) --}}
         <div id="executionFormSection" class="p-4 space-y-4">
             <div>
-                <label for="defectQtyInput" class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Jumlah Defect / Rusak (PCS)
-                </label>
-                <div class="flex items-center gap-2">
-                    <button type="button" id="btnDefectMinus" class="w-12 h-12 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xl flex items-center justify-center touch-manipulation active:scale-95">
-                        <i class="fas fa-minus"></i>
-                    </button>
-                    <input
-                        type="number"
-                        id="defectQtyInput"
-                        name="defect_qty"
-                        value="0"
-                        min="0"
-                        class="flex-1 min-h-[48px] text-center font-mono font-bold text-2xl border-2 border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-emerald-500 outline-none"
-                    >
-                    <button type="button" id="btnDefectPlus" class="w-12 h-12 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xl flex items-center justify-center touch-manipulation active:scale-95">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                </div>
-            </div>
-
-            {{-- Calculated Good Qty Preview --}}
-            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-                <span class="text-slate-600 font-medium">Estimasi Qty Bagus (Good):</span>
-                <span id="previewGoodQty" class="font-bold text-base text-emerald-700">0 PCS</span>
-            </div>
-
-            {{-- Optional Notes --}}
-            <div>
-                <label for="executionNotesInput" class="block text-xs font-medium text-slate-600 mb-1">
-                    Catatan Operator (Opsional)
+                <label for="executionNotesInput" class="block text-xs font-bold text-slate-700 mb-1">
+                    Catatan Proses Fisik (Opsional)
                 </label>
                 <textarea
                     id="executionNotesInput"
                     rows="2"
-                    placeholder="Contoh: Permukaan kasar, retak tipis..."
+                    placeholder="Contoh: Selesai potong netto, mata pisau baru..."
                     class="w-full text-xs p-3 border border-slate-300 rounded-xl focus:border-emerald-500 focus:ring-emerald-500 outline-none"
                 ></textarea>
             </div>
 
             {{-- Action Buttons --}}
-            <div class="grid grid-cols-2 gap-2 pt-2">
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                     type="button"
                     id="btnCancelKtr"
-                    class="min-h-[48px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-colors touch-manipulation">
+                    class="min-h-[50px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-colors touch-manipulation">
                     BATAL
                 </button>
                 <button
                     type="button"
                     id="btnProceedConfirmation"
-                    class="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm shadow-sm transition-colors touch-manipulation">
-                    PROSES {{ $stageLabel }}
+                    class="min-h-[50px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl text-sm shadow-md transition-colors touch-manipulation flex items-center justify-center gap-1.5">
+                    <i class="fas fa-check-circle text-base"></i>
+                    <span>SELESAI PROSES</span>
                 </button>
             </div>
         </div>
 
-        {{-- Cancel only button if invalid/halted --}}
+        {{-- Reset button if invalid/halted/in-progress --}}
         <div id="invalidKtrActionSection" class="p-4 hidden">
             <button
                 type="button"
                 id="btnResetInvalidKtr"
-                class="w-full min-h-[48px] bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm touch-manipulation">
+                class="w-full min-h-[48px] bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-sm touch-manipulation shadow-sm">
                 SCAN KTR LAIN
             </button>
         </div>
     </div>
 
     {{-- 7. PRE-EXECUTION CONFIRMATION MODAL --}}
-    <div id="confirmModal" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 hidden">
+    <div id="confirmModal" class="fixed inset-0 z-50 bg-black/75 flex items-end sm:items-center justify-center p-3 hidden">
         <div class="bg-white w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div class="text-center">
-                <div class="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
-                    <i class="fas fa-check-double"></i>
+                <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl shadow-inner">
+                    <i class="fas fa-clipboard-check"></i>
                 </div>
-                <h3 class="text-base font-bold text-slate-900">Konfirmasi Eksekusi {{ $stageLabel }}</h3>
-                <p class="text-xs text-slate-500">Pastikan kuantitas defect sudah sesuai</p>
+                <h3 class="text-base font-black text-slate-900">Konfirmasi Selesai Fisik</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Pastikan proses fisik pada tahap ini sudah selesai.</p>
             </div>
 
-            <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-2 text-xs">
-                <div class="flex justify-between">
-                    <span class="text-slate-500">KTR:</span>
-                    <span id="confirmKtr" class="font-mono font-bold text-slate-800">KTR-XXXX</span>
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5 text-xs">
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-500 font-medium">Nomor KTR:</span>
+                    <span id="confirmKtr" class="font-mono font-black text-slate-900 text-sm">KTR-XXXX</span>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Tahap:</span>
-                    <span class="font-bold text-slate-800 uppercase">{{ $stageLabel }}</span>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-500 font-medium">Proses / Tahap:</span>
+                    <span class="font-black text-slate-900 uppercase">{{ $stageLabel }}</span>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Qty Masuk:</span>
-                    <span id="confirmInputQty" class="font-bold text-slate-800">0 PCS</span>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-500 font-medium">Checkpoint:</span>
+                    <span id="confirmCheckpoint" class="font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[11px] uppercase">-</span>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Defect / Rusak:</span>
-                    <span id="confirmDefectQty" class="font-bold text-red-600">0 PCS</span>
-                </div>
-                <div class="flex justify-between pt-2 border-t border-slate-200 text-sm">
-                    <span class="font-bold text-slate-800">Qty Bagus (Good):</span>
-                    <span id="confirmGoodQty" class="font-black text-emerald-700">0 PCS</span>
+                <div class="flex justify-between items-center pt-2 border-t border-slate-200">
+                    <span class="text-slate-700 font-bold">Qty Masuk:</span>
+                    <span id="confirmInputQty" class="font-black text-slate-900 text-sm">0 PCS</span>
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                     type="button"
                     id="btnBackToForm"
-                    class="min-h-[46px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm touch-manipulation">
-                    KEMBALI
+                    class="min-h-[48px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm touch-manipulation">
+                    BATAL
                 </button>
                 <button
                     type="button"
                     id="btnExecuteSubmit"
-                    class="min-h-[46px] bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm shadow-md transition-all touch-manipulation flex items-center justify-center gap-2">
-                    <span id="btnExecuteSubmitText">PROSES</span>
+                    class="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl text-sm shadow-md transition-all touch-manipulation flex items-center justify-center gap-2">
+                    <span id="btnExecuteSubmitText">SELESAI</span>
                 </button>
             </div>
         </div>
     </div>
 
-    {{-- 8. EXECUTION SUCCESS CARD --}}
+    {{-- 8. EXECUTION SUCCESS CARD (WAITING_DEFECT STATE) --}}
     <div id="successCard" class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-6 text-center space-y-4 hidden">
-        <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl shadow-inner">
-            <i class="fas fa-check"></i>
+        <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto text-2xl shadow-inner">
+            <i class="fas fa-check-double"></i>
         </div>
         <div>
-            <span class="text-xs uppercase font-extrabold text-emerald-600 tracking-wider">BERHASIL DIPROSES</span>
-            <h3 id="successStageTitle" class="text-xl font-black text-slate-800 mt-1">Tahap {{ $stageLabel }} Selesai</h3>
-            <p id="successTravelerNum" class="font-mono text-sm text-slate-600 mt-0.5">KTR-XXXX</p>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 mb-1">
+                <i class="fas fa-clock mr-1.5 text-amber-700"></i> WAITING DEFECT
+            </span>
+            <h3 class="text-xl font-black text-slate-900 mt-1">Proses Fisik Selesai</h3>
+            <p id="successTravelerNum" class="font-mono font-bold text-sm text-slate-600 mt-0.5">KTR-XXXX</p>
         </div>
 
-        <div class="bg-emerald-50/60 rounded-xl p-4 border border-emerald-100 grid grid-cols-3 gap-2 text-center text-xs">
-            <div>
-                <span class="text-slate-500 block">Masuk</span>
-                <span id="successInputQty" class="text-base font-black text-slate-800">0</span>
+        <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs space-y-2 text-left">
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500">Tahap:</span>
+                <span class="font-black text-slate-800 uppercase">{{ $stageLabel }}</span>
             </div>
-            <div>
-                <span class="text-slate-500 block">Defect</span>
-                <span id="successDefectQty" class="text-base font-black text-red-600">0</span>
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500">Checkpoint:</span>
+                <span id="successCheckpoint" class="font-mono font-bold text-slate-800">-</span>
             </div>
-            <div>
-                <span class="text-slate-500 block">Good</span>
-                <span id="successGoodQty" class="text-base font-black text-emerald-700">0</span>
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500">Qty Masuk:</span>
+                <span id="successInputQty" class="font-bold text-slate-800">0 PCS</span>
             </div>
-        </div>
-
-        {{-- Next Stage Navigation Banner --}}
-        <div id="successNextStageSection" class="p-3 bg-slate-900 text-white rounded-xl text-xs flex items-center justify-between">
-            <span class="text-slate-400">Tahap Selanjutnya:</span>
-            <span id="successNextStageBadge" class="font-bold text-emerald-400 uppercase tracking-wider">BUBUT OD</span>
-        </div>
-
-        {{-- Success Halted Banner if good = 0 --}}
-        <div id="successHaltedSection" class="p-3 bg-red-50 text-red-800 rounded-xl text-xs border border-red-200 hidden text-left">
-            <div class="font-bold flex items-center gap-1.5 text-red-700">
-                <i class="fas fa-exclamation-triangle"></i> KTR TERHENTI (HALTED)
+            <div class="pt-2 border-t border-slate-200 text-amber-800 text-[11px] leading-relaxed">
+                <i class="fas fa-info-circle mr-1 text-amber-600"></i>
+                KTR ini kini <b>menunggu input defect</b> oleh Admin PPIC sebelum dilanjutkan ke verifikasi QC.
             </div>
-            <p class="mt-1 text-red-600">Tidak ada kuantitas good yang dihasilkan. KTR tidak diteruskan ke tahap berikutnya.</p>
         </div>
 
         <button
             type="button"
             id="btnResetScanner"
-            class="w-full min-h-[50px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-base shadow-sm transition-colors touch-manipulation">
+            class="w-full min-h-[52px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl text-base shadow-md transition-colors touch-manipulation">
             SCAN KTR BERIKUTNYA
         </button>
     </div>
 
 </div>
 
-{{-- 9. REUSABLE STAGE SCANNER ENGINE SCRIPT --}}
+{{-- 9. OPERATIONAL STAGE SCANNER JAVASCRIPT ENGINE --}}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Stage Context Configuration
@@ -453,17 +423,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const cardCustomer = document.getElementById('cardCustomer');
     const cardCastInfo = document.getElementById('cardCastInfo');
     const cardInputQty = document.getElementById('cardInputQty');
-    const cardCurrentStageBadge = document.getElementById('cardCurrentStageBadge');
+    const cardActiveCheckpointBadge = document.getElementById('cardActiveCheckpointBadge');
     const stageMismatchAlert = document.getElementById('stageMismatchAlert');
     const stageMismatchMessage = document.getElementById('stageMismatchMessage');
+    const statusAlert = document.getElementById('statusAlert');
+    const statusAlertMessage = document.getElementById('statusAlertMessage');
     const haltedAlert = document.getElementById('haltedAlert');
     const executionFormSection = document.getElementById('executionFormSection');
     const invalidKtrActionSection = document.getElementById('invalidKtrActionSection');
     const btnResetInvalidKtr = document.getElementById('btnResetInvalidKtr');
-    const defectQtyInput = document.getElementById('defectQtyInput');
-    const btnDefectMinus = document.getElementById('btnDefectMinus');
-    const btnDefectPlus = document.getElementById('btnDefectPlus');
-    const previewGoodQty = document.getElementById('previewGoodQty');
     const executionNotesInput = document.getElementById('executionNotesInput');
     const btnCancelKtr = document.getElementById('btnCancelKtr');
     const btnProceedConfirmation = document.getElementById('btnProceedConfirmation');
@@ -471,23 +439,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // Confirmation Elements
     const confirmModal = document.getElementById('confirmModal');
     const confirmKtr = document.getElementById('confirmKtr');
+    const confirmCheckpoint = document.getElementById('confirmCheckpoint');
     const confirmInputQty = document.getElementById('confirmInputQty');
-    const confirmDefectQty = document.getElementById('confirmDefectQty');
-    const confirmGoodQty = document.getElementById('confirmGoodQty');
     const btnBackToForm = document.getElementById('btnBackToForm');
     const btnExecuteSubmit = document.getElementById('btnExecuteSubmit');
     const btnExecuteSubmitText = document.getElementById('btnExecuteSubmitText');
 
     // Success Elements
     const successCard = document.getElementById('successCard');
-    const successStageTitle = document.getElementById('successStageTitle');
     const successTravelerNum = document.getElementById('successTravelerNum');
+    const successCheckpoint = document.getElementById('successCheckpoint');
     const successInputQty = document.getElementById('successInputQty');
-    const successDefectQty = document.getElementById('successDefectQty');
-    const successGoodQty = document.getElementById('successGoodQty');
-    const successNextStageSection = document.getElementById('successNextStageSection');
-    const successNextStageBadge = document.getElementById('successNextStageBadge');
-    const successHaltedSection = document.getElementById('successHaltedSection');
     const btnResetScanner = document.getElementById('btnResetScanner');
 
     // ==========================================
@@ -534,12 +496,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ==========================================
-    // 2. RENDER KTR DETAILS & VALIDATE STAGE
+    // 2. RENDER KTR DETAILS & VALIDATE STATE
     // ==========================================
     function renderKtrCard(data) {
         currentKtr = data;
 
-        // Hide idle & other cards
+        // Hide idle & success cards
         scannerActionCard.classList.add('hidden');
         successCard.classList.add('hidden');
         ktrDetailCard.classList.remove('hidden');
@@ -551,10 +513,8 @@ document.addEventListener('DOMContentLoaded', function () {
         cardItemName.textContent = data.item_name || (data.item_code || '-');
         cardCustomer.textContent = data.customer || '-';
         cardCastInfo.textContent = `${data.cast_date || '-'} / Shift ${data.shift || '-'}`;
-        cardInputQty.innerHTML = `${data.current_input_qty ?? 0} <span class="text-sm font-semibold">PCS</span>`;
-
-        const stageLabel = (data.current_stage || 'NO STAGE').replace('_', ' ').toUpperCase();
-        cardCurrentStageBadge.textContent = stageLabel;
+        cardInputQty.innerHTML = `${data.current_input_qty ?? 0} <span class="text-sm font-bold text-emerald-800">PCS</span>`;
+        cardActiveCheckpointBadge.textContent = data.active_checkpoint || '-';
 
         if (data.is_urgent) {
             cardUrgentBadge.classList.remove('hidden');
@@ -563,25 +523,23 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // Reset Inputs
-        defectQtyInput.value = 0;
-        defectQtyInput.max = data.current_input_qty ?? 0;
         executionNotesInput.value = '';
-        updateGoodQtyPreview();
 
-        // Stage & Operational Validation
+        // Operational & Stage State Evaluation
         const isCurrentStageMatch = (data.current_stage === CONTEXT.stage);
-        const isReady = (data.operational_status === 'READY');
-        const isHalted = (data.operational_status === 'HALTED');
+        const stageLabel = (data.current_stage || 'NO STAGE').replace('_', ' ').toUpperCase();
+        const opStatus = data.operational_status;
 
-        // Reset Alert states
+        // Reset Alert & Form states
         stageMismatchAlert.classList.add('hidden');
+        statusAlert.classList.add('hidden');
         haltedAlert.classList.add('hidden');
         executionFormSection.classList.add('hidden');
         invalidKtrActionSection.classList.add('hidden');
 
         if (!data.current_stage) {
             stageMismatchAlert.classList.remove('hidden');
-            stageMismatchMessage.textContent = `KTR ${data.traveler_number} belum memiliki operational stage dan tidak dapat diproses.`;
+            stageMismatchMessage.textContent = `Traveler ini belum memiliki operational stage dan belum dapat diproses.`;
             invalidKtrActionSection.classList.remove('hidden');
         } else if (data.current_stage === 'completed') {
             stageMismatchAlert.classList.remove('hidden');
@@ -589,76 +547,43 @@ document.addEventListener('DOMContentLoaded', function () {
             invalidKtrActionSection.classList.remove('hidden');
         } else if (!isCurrentStageMatch) {
             stageMismatchAlert.classList.remove('hidden');
-            stageMismatchMessage.textContent = `KTR ini saat ini berada di stage ${stageLabel}. Tahap yang valid untuk stasiun ini adalah ${CONTEXT.stageLabel}.`;
+            stageMismatchMessage.textContent = `KTR saat ini berada di stage ${stageLabel}. Tahap yang valid untuk stasiun ini adalah ${CONTEXT.stageLabel}.`;
             invalidKtrActionSection.classList.remove('hidden');
-        } else if (isHalted) {
+        } else if (opStatus === 'HALTED' || (data.current_input_qty !== null && data.current_input_qty <= 0)) {
             haltedAlert.classList.remove('hidden');
             invalidKtrActionSection.classList.remove('hidden');
-        } else if (isReady) {
+        } else if (opStatus === 'WAITING_DEFECT') {
+            statusAlert.classList.remove('hidden');
+            statusAlertMessage.textContent = `KTR sudah selesai fisik pada checkpoint ${data.active_checkpoint} dan sedang menunggu input defect oleh Admin PPIC.`;
+            invalidKtrActionSection.classList.remove('hidden');
+        } else if (opStatus === 'WAITING_QC') {
+            statusAlert.classList.remove('hidden');
+            statusAlertMessage.textContent = `KTR sedang menunggu verifikasi klasifikasi defect oleh QC Inspector.`;
+            invalidKtrActionSection.classList.remove('hidden');
+        } else if (opStatus === 'CONFIRMED') {
+            statusAlert.classList.remove('hidden');
+            statusAlertMessage.textContent = `Eksekusi checkpoint ini sudah terkonfirmasi.`;
+            invalidKtrActionSection.classList.remove('hidden');
+        } else if (opStatus === 'READY') {
+            // Authorized and Ready for Physical Done
             executionFormSection.classList.remove('hidden');
-            defectQtyInput.focus();
         } else {
             stageMismatchAlert.classList.remove('hidden');
-            stageMismatchMessage.textContent = `Status KTR (${data.operational_status}) tidak siap diproses.`;
+            stageMismatchMessage.textContent = `Status KTR (${opStatus}) tidak siap diproses fisik.`;
             invalidKtrActionSection.classList.remove('hidden');
         }
     }
 
     // ==========================================
-    // 3. DEFECT STEPPERS & PREVIEW CALCULATION
-    // ==========================================
-    function updateGoodQtyPreview() {
-        if (!currentKtr) return;
-        const inputQty = parseInt(currentKtr.current_input_qty || 0, 10);
-        let defectQty = parseInt(defectQtyInput.value || 0, 10);
-
-        if (isNaN(defectQty) || defectQty < 0) {
-            defectQty = 0;
-            defectQtyInput.value = 0;
-        }
-
-        if (defectQty > inputQty) {
-            defectQty = inputQty;
-            defectQtyInput.value = inputQty;
-        }
-
-        const goodQty = Math.max(0, inputQty - defectQty);
-        previewGoodQty.textContent = `${goodQty} PCS`;
-    }
-
-    defectQtyInput.addEventListener('input', updateGoodQtyPreview);
-
-    btnDefectMinus.addEventListener('click', function () {
-        let val = parseInt(defectQtyInput.value || 0, 10);
-        if (val > 0) {
-            defectQtyInput.value = val - 1;
-            updateGoodQtyPreview();
-        }
-    });
-
-    btnDefectPlus.addEventListener('click', function () {
-        if (!currentKtr) return;
-        const max = parseInt(currentKtr.current_input_qty || 0, 10);
-        let val = parseInt(defectQtyInput.value || 0, 10);
-        if (val < max) {
-            defectQtyInput.value = val + 1;
-            updateGoodQtyPreview();
-        }
-    });
-
-    // ==========================================
-    // 4. CONFIRMATION MODAL & EXECUTION SUBMIT
+    // 3. CONFIRMATION MODAL & EXECUTION SUBMIT
     // ==========================================
     btnProceedConfirmation.addEventListener('click', function () {
         if (!currentKtr) return;
         const inputQty = parseInt(currentKtr.current_input_qty || 0, 10);
-        const defectQty = parseInt(defectQtyInput.value || 0, 10);
-        const goodQty = Math.max(0, inputQty - defectQty);
 
         confirmKtr.textContent = currentKtr.traveler_number;
+        confirmCheckpoint.textContent = currentKtr.active_checkpoint || CONTEXT.stageLabel;
         confirmInputQty.textContent = `${inputQty} PCS`;
-        confirmDefectQty.textContent = `${defectQty} PCS`;
-        confirmGoodQty.textContent = `${goodQty} PCS`;
 
         confirmModal.classList.remove('hidden');
     });
@@ -670,9 +595,9 @@ document.addEventListener('DOMContentLoaded', function () {
     btnExecuteSubmit.addEventListener('click', async function () {
         if (!currentKtr || isSubmitting) return;
 
-        const defectQty = parseInt(defectQtyInput.value || 0, 10);
         const notes = executionNotesInput.value.trim();
 
+        // Concurrency Guard: Disable button immediately
         isSubmitting = true;
         btnExecuteSubmit.disabled = true;
         btnExecuteSubmitText.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> MEMPROSES...';
@@ -688,7 +613,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 body: JSON.stringify({
                     traveler_number: currentKtr.traveler_number,
-                    defect_qty: defectQty,
                     notes: notes || null
                 })
             });
@@ -699,7 +623,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!response.ok || !result.success) {
                 Swal.fire({
                     icon: 'error',
-                    title: 'Eksekusi Ditolak',
+                    title: response.status === 403 ? 'Akses Ditolak (403)' : 'Eksekusi Ditolak',
                     text: result.message || 'Gagal memproses tahap eksekusi.',
                     confirmButtonColor: '#059669',
                 });
@@ -718,37 +642,24 @@ document.addEventListener('DOMContentLoaded', function () {
         } finally {
             isSubmitting = false;
             btnExecuteSubmit.disabled = false;
-            btnExecuteSubmitText.textContent = 'PROSES';
+            btnExecuteSubmitText.textContent = 'SELESAI';
         }
     });
 
     // ==========================================
-    // 5. SUCCESS SCREEN RENDERING
+    // 4. SUCCESS SCREEN RENDERING (WAITING_DEFECT)
     // ==========================================
     function renderSuccess(data) {
         ktrDetailCard.classList.add('hidden');
         successCard.classList.remove('hidden');
 
         successTravelerNum.textContent = data.traveler_number;
-        successInputQty.textContent = data.input_qty;
-        successDefectQty.textContent = data.defect_qty;
-        successGoodQty.textContent = data.good_qty;
-
-        if (data.good_qty === 0 || data.operational_status === 'HALTED') {
-            successStageTitle.textContent = `Tahap ${CONTEXT.stageLabel} Tercatat (Halted)`;
-            successNextStageSection.classList.add('hidden');
-            successHaltedSection.classList.remove('hidden');
-        } else {
-            successStageTitle.textContent = `Tahap ${CONTEXT.stageLabel} Selesai`;
-            successHaltedSection.classList.add('hidden');
-            successNextStageSection.classList.remove('hidden');
-            const nextLabel = (data.next_stage || 'SELESAI').replace('_', ' ').toUpperCase();
-            successNextStageBadge.textContent = nextLabel;
-        }
+        successCheckpoint.textContent = data.checkpoint_code;
+        successInputQty.textContent = `${data.input_qty} PCS`;
     }
 
     // ==========================================
-    // 6. RESET SCANNER STATE
+    // 5. RESET SCANNER STATE
     // ==========================================
     function resetToIdle() {
         currentKtr = null;
@@ -757,7 +668,6 @@ document.addEventListener('DOMContentLoaded', function () {
         confirmModal.classList.add('hidden');
         scannerActionCard.classList.remove('hidden');
         manualKtrInput.value = '';
-        defectQtyInput.value = 0;
         executionNotesInput.value = '';
     }
 
@@ -766,7 +676,7 @@ document.addEventListener('DOMContentLoaded', function () {
     btnResetScanner.addEventListener('click', resetToIdle);
 
     // ==========================================
-    // 7. MANUAL KTR INPUT FORM
+    // 6. MANUAL KTR INPUT FORM
     // ==========================================
     manualKtrForm.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -777,7 +687,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ==========================================
-    // 8. MANUAL HEAT NUMBER SEARCH & CANDIDATES
+    // 7. MANUAL HEAT NUMBER SEARCH & CANDIDATES
     // ==========================================
     btnOpenHeatModal.addEventListener('click', function () {
         heatSearchResultArea.innerHTML = '';
@@ -868,7 +778,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ==========================================
-    // 9. CAMERA BARCODE SCANNER ENGINE
+    // 8. CAMERA BARCODE SCANNER ENGINE
     // ==========================================
     btnOpenScanCamera.addEventListener('click', async function () {
         cameraModal.classList.remove('hidden');
@@ -901,7 +811,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 detectBarcodeLoop(barcodeDetector);
             } else {
-                // Fallback explanation if BarcodeDetector not available in browser
                 console.warn('BarcodeDetector API is not supported in this browser.');
             }
         } catch (err) {
@@ -950,7 +859,6 @@ document.addEventListener('DOMContentLoaded', function () {
         cameraModal.classList.add('hidden');
     }
 
-    // Safety cleanup on page leave
     window.addEventListener('beforeunload', stopCamera);
     window.addEventListener('pagehide', stopCamera);
 

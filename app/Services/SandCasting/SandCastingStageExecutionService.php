@@ -127,7 +127,9 @@ class SandCastingStageExecutionService
         }
 
         foreach ($stageCheckpoints as $chkCode) {
-            $exec = $line->stageExecutions()->where('checkpoint_code', $chkCode)->first();
+            $exec = $line->relationLoaded('stageExecutions')
+                ? $line->stageExecutions->firstWhere('checkpoint_code', $chkCode)
+                : $line->stageExecutions()->where('checkpoint_code', $chkCode)->first();
 
             if (! $exec) {
                 return [
@@ -444,11 +446,13 @@ class SandCastingStageExecutionService
                     $nextStage = self::CHECKPOINT_STAGE[$nextCheckpoint];
                     if ($nextStage !== $line->current_stage) {
                         $line->current_stage = $nextStage;
+                        $line->queue_position = null;
                         $line->save();
                     }
                 } else {
                     // Final checkpoint in entire flow (GUDANG_RECEIVE) confirmed
                     $line->current_stage = 'completed';
+                    $line->queue_position = null;
                     $line->save();
                 }
             }

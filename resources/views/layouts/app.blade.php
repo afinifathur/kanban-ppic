@@ -44,20 +44,44 @@
                     }
                 });
             }
+            // Mobile Sidebar Drawer Event Listener
+            const mobileSidebarToggle = document.getElementById('mobileSidebarToggle');
+            const mobileBackdrop = document.getElementById('sidebarMobileBackdrop');
+
+            function openMobileSidebar() {
+                if (sidebar) sidebar.classList.remove('-translate-x-full');
+                if (mobileBackdrop) mobileBackdrop.classList.remove('hidden');
+            }
+
+            function closeMobileSidebar() {
+                if (sidebar) sidebar.classList.add('-translate-x-full');
+                if (mobileBackdrop) mobileBackdrop.classList.add('hidden');
+            }
+
+            if (mobileSidebarToggle && mobileBackdrop) {
+                mobileSidebarToggle.addEventListener('click', function () {
+                    if (sidebar && sidebar.classList.contains('-translate-x-full')) {
+                        openMobileSidebar();
+                    } else {
+                        closeMobileSidebar();
+                    }
+                });
+                mobileBackdrop.addEventListener('click', closeMobileSidebar);
+            }
         });
 
         function toggleCorPasirMenu() {
             const menu = document.getElementById('corPasirMenu');
             const icon = document.getElementById('corPasirMenuIcon');
-            menu.classList.toggle('hidden');
-            icon.classList.toggle('rotate-90');
+            if (menu) menu.classList.toggle('hidden');
+            if (icon) icon.classList.toggle('rotate-90');
         }
 
         function toggleLostWaxMenu() {
             const menu = document.getElementById('lostWaxMenu');
             const icon = document.getElementById('lostWaxMenuIcon');
-            menu.classList.toggle('hidden');
-            icon.classList.toggle('rotate-90');
+            if (menu) menu.classList.toggle('hidden');
+            if (icon) icon.classList.toggle('rotate-90');
         }
     </script>
     <!-- Font Awesome -->
@@ -131,8 +155,11 @@
 
 <body id="app-body" class="bg-gray-100 font-sans text-gray-900 flex h-screen overflow-hidden">
 
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div id="sidebarMobileBackdrop" class="fixed inset-0 bg-slate-900/60 z-40 hidden md:hidden"></div>
+
     <!-- Sidebar -->
-    <aside id="app-sidebar" class="relative w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col">
+    <aside id="app-sidebar" class="fixed inset-y-0 left-0 z-50 transform -translate-x-full md:relative md:translate-x-0 w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col transition-transform duration-200 ease-in-out md:transition-all">
         <script>
             if (localStorage.getItem('sidebar-collapsed') === 'true') {
                 document.getElementById('app-sidebar').classList.add('sidebar-collapsed');
@@ -277,6 +304,14 @@
                             </a>
                         </li>
                         @endif
+                        <li>
+                            <a href="{{ route('sand-casting.kanban.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.kanban.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
+                                title="Kanban Floor">
+                                <i class="fas fa-th-list w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Kanban Floor</span>
+                            </a>
+                        </li>
                         <li>
                             <a href="{{ route('sand-casting.scan.netto') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.scan.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
@@ -623,9 +658,16 @@
 
         <!-- Top Navigation Bar -->
         <header id="app-main-header"
-            class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
+            class="bg-white border-b border-gray-200 h-14 sm:h-16 flex items-center justify-between px-2 sm:px-4 shadow-sm z-20 shrink-0">
+            <!-- Mobile Sidebar Toggle Button -->
+            <button type="button" id="mobileSidebarToggle"
+                class="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 mr-1.5 flex items-center justify-center min-w-[36px] min-h-[36px] shrink-0"
+                title="Menu Navigasi">
+                <i class="fas fa-bars text-base"></i>
+            </button>
+
             <!-- Dynamic Top Bar Content (Process Flow) -->
-            <div class="flex-1 flex items-center overflow-x-auto no-scrollbar gap-2">
+            <div class="flex-1 flex items-center overflow-x-auto no-scrollbar gap-2 min-w-0">
                 @yield('top_bar')
             </div>
 
@@ -642,7 +684,7 @@
         </header>
 
         <!-- Scrollable Content -->
-        <div id="app-main-content" class="flex-1 overflow-y-auto overflow-x-auto p-6 md:p-8 custom-scrollbar">
+        <div id="app-main-content" class="flex-1 overflow-y-auto overflow-x-auto p-2 sm:p-4 md:p-6 lg:p-8 custom-scrollbar">
             @if(session('success'))
                 <div
                     class="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center shadow-sm">
