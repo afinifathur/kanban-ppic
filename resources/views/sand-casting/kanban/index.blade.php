@@ -19,6 +19,12 @@
                 <i class="fas fa-qrcode text-xs"></i>
                 <span>SCAN</span>
             </a>
+            {{-- Auto-Refresh Indicator Badge (Desktop / TV) --}}
+            <span id="autoRefreshBadge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-100 border border-slate-200 text-slate-600 min-h-[36px]" title="Auto-Refresh Aktif (Desktop / TV)">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-[10px] text-slate-500 font-sans uppercase font-bold tracking-tight">AUTO:</span>
+                <span id="autoRefreshTimer" class="font-mono">02:00</span>
+            </span>
             <a href="{{ url()->current() . '?' . http_build_query(request()->query()) }}" class="inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100 shadow-sm transition-all min-h-[36px] touch-manipulation" title="Refresh data">
                 <i class="fas fa-sync-alt text-slate-600 text-xs"></i>
             </a>
@@ -88,7 +94,7 @@
     };
 @endphp
 
-<div class="space-y-3 max-w-7xl mx-auto pb-6">
+<div class="space-y-3 w-full pb-6">
 
     {{-- FLASH MESSAGES --}}
     @if(session('success'))
@@ -208,8 +214,8 @@
                             </div>
                         </div>
 
-                        {{-- Independent Scroll Container for this Line --}}
-                        <div class="overflow-y-auto overscroll-contain space-y-2 pr-1 custom-scrollbar md:h-[calc(100vh-250px)] min-h-[100px]" data-line-scroll="{{ $lineNo }}">
+                        {{-- Independent Scroll Container for this Line (desktop only, natural scroll on mobile) --}}
+                        <div class="md:overflow-y-auto md:overscroll-contain space-y-2 md:pr-1 md:custom-scrollbar md:h-[calc(100vh-250px)] min-h-[50px]" data-line-scroll="{{ $lineNo }}">
                             @if(count($cardsInLine) === 0 && count($incomingInLine) === 0)
                                 <div class="p-4 text-center text-slate-400 text-xs italic bg-white/60 rounded-lg border border-dashed border-slate-200">
                                     Tidak ada antrean Line {{ $lineNo }}
@@ -376,8 +382,8 @@
                     </div>
                 </div>
 
-                {{-- Scroll Container for Filtered Line --}}
-                <div class="overflow-y-auto overscroll-contain pr-1 custom-scrollbar md:h-[calc(100vh-250px)] space-y-3" data-line-scroll="{{ $lineNo }}">
+                {{-- Scroll Container for Filtered Line (desktop only, natural scroll on mobile) --}}
+                <div class="md:overflow-y-auto md:overscroll-contain md:pr-1 md:custom-scrollbar md:h-[calc(100vh-250px)] space-y-3" data-line-scroll="{{ $lineNo }}">
                     @if(count($cardsInLine) === 0 && count($incomingInLine) === 0)
                         <div class="p-8 text-center text-slate-400 text-xs italic bg-white rounded-lg border border-dashed border-slate-200">
                             Tidak ada antrean pada Line {{ $lineNo }}
@@ -599,4 +605,64 @@
         }
     </script>
 @endif
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Auto-Refresh Logic (120000 ms = 2 minutes)
+        // Desktop / Laptop / TV Display = ON
+        // Android / Mobile Operational Devices = OFF
+        const isMobileDevice = (function () {
+            const ua = navigator.userAgent || '';
+            const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+            const hasCoarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            const isSmallScreen = window.innerWidth < 1024;
+
+            // Mobile phones & compact touch tablets in hand operation are detected as mobile
+            return (isMobileUA && isSmallScreen) || (hasCoarsePointer && isSmallScreen);
+        })();
+
+        const badgeEl = document.getElementById('autoRefreshBadge');
+        const timerEl = document.getElementById('autoRefreshTimer');
+
+        if (isMobileDevice) {
+            // Mobile device: No auto-refresh, keep badge hidden
+            if (badgeEl) {
+                badgeEl.classList.add('hidden');
+            }
+            return;
+        }
+
+        // Desktop / TV: Show indicator and activate 2-minute countdown
+        if (badgeEl) {
+            badgeEl.classList.remove('hidden');
+        }
+
+        let remainingSeconds = 120;
+
+        function updateDisplay() {
+            if (!timerEl) return;
+            const m = Math.floor(remainingSeconds / 60);
+            const s = remainingSeconds % 60;
+            timerEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        updateDisplay();
+
+        const intervalId = setInterval(function () {
+            // Pause auto-refresh if PPIC reorder modal is actively open so user input is preserved
+            const modal = document.getElementById('reorderModal');
+            if (modal && !modal.classList.contains('hidden')) {
+                return;
+            }
+
+            remainingSeconds--;
+            if (remainingSeconds <= 0) {
+                clearInterval(intervalId);
+                window.location.reload();
+            } else {
+                updateDisplay();
+            }
+        }, 1000);
+    });
+</script>
 @endsection

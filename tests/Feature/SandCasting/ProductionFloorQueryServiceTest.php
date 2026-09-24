@@ -226,17 +226,17 @@ class ProductionFloorQueryServiceTest extends TestCase
         $this->assertEquals('bubut_od', $dataOd['current_stage']);
         $this->assertEquals(95, $dataOd['current_input_qty']);
         $this->assertEquals('READY', $dataOd['operational_status']);
-        $this->assertEquals('marking', $dataOd['next_stage']);
+        $this->assertEquals('bubut_cnc', $dataOd['next_stage']);
 
         // Execute BUBUT_OD (95 in, 3 defect -> 92 good)
         $this->executionService->execute($line->traveler_number, 'bubut_od', 3, $this->user->id);
 
-        // 3. Stage marking: current_input_qty = 92
-        $dataMarking = $this->queryService->findByTraveler($line->traveler_number);
-        $this->assertEquals('marking', $dataMarking['current_stage']);
-        $this->assertEquals(92, $dataMarking['current_input_qty']);
-        $this->assertEquals('READY', $dataMarking['operational_status']);
-        $this->assertEquals('bubut_cnc', $dataMarking['next_stage']);
+        // 3. Stage bubut_cnc: current_input_qty = 92
+        $dataCnc = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertEquals('bubut_cnc', $dataCnc['current_stage']);
+        $this->assertEquals(92, $dataCnc['current_input_qty']);
+        $this->assertEquals('READY', $dataCnc['operational_status']);
+        $this->assertEquals('bor', $dataCnc['next_stage']);
     }
 
     /**
@@ -266,7 +266,6 @@ class ProductionFloorQueryServiceTest extends TestCase
         // Execute full chain to completion (note: bubut_cnc has 3 checkpoints: CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR)
         $this->executionService->execute($line->traveler_number, 'netto', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bubut_od', 0, $this->user->id);
-        $this->executionService->execute($line->traveler_number, 'marking', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);

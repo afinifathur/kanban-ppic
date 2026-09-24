@@ -14,7 +14,6 @@ class ProductionFloorKanbanController extends Controller
     public const STAGE_LABELS = [
         'netto' => 'NETTO',
         'bubut_od' => 'BUBUT OD',
-        'marking' => 'MARKING',
         'bubut_cnc' => 'BUBUT CNC',
         'bor' => 'BOR',
         'qc' => 'QC',

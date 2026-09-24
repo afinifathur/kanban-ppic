@@ -131,7 +131,7 @@ class StageExecutionServiceTest extends TestCase
 
     /**
      * TEST 2: BUBUT OD execution
-     * Previous NETTO good = 95, defect 3 -> input 95, good 92, current_stage = marking
+     * Previous NETTO good = 95, defect 3 -> input 95, good 92, current_stage = bubut_cnc
      */
     public function test_bubut_od_execution_resolves_previous_stage_good_qty(): void
     {
@@ -145,13 +145,13 @@ class StageExecutionServiceTest extends TestCase
             operatorId: $this->user->id
         );
 
-        // Execute BUBUT_OD
+        // Execute BUBUT_OD (OD Turning + Physical Marking)
         $execution = $this->service->execute(
             travelerNumber: $line->traveler_number,
             targetStage: 'bubut_od',
             defectQty: 3,
             operatorId: $this->user->id,
-            notes: 'Bubut OD selesai'
+            notes: 'Bubut OD dan marking fisik selesai'
         );
 
         $this->assertEquals('bubut_od', $execution->stage);
@@ -160,12 +160,12 @@ class StageExecutionServiceTest extends TestCase
         $this->assertEquals(92, $execution->good_qty);
 
         $line->refresh();
-        $this->assertEquals('marking', $line->current_stage);
+        $this->assertEquals('bubut_cnc', $line->current_stage);
     }
 
     /**
-     * TEST 3: Full 7-stage chain execution
-     * 100 -> 95 -> 92 -> 91 -> 91 -> 89 -> 88 -> gudang_jadi -> completed
+     * TEST 3: Full 6-stage chain execution (8 checkpoints)
+     * 100 -> 95 (Netto) -> 92 (OD) -> 92 (CNC) -> 90 (Bor) -> 89 (QC) -> 89 (Gudang Jadi) -> completed
      */
     public function test_full_chain_quantity_continuity_and_completion(): void
     {
@@ -176,43 +176,38 @@ class StageExecutionServiceTest extends TestCase
         $line->refresh();
         $this->assertEquals('bubut_od', $line->current_stage);
 
-        // 2. BUBUT OD (95 in, 3 defect -> 92 good)
+        // 2. BUBUT OD (95 in, 3 defect -> 92 good -> advances directly to bubut_cnc)
         $this->service->execute($line->traveler_number, 'bubut_od', 3, $this->user->id);
-        $line->refresh();
-        $this->assertEquals('marking', $line->current_stage);
-
-        // 3. MARKING (92 in, 1 defect -> 91 good)
-        $this->service->execute($line->traveler_number, 'marking', 1, $this->user->id);
         $line->refresh();
         $this->assertEquals('bubut_cnc', $line->current_stage);
 
-        // 4. BUBUT CNC (91 in, 0 defect -> 91 good across CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR)
+        // 3. BUBUT CNC (92 in, 0 defect -> 92 good across CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR)
         $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $line->refresh();
         $this->assertEquals('bor', $line->current_stage);
 
-        // 5. BOR (91 in, 2 defect -> 89 good)
+        // 4. BOR (92 in, 2 defect -> 90 good)
         $this->service->execute($line->traveler_number, 'bor', 2, $this->user->id);
         $line->refresh();
         $this->assertEquals('qc', $line->current_stage);
 
-        // 6. QC (89 in, 1 defect -> 88 good)
+        // 5. QC (90 in, 1 defect -> 89 good)
         $this->service->execute($line->traveler_number, 'qc', 1, $this->user->id);
         $line->refresh();
         $this->assertEquals('gudang_jadi', $line->current_stage);
 
-        // 7. GUDANG JADI (88 in, 0 defect -> 88 good)
+        // 6. GUDANG JADI (89 in, 0 defect -> 89 good)
         $gudangExec = $this->service->execute($line->traveler_number, 'gudang_jadi', 0, $this->user->id);
         $this->assertEquals('gudang_jadi', $gudangExec->stage);
-        $this->assertEquals(88, $gudangExec->input_qty);
+        $this->assertEquals(89, $gudangExec->input_qty);
         $this->assertEquals(0, $gudangExec->defect_qty);
-        $this->assertEquals(88, $gudangExec->good_qty);
+        $this->assertEquals(89, $gudangExec->good_qty);
 
         $line->refresh();
         $this->assertEquals('completed', $line->current_stage);
-        $this->assertCount(9, $line->stageExecutions);
+        $this->assertCount(8, $line->stageExecutions);
     }
 
     /**

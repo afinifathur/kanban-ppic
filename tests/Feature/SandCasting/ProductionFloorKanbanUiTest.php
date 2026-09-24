@@ -213,7 +213,7 @@ class ProductionFloorKanbanUiTest extends TestCase
         $response->assertSee('KANBAN PRODUKSI &mdash; BUBUT OD', false);
         $response->assertSee('NETTO');
         $response->assertSee('BUBUT OD');
-        $response->assertSee('MARKING');
+        $response->assertDontSee('/sand-casting/kanban/marking');
         $response->assertSee('BUBUT CNC');
         $response->assertSee('BOR');
         $response->assertSee('QC');
@@ -519,5 +519,31 @@ class ProductionFloorKanbanUiTest extends TestCase
         $response->assertSee('WAITING DEFECT');
         $response->assertSee('MENUNGGU INPUT DEFECT');
         $response->assertSee('INCOMING');
+    }
+
+    /**
+     * Phase 3B: Kanban view renders full-width layout and auto-refresh elements.
+     */
+    public function test_kanban_view_renders_full_width_layout_and_auto_refresh_badge(): void
+    {
+        $this->createKtrLine([
+            'traveler_number' => 'KTR-20260924-0001',
+            'current_stage' => 'netto',
+            'qty_good' => 25,
+            'line_number' => 1,
+        ]);
+
+        $response = $this->actingAs($this->spvNetto)->get('/sand-casting/kanban/netto');
+
+        $response->assertOk();
+        // Full width container
+        $response->assertSee('class="space-y-3 w-full pb-6"', false);
+        $response->assertDontSee('max-w-7xl mx-auto');
+
+        // Auto-refresh elements
+        $response->assertSee('id="autoRefreshBadge"', false);
+        $response->assertSee('id="autoRefreshTimer"', false);
+        $response->assertSee('02:00');
+        $response->assertSee('AUTO:');
     }
 }

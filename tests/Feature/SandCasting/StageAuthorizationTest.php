@@ -29,8 +29,6 @@ class StageAuthorizationTest extends TestCase
 
     protected User $spvBubutOd;
 
-    protected User $spvMarking;
-
     protected User $spvBubutCnc;
 
     protected User $spvBor;
@@ -92,13 +90,6 @@ class StageAuthorizationTest extends TestCase
             'assigned_stage' => 'bubut_od',
         ]);
         $this->spvBubutOd->assignRole('spv');
-
-        $this->spvMarking = User::factory()->create([
-            'name' => 'SPV Marking',
-            'email' => 'spv_marking@peroniks.com',
-            'assigned_stage' => 'marking',
-        ]);
-        $this->spvMarking->assignRole('spv');
 
         $this->spvBubutCnc = User::factory()->create([
             'name' => 'SPV Bubut CNC',
@@ -260,24 +251,22 @@ class StageAuthorizationTest extends TestCase
     }
 
     /**
-     * Requirement C: SPV with assigned_stage = netto CANNOT execute marking.
+     * Requirement C: Route marking does not exist (GET 404, POST 422 invalid stage).
      */
-    public function test_requirement_c_spv_netto_cannot_execute_marking(): void
+    public function test_requirement_c_marking_route_does_not_exist(): void
     {
-        $line = $this->createKtrLine(['current_stage' => 'marking', 'qty_good' => 50]);
+        $responseGet = $this->actingAs($this->spvNetto)->get('/sand-casting/scan/marking');
+        $responseGet->assertStatus(404);
+
+        $line = $this->createKtrLine(['current_stage' => 'bubut_od', 'qty_good' => 50]);
 
         $response = $this->actingAs($this->spvNetto)->postJson('/sand-casting/scan/marking/execute', [
             'traveler_number' => $line->traveler_number,
             'defect_qty' => 0,
         ]);
 
-        $response->assertStatus(403);
+        $response->assertStatus(422);
         $response->assertJsonPath('success', false);
-
-        $this->assertDatabaseMissing('sand_casting_stage_executions', [
-            'sand_casting_casting_result_line_id' => $line->id,
-            'stage' => 'marking',
-        ]);
     }
 
     /**
@@ -393,7 +382,7 @@ class StageAuthorizationTest extends TestCase
         // Advance line to bubut_cnc stage
         $line = $this->createKtrLine(['current_stage' => 'bubut_cnc', 'qty_good' => 50]);
 
-        // Prior confirmed executions for NETTO, OD, and MARKING
+        // Prior confirmed executions for NETTO and OD
         $line->stageExecutions()->create([
             'stage' => 'netto',
             'checkpoint_code' => 'NETTO_CUT',
@@ -402,7 +391,7 @@ class StageAuthorizationTest extends TestCase
             'good_qty' => 50,
             'status' => SandCastingStageExecution::STATUS_CONFIRMED,
             'operator_id' => $this->spvNetto->id,
-            'executed_at' => now()->subHours(3),
+            'executed_at' => now()->subHours(2),
         ]);
 
         $line->stageExecutions()->create([
@@ -413,17 +402,6 @@ class StageAuthorizationTest extends TestCase
             'good_qty' => 50,
             'status' => SandCastingStageExecution::STATUS_CONFIRMED,
             'operator_id' => $this->spvBubutOd->id,
-            'executed_at' => now()->subHours(2),
-        ]);
-
-        $line->stageExecutions()->create([
-            'stage' => 'marking',
-            'checkpoint_code' => 'MARKING_STAMP',
-            'input_qty' => 50,
-            'defect_qty' => 0,
-            'good_qty' => 50,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'operator_id' => $this->spvMarking->id,
             'executed_at' => now()->subHour(),
         ]);
 
@@ -605,5 +583,38 @@ class StageAuthorizationTest extends TestCase
         // Invalid stage throws InvalidArgumentException
         $this->expectException(InvalidArgumentException::class);
         $this->authService->authorize($this->spvNetto, 'invalid_stage');
+    }
+
+    /**
+     * Requirement: Proper SPV Netto presentation account (spvnettofl@peroniks.com).
+     */
+    public function test_spvnettofl_presentation_account_authorization(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'SPV Netto Flange',
+            'email' => 'spvnettofl@peroniks.com',
+            'password' => bcrypt('password'),
+            'assigned_stage' => 'netto',
+        ]);
+        $user->assignRole('spv');
+
+        // 1. Roles and stage attributes
+        $this->assertTrue($user->hasRole('spv'));
+        $this->assertEquals('netto', $user->assigned_stage);
+
+        // 2. Can access and scan Netto
+        $this->assertTrue($this->authService->canAccessStage($user, 'netto'));
+        $responseNetto = $this->actingAs($user)->get('/sand-casting/scan/netto');
+        $responseNetto->assertStatus(200);
+
+        // 3. Cannot access or scan other stages
+        $this->assertFalse($this->authService->canAccessStage($user, 'bubut_od'));
+        $this->assertFalse($this->authService->canAccessStage($user, 'bubut_cnc'));
+        $this->assertFalse($this->authService->canAccessStage($user, 'bor'));
+        $this->assertFalse($this->authService->canAccessStage($user, 'qc'));
+        $this->assertFalse($this->authService->canAccessStage($user, 'gudang_jadi'));
+
+        $responseOd = $this->actingAs($user)->get('/sand-casting/scan/stage/bubut-od');
+        $responseOd->assertStatus(403);
     }
 }

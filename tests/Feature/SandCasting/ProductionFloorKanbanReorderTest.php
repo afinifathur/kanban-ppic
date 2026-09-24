@@ -110,7 +110,7 @@ class ProductionFloorKanbanReorderTest extends TestCase
         ]);
 
         $order = SandCastingCastingOrder::create([
-            'casting_order_number' => 'PCOR-20260920-'.rand(1000, 9999),
+            'casting_order_number' => 'PCOR-20260920-'.uniqid().rand(100, 999),
             'scheduled_date' => '2026-09-20',
             'status' => 'ISSUED',
             'created_by' => $this->adminUser->id,

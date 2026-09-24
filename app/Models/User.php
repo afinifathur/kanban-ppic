@@ -53,4 +53,39 @@ class User extends Authenticatable
     {
         return $this->product_scope;
     }
+
+    /**
+     * Get operational display title (nickname) for UI header / user card.
+     */
+    public function getOperationalTitle(): string
+    {
+        if ($this->hasRole('spv') && ! empty($this->assigned_stage)) {
+            $stageMap = [
+                'netto' => 'SPV NETTO',
+                'bubut_od' => 'SPV BUBUT OD',
+                'bubut_cnc' => 'SPV BUBUT CNC',
+                'bor' => 'SPV BOR',
+                'qc' => 'SPV QC',
+                'gudang_jadi' => 'SPV GUDANG JADI',
+            ];
+
+            return $stageMap[$this->assigned_stage] ?? 'SPV '.strtoupper(str_replace('_', ' ', $this->assigned_stage));
+        }
+
+        return explode(' ', $this->name ?? 'User')[0];
+    }
+
+    /**
+     * Get operational domain subtitle for UI header / user card.
+     */
+    public function getOperationalSubtitle(): string
+    {
+        if ($this->hasRole('spv')) {
+            return 'FLANGE';
+        }
+
+        $roleName = $this->roles->pluck('name')->first() ?? 'User';
+
+        return $roleName.($this->product_scope ? ' - '.$this->product_scope : '');
+    }
 }

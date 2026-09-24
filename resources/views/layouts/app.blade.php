@@ -184,15 +184,15 @@
                 <div
                     class="h-9 w-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold shadow-inner shrink-0"
                     title="User Profile: {{ Auth::user()->name ?? 'User' }}">
-                    {{ substr(Auth::user()->name ?? 'U', 0, 1) }}
+                    {{ substr(Auth::user()->getOperationalTitle() ?? 'U', 0, 1) }}
                 </div>
                 <div class="flex-1 min-w-0 sidebar-text">
-                    <div class="text-sm font-bold text-slate-100 truncate">
-                        {{ explode(' ', Auth::user()->name)[0] }}
+                    <div class="text-sm font-bold text-slate-100 truncate" title="{{ Auth::user()->name ?? 'User' }}">
+                        {{ Auth::user()->getOperationalTitle() }}
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold truncate" title="{{ Auth::user()->roles->pluck('name')->first() ?? 'User' }}{{ Auth::user()->product_scope ? ' - '.Auth::user()->product_scope : '' }}">
-                            {{ Auth::user()->roles->pluck('name')->first() ?? 'User' }}{{ Auth::user()->product_scope ? ' - '.Auth::user()->product_scope : '' }}
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold truncate" title="{{ Auth::user()->getOperationalSubtitle() }}">
+                            {{ Auth::user()->getOperationalSubtitle() }}
                         </span>
                         <form action="{{ route('logout') }}" method="POST" class="inline">
                             @csrf
@@ -209,6 +209,33 @@
 
         <nav class="flex-1 overflow-y-auto py-4">
             <ul class="space-y-1">
+                @if(Auth::user() && Auth::user()->hasRole('spv') && Auth::user()->assigned_stage)
+                    <!-- OPERASIONAL (SPV SAND CASTING) -->
+                    @php
+                        $spvStageSlug = str_replace('_', '-', Auth::user()->assigned_stage);
+                        $spvKanbanUrl = route('sand-casting.kanban.show', $spvStageSlug);
+                        $spvScanUrl = route('sand-casting.scan.stage', $spvStageSlug);
+                    @endphp
+                    <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                        <span class="sidebar-text">Operasional</span>
+                    </li>
+                    <li>
+                        <a href="{{ $spvKanbanUrl }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('sand-casting.kanban.*') ? 'bg-blue-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Kanban Floor">
+                            <i class="fas fa-columns w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Kanban Floor</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ $spvScanUrl }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('sand-casting.scan.*') ? 'bg-blue-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Scanner">
+                            <i class="fas fa-qrcode w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Scanner</span>
+                        </a>
+                    </li>
+                @else
                 <!-- 1. DASHBOARD -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Dashboard</span>
@@ -594,6 +621,7 @@
                         </li>
                     </ul>
                 </li>
+                @endif
 
                 <script>
                     function handleCollapsedClick(menuId, iconId) {

@@ -14,7 +14,6 @@ class SandCastingStageAuthorizationService
     public const VALID_STAGES = [
         'netto',
         'bubut_od',
-        'marking',
         'bubut_cnc',
         'bor',
         'qc',
@@ -28,7 +27,6 @@ class SandCastingStageAuthorizationService
         'netto' => 'netto',
         'bubut-od' => 'bubut_od',
         'bubut_od' => 'bubut_od',
-        'marking' => 'marking',
         'bubut-cnc' => 'bubut_cnc',
         'bubut_cnc' => 'bubut_cnc',
         'bor' => 'bor',

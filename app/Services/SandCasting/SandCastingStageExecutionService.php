@@ -18,7 +18,6 @@ class SandCastingStageExecutionService
     public const STAGES = [
         'netto',
         'bubut_od',
-        'marking',
         'bubut_cnc',
         'bor',
         'qc',
@@ -30,8 +29,7 @@ class SandCastingStageExecutionService
      */
     public const STAGE_FLOW = [
         'netto' => 'bubut_od',
-        'bubut_od' => 'marking',
-        'marking' => 'bubut_cnc',
+        'bubut_od' => 'bubut_cnc',
         'bubut_cnc' => 'bor',
         'bor' => 'qc',
         'qc' => 'gudang_jadi',
@@ -44,7 +42,6 @@ class SandCastingStageExecutionService
     public const CHECKPOINTS = [
         'NETTO_CUT',
         'OD_TURNING',
-        'MARKING_STAMP',
         'CNC_MACHINING',
         'QC_POST_CNC',
         'QC_PRE_BOR',
@@ -59,7 +56,6 @@ class SandCastingStageExecutionService
     public const STAGE_CHECKPOINTS = [
         'netto' => ['NETTO_CUT'],
         'bubut_od' => ['OD_TURNING'],
-        'marking' => ['MARKING_STAMP'],
         'bubut_cnc' => ['CNC_MACHINING', 'QC_POST_CNC', 'QC_PRE_BOR'],
         'bor' => ['BOR_DRILLING'],
         'qc' => ['QC_FINAL_INSPECTION'],
@@ -72,7 +68,6 @@ class SandCastingStageExecutionService
     public const CHECKPOINT_STAGE = [
         'NETTO_CUT' => 'netto',
         'OD_TURNING' => 'bubut_od',
-        'MARKING_STAMP' => 'marking',
         'CNC_MACHINING' => 'bubut_cnc',
         'QC_POST_CNC' => 'bubut_cnc',
         'QC_PRE_BOR' => 'bubut_cnc',
@@ -86,8 +81,7 @@ class SandCastingStageExecutionService
      */
     public const PREVIOUS_CHECKPOINT = [
         'OD_TURNING' => 'NETTO_CUT',
-        'MARKING_STAMP' => 'OD_TURNING',
-        'CNC_MACHINING' => 'MARKING_STAMP',
+        'CNC_MACHINING' => 'OD_TURNING',
         'QC_POST_CNC' => 'CNC_MACHINING',
         'QC_PRE_BOR' => 'QC_POST_CNC',
         'BOR_DRILLING' => 'QC_PRE_BOR',
@@ -100,8 +94,7 @@ class SandCastingStageExecutionService
      */
     public const NEXT_CHECKPOINT = [
         'NETTO_CUT' => 'OD_TURNING',
-        'OD_TURNING' => 'MARKING_STAMP',
-        'MARKING_STAMP' => 'CNC_MACHINING',
+        'OD_TURNING' => 'CNC_MACHINING',
         'CNC_MACHINING' => 'QC_POST_CNC',
         'QC_POST_CNC' => 'QC_PRE_BOR',
         'QC_PRE_BOR' => 'BOR_DRILLING',

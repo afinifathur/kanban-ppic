@@ -463,19 +463,13 @@ class StageExecutionStateMachineTest extends TestCase
         $this->service->verifyQcBreakdown($nettoExec, [], $this->qcInspector->id);
         $this->assertEquals('bubut_od', $line->fresh()->current_stage);
 
-        // 2. BUBUT OD: 60 -> defect 0 -> good 60
+        // 2. BUBUT OD (Physical OD + Marking): 60 -> defect 0 -> good 60 -> advances directly to bubut_cnc
         $odExec = $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
         $odExec = $this->service->recordDefectQty($odExec, 0, $this->adminPpic->id);
         $this->service->verifyQcBreakdown($odExec, [], $this->qcInspector->id);
-        $this->assertEquals('marking', $line->fresh()->current_stage);
-
-        // 3. MARKING: 60 -> defect 0 -> good 60
-        $markingExec = $this->service->markPhysicalDone($line->traveler_number, 'marking', $this->operator->id);
-        $markingExec = $this->service->recordDefectQty($markingExec, 0, $this->adminPpic->id);
-        $this->service->verifyQcBreakdown($markingExec, [], $this->qcInspector->id);
         $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
 
-        // 4. BUBUT CNC Checkpoint 1 (CNC_MACHINING): Input 60 -> defect 5 -> good 55
+        // 3. BUBUT CNC Checkpoint 1 (CNC_MACHINING): Input 60 -> defect 5 -> good 55
         $activeChk1 = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertEquals('CNC_MACHINING', $activeChk1['code']);
 
@@ -491,7 +485,7 @@ class StageExecutionStateMachineTest extends TestCase
         // Current stage MUST STILL be bubut_cnc!
         $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
 
-        // 5. BUBUT CNC Checkpoint 2 (QC_POST_CNC): Input 55 -> defect 2 -> good 53
+        // 4. BUBUT CNC Checkpoint 2 (QC_POST_CNC): Input 55 -> defect 2 -> good 53
         $activeChk2 = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertEquals('QC_POST_CNC', $activeChk2['code']);
 
@@ -507,7 +501,7 @@ class StageExecutionStateMachineTest extends TestCase
         // Current stage MUST STILL be bubut_cnc!
         $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
 
-        // 6. BUBUT CNC Checkpoint 3 (QC_PRE_BOR): Input 53 -> defect 3 -> good 50
+        // 5. BUBUT CNC Checkpoint 3 (QC_PRE_BOR): Input 53 -> defect 3 -> good 50
         $activeChk3 = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertEquals('QC_PRE_BOR', $activeChk3['code']);
 
@@ -523,7 +517,7 @@ class StageExecutionStateMachineTest extends TestCase
         // Now that QC_PRE_BOR is CONFIRMED, stage MUST advance to bor!
         $this->assertEquals('bor', $line->fresh()->current_stage);
 
-        // 7. BOR (BOR_DRILLING): Input must be exactly 50!
+        // 6. BOR (BOR_DRILLING): Input must be exactly 50!
         $activeBor = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertEquals('BOR_DRILLING', $activeBor['code']);
 
@@ -548,8 +542,7 @@ class StageExecutionStateMachineTest extends TestCase
 
         $pipeline = [
             ['stage' => 'netto', 'chk' => 'NETTO_CUT', 'defect' => 5], // good 95
-            ['stage' => 'bubut_od', 'chk' => 'OD_TURNING', 'defect' => 1], // good 94
-            ['stage' => 'marking', 'chk' => 'MARKING_STAMP', 'defect' => 2], // good 92
+            ['stage' => 'bubut_od', 'chk' => 'OD_TURNING', 'defect' => 3], // good 92
             ['stage' => 'bubut_cnc', 'chk' => 'CNC_MACHINING', 'defect' => 5], // good 87
             ['stage' => 'bubut_cnc', 'chk' => 'QC_POST_CNC', 'defect' => 2], // good 85
             ['stage' => 'bubut_cnc', 'chk' => 'QC_PRE_BOR', 'defect' => 3], // good 82
@@ -573,6 +566,6 @@ class StageExecutionStateMachineTest extends TestCase
         }
 
         $this->assertEquals('completed', $line->fresh()->current_stage);
-        $this->assertCount(9, $line->stageExecutions);
+        $this->assertCount(8, $line->stageExecutions);
     }
 }

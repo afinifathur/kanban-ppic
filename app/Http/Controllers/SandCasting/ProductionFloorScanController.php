@@ -21,7 +21,6 @@ class ProductionFloorScanController extends Controller
         'netto' => 'netto',
         'bubut-od' => 'bubut_od',
         'bubut_od' => 'bubut_od',
-        'marking' => 'marking',
         'bubut-cnc' => 'bubut_cnc',
         'bubut_cnc' => 'bubut_cnc',
         'bor' => 'bor',
@@ -33,7 +32,6 @@ class ProductionFloorScanController extends Controller
     public const STAGE_LABELS = [
         'netto' => 'NETTO',
         'bubut_od' => 'BUBUT OD',
-        'marking' => 'MARKING',
         'bubut_cnc' => 'BUBUT CNC',
         'bor' => 'BOR',
         'qc' => 'QC',

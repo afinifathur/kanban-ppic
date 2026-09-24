@@ -393,7 +393,7 @@ class OperationalKanbanQueryTest extends TestCase
      */
     public function test_s_t_u_bubut_cnc_multi_checkpoint_kanban_progression(): void
     {
-        // 1. Progress a KTR from Netto -> Bubut OD -> Marking -> Bubut CNC
+        // 1. Progress a KTR from Netto -> Bubut OD -> Bubut CNC
         $ktr = $this->createKtrLine(['qty_good' => 40, 'current_stage' => 'netto']);
 
         // Netto
@@ -405,11 +405,6 @@ class OperationalKanbanQueryTest extends TestCase
         $e2 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->admin->id);
         $e2 = $this->executionService->recordDefectQty($e2, 0, $this->admin->id);
         $this->executionService->verifyQcBreakdown($e2, [], $this->qcInspector->id);
-
-        // Marking
-        $e3 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'marking', $this->admin->id);
-        $e3 = $this->executionService->recordDefectQty($e3, 0, $this->admin->id);
-        $this->executionService->verifyQcBreakdown($e3, [], $this->qcInspector->id);
 
         $ktr->refresh();
         $this->assertEquals('bubut_cnc', $ktr->current_stage);
@@ -602,7 +597,7 @@ class OperationalKanbanQueryTest extends TestCase
         $e1 = $this->executionService->markPhysicalDone($ktr1->traveler_number, 'netto', $this->admin->id);
         $this->executionService->recordDefectQty($e1, 2, $this->admin->id);
 
-        // Bubut OD KTR waiting QC -> projected to Marking incoming
+        // Bubut OD KTR waiting QC -> projected to Bubut CNC incoming
         $ktr2 = $this->createKtrLine(['qty_good' => 40, 'current_stage' => 'bubut_od']);
         // Create confirmed Netto exec for KTR 2
         SandCastingStageExecution::create([
@@ -620,13 +615,13 @@ class OperationalKanbanQueryTest extends TestCase
         $this->executionService->recordDefectQty($e2, 1, $this->admin->id);
 
         $odData = $this->queryService->getStageKanbanData('bubut_od');
-        $markingData = $this->queryService->getStageKanbanData('marking');
+        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
 
         $this->assertEquals(1, $odData['summary']['incoming_count']);
         $this->assertEquals($ktr1->traveler_number, $odData['incoming'][0]['traveler_number']);
 
-        $this->assertEquals(1, $markingData['summary']['incoming_count']);
-        $this->assertEquals($ktr2->traveler_number, $markingData['incoming'][0]['traveler_number']);
+        $this->assertEquals(1, $cncData['summary']['incoming_count']);
+        $this->assertEquals($ktr2->traveler_number, $cncData['incoming'][0]['traveler_number']);
     }
 
     /**
@@ -843,7 +838,7 @@ class OperationalKanbanQueryTest extends TestCase
             operatorId: $this->spvNetto->id
         );
 
-        $stages = ['netto', 'bubut_od', 'marking', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
+        $stages = ['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
         $foundCount = 0;
 
         foreach ($stages as $stg) {
