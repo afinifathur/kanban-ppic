@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             QcFittingUserSeeder::class,
             SandCastingSpvUserSeeder::class,
             SandCastingQcUserSeeder::class,
+            SandCastingPpicUserSeeder::class,
         ]);
     }
 }
