@@ -154,4 +154,94 @@ class SandCastingStageAuthorizationService
 
         throw new AuthorizationException('Hanya akun PPIC Flange berwenang yang dapat mengubah urutan prioritas antrian.');
     }
+
+    /**
+     * Check if a user is authorized to view and record defects as Admin PPIC.
+     */
+    public function canRecordDefect(?User $user): bool
+    {
+        try {
+            $this->authorizeRecordDefect($user);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Authorize user for Sand Casting PPIC defect recording.
+     * Controlled for PPIC and Admin roles, with primary user adminppicfl@peroniks.com.
+     *
+     * @throws AuthorizationException
+     */
+    public function authorizeRecordDefect(?User $user): void
+    {
+        if (! $user) {
+            throw new AuthorizationException('User belum terautentikasi.');
+        }
+
+        // 1. Admin role
+        if ($user->hasRole('admin')) {
+            return;
+        }
+
+        // 2. PPIC role
+        if ($user->hasRole('ppic')) {
+            return;
+        }
+
+        // 3. Specifically authorized email accounts
+        $email = strtolower(trim((string) $user->email));
+        if (in_array($email, ['adminppicfl@peroniks.com', 'ppicflange@peroniks.com', 'adminppicpf@peroniks.com'], true)) {
+            return;
+        }
+
+        throw new AuthorizationException("User '{$user->name}' tidak memiliki hak akses untuk mencatat defect PPIC Sand Casting.");
+    }
+
+    /**
+     * Check if a user is authorized to view and verify defects as Admin QC.
+     */
+    public function canVerifyQc(?User $user): bool
+    {
+        try {
+            $this->authorizeVerifyQc($user);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Authorize user for Sand Casting QC defect verification.
+     * Controlled for QC and Admin roles, with primary user adminqcflange@peroniks.com.
+     *
+     * @throws AuthorizationException
+     */
+    public function authorizeVerifyQc(?User $user): void
+    {
+        if (! $user) {
+            throw new AuthorizationException('User belum terautentikasi.');
+        }
+
+        // 1. Admin role
+        if ($user->hasRole('admin')) {
+            return;
+        }
+
+        // 2. QC roles
+        if ($user->hasRole('qc') || $user->hasRole('admin_qc') || $user->hasRole('admin_qc_fitting')) {
+            return;
+        }
+
+        // 3. Specifically authorized QC email accounts
+        $email = strtolower(trim((string) $user->email));
+        if (in_array($email, ['adminqcflange@peroniks.com', 'adminqcfitting@peroniks.com'], true)) {
+            return;
+        }
+
+        throw new AuthorizationException("User '{$user->name}' tidak memiliki hak akses untuk memverifikasi defect QC Sand Casting.");
+    }
 }

@@ -339,6 +339,34 @@
                                 <span class="text-sm sidebar-text">Kanban Floor</span>
                             </a>
                         </li>
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || in_array(strtolower(trim((string) Auth::user()->email)), ['adminppicfl@peroniks.com', 'ppicflange@peroniks.com', 'adminppicpf@peroniks.com'])))
+                        <li>
+                            <a href="{{ route('sand-casting.defects.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.defects.*') ? 'text-white font-medium border-l-2 border-amber-500' : 'text-slate-300' }}"
+                                title="Pencatatan Kerusakan">
+                                <i class="fas fa-tools w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Pencatatan Kerusakan</span>
+                            </a>
+                        </li>
+                        @endif
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'qc') || Auth::user()->roles->contains('name', 'admin_qc_fitting') || in_array(strtolower(trim((string) Auth::user()->email)), ['adminqcflange@peroniks.com', 'adminqcfitting@peroniks.com'])))
+                        <li>
+                            <a href="{{ route('sand-casting.qc-defects.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.qc-defects.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                title="Verifikasi Defect (QC)">
+                                <i class="fas fa-clipboard-check w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Verifikasi Defect (QC)</span>
+                            </a>
+                        </li>
+                        @endif
+                        <li>
+                            <a href="{{ route('sand-casting.report.production.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.production.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
+                                title="Laporan Produksi">
+                                <i class="fas fa-file-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Laporan Produksi</span>
+                            </a>
+                        </li>
                         <li>
                             <a href="{{ route('sand-casting.scan.netto') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.scan.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"

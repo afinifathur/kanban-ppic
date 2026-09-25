@@ -928,4 +928,354 @@ class SandCastingProductionFloorQueryService
             'border' => $pal['border'],
         ];
     }
+
+    // =========================================================================
+    // DEFECT RECORDING READ MODEL (PPIC 6 TABS)
+    // =========================================================================
+
+    /**
+     * Get global summary counters for PPIC Defect Recording dashboard.
+     *
+     * @return array{
+     *     waiting_defect_count: int,
+     *     waiting_defect_pcs: int,
+     *     today_incoming_count: int,
+     *     stage_counts: array<string, int>
+     * }
+     */
+    public function getDefectRecordingSummary(): array
+    {
+        $waitingExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_DEFECT)->get();
+
+        $todayIncomingCount = SandCastingStageExecution::whereDate('physical_done_at', today())->count();
+
+        $stageCounts = [];
+        foreach (SandCastingStageExecutionService::STAGES as $stg) {
+            $stageCounts[$stg] = $waitingExecs->where('stage', $stg)->count();
+        }
+
+        return [
+            'waiting_defect_count' => $waitingExecs->count(),
+            'waiting_defect_pcs' => (int) $waitingExecs->sum('input_qty'),
+            'today_incoming_count' => $todayIncomingCount,
+            'stage_counts' => $stageCounts,
+        ];
+    }
+
+    /**
+     * Get FIFO queue of stage executions for a specific stage awaiting defect recording.
+     *
+     * @param  string  $stage  Canonical or slug stage name
+     * @param  array{search?: string}  $filters
+     * @return list<array>
+     */
+    public function getDefectRecordingQueue(string $stage, array $filters = []): array
+    {
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage);
+        if ($canonicalStage === null) {
+            throw new \InvalidArgumentException("Tahap operasional '{$stage}' tidak valid dalam alur Sand Casting.");
+        }
+
+        $query = SandCastingStageExecution::where('stage', $canonicalStage)
+            ->where('status', SandCastingStageExecution::STATUS_WAITING_DEFECT)
+            ->with([
+                'castingResultLine.castingResult',
+                'castingResultLine.productionPlan',
+                'castingResultLine.castingOrderLine.castingOrder',
+                'operator',
+                'defectEnteredBy',
+            ])
+            ->orderBy('physical_done_at', 'asc')
+            ->orderBy('id', 'asc');
+
+        $executions = $query->get();
+
+        $items = [];
+        foreach ($executions as $exec) {
+            $card = $this->formatDefectRecordingCard($exec);
+            if ($card === null) {
+                continue;
+            }
+
+            if (! empty($filters['search'])) {
+                $search = strtolower(trim((string) $filters['search']));
+                $haystack = strtolower(
+                    ($card['traveler_number'] ?? '').' '.
+                    ($card['heat_number'] ?? '').' '.
+                    ($card['production_code'] ?? '').' '.
+                    ($card['item_name'] ?? '').' '.
+                    ($card['item_code'] ?? '').' '.
+                    ($card['customer'] ?? '').' '.
+                    ($card['checkpoint_code'] ?? '')
+                );
+                if (! str_contains($haystack, $search)) {
+                    continue;
+                }
+            }
+
+            $items[] = $card;
+        }
+
+        return $items;
+    }
+
+    /**
+     * Get all 6 stages queues for PPIC Defect Recording.
+     *
+     * @param  array{search?: string}  $filters
+     * @return array<string, list<array>>
+     */
+    public function getAllDefectRecordingQueues(array $filters = []): array
+    {
+        $queues = [];
+        foreach (SandCastingStageExecutionService::STAGES as $stage) {
+            $queues[$stage] = $this->getDefectRecordingQueue($stage, $filters);
+        }
+
+        return $queues;
+    }
+
+    /**
+     * Format a SandCastingStageExecution into a standardized Defect Recording Card DTO.
+     */
+    public function formatDefectRecordingCard(SandCastingStageExecution $exec): ?array
+    {
+        $line = $exec->castingResultLine;
+        if (! $line) {
+            return null;
+        }
+
+        $size = $line->castingOrderLine?->size ?? $line->productionPlan?->size;
+        $lineNumber = self::resolveLineNumber($line->productionPlan?->line_number, $size);
+        $aging = $this->calculateAging($line, $exec);
+        $customer = $line->productionPlan?->customer ?? $line->castingOrderLine?->customer;
+
+        // Defect status determination
+        if ($exec->status === SandCastingStageExecution::STATUS_WAITING_DEFECT) {
+            $defectState = 'unrecorded';
+            $defectStatusLabel = 'BELUM DICATAT';
+        } elseif ($exec->defect_qty === 0) {
+            $defectState = 'zero';
+            $defectStatusLabel = 'RUSAK 0 PCS';
+        } else {
+            $defectState = 'defect';
+            $defectStatusLabel = "RUSAK {$exec->defect_qty} PCS";
+        }
+
+        return [
+            'id' => $exec->id,
+            'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
+            'traveler_number' => $line->traveler_number,
+            'heat_number' => $line->castingResult?->heat_number,
+            'production_code' => $line->productionPlan?->code ?? $line->castingOrderLine?->code,
+            'item_code' => $line->productionPlan?->item_code,
+            'item_name' => $line->productionPlan?->item_name ?? $line->castingOrderLine?->item_name,
+            'customer' => $customer,
+            'customer_badge' => self::resolveCustomerBadge($customer),
+            'size' => $size,
+            'line_number' => $lineNumber,
+            'stage' => $exec->stage,
+            'checkpoint_code' => $exec->checkpoint_code,
+            'checkpoint_label' => str_replace('_', ' ', $exec->checkpoint_code),
+            'input_qty' => (int) $exec->input_qty,
+            'defect_qty' => (int) $exec->defect_qty,
+            'good_qty' => (int) $exec->good_qty,
+            'status' => $exec->status,
+            'defect_state' => $defectState,
+            'defect_status_label' => $defectStatusLabel,
+            'physical_done_at' => $exec->physical_done_at?->format('Y-m-d H:i:s'),
+            'physical_done_date' => $exec->physical_done_at?->format('Y-m-d') ?? now()->format('Y-m-d'),
+            'physical_done_human' => $exec->physical_done_at?->diffForHumans(),
+            'operator_name' => $exec->operator?->name ?? '-',
+            'notes' => $exec->notes,
+            'aging' => $aging,
+            'is_urgent' => (bool) $line->is_urgent,
+        ];
+    }
+
+    // =========================================================================
+    // QC DEFECT VERIFICATION READ MODEL (ADMIN QC 6 TABS)
+    // =========================================================================
+
+    /**
+     * Get global summary counters for QC Defect Verification dashboard.
+     *
+     * @return array{
+     *     waiting_qc_count: int,
+     *     waiting_qc_defect_pcs: int,
+     *     today_verified_count: int,
+     *     stage_counts: array<string, int>
+     * }
+     */
+    public function getQcVerificationSummary(): array
+    {
+        $waitingExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)->get();
+
+        $todayVerifiedCount = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_CONFIRMED)
+            ->whereDate('qc_verified_at', today())
+            ->count();
+
+        $stageCounts = [];
+        foreach (SandCastingStageExecutionService::STAGES as $stg) {
+            $stageCounts[$stg] = $waitingExecs->where('stage', $stg)->count();
+        }
+
+        return [
+            'waiting_qc_count' => $waitingExecs->count(),
+            'waiting_qc_defect_pcs' => (int) $waitingExecs->sum('defect_qty'),
+            'today_verified_count' => $todayVerifiedCount,
+            'stage_counts' => $stageCounts,
+        ];
+    }
+
+    /**
+     * Get FIFO queue of stage executions for a specific stage awaiting QC defect verification.
+     * FIFO sorted by defect_entered_at ASC, id ASC.
+     *
+     * @param  string  $stage  Canonical or slug stage name
+     * @param  array{search?: string}  $filters
+     * @return list<array>
+     */
+    public function getQcVerificationQueue(string $stage, array $filters = []): array
+    {
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage);
+        if ($canonicalStage === null) {
+            throw new \InvalidArgumentException("Tahap operasional '{$stage}' tidak valid dalam alur Sand Casting.");
+        }
+
+        $query = SandCastingStageExecution::where('stage', $canonicalStage)
+            ->where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+            ->with([
+                'castingResultLine.castingResult',
+                'castingResultLine.productionPlan',
+                'castingResultLine.castingOrderLine.castingOrder',
+                'operator',
+                'defectEnteredBy',
+                'qcVerifiedBy',
+                'defects.defectType',
+            ])
+            ->orderBy('defect_entered_at', 'asc')
+            ->orderBy('id', 'asc');
+
+        $executions = $query->get();
+
+        $items = [];
+        foreach ($executions as $exec) {
+            $card = $this->formatQcVerificationCard($exec);
+            if ($card === null) {
+                continue;
+            }
+
+            if (! empty($filters['search'])) {
+                $search = strtolower(trim((string) $filters['search']));
+                $haystack = strtolower(
+                    ($card['traveler_number'] ?? '').' '.
+                    ($card['heat_number'] ?? '').' '.
+                    ($card['production_code'] ?? '').' '.
+                    ($card['item_name'] ?? '').' '.
+                    ($card['item_code'] ?? '').' '.
+                    ($card['customer'] ?? '').' '.
+                    ($card['checkpoint_code'] ?? '')
+                );
+                if (! str_contains($haystack, $search)) {
+                    continue;
+                }
+            }
+
+            $items[] = $card;
+        }
+
+        return $items;
+    }
+
+    /**
+     * Get all 6 stages queues for QC Defect Verification.
+     *
+     * @param  array{search?: string}  $filters
+     * @return array<string, list<array>>
+     */
+    public function getAllQcVerificationQueues(array $filters = []): array
+    {
+        $queues = [];
+        foreach (SandCastingStageExecutionService::STAGES as $stage) {
+            $queues[$stage] = $this->getQcVerificationQueue($stage, $filters);
+        }
+
+        return $queues;
+    }
+
+    /**
+     * Format a SandCastingStageExecution into a standardized QC Verification Card DTO.
+     */
+    public function formatQcVerificationCard(SandCastingStageExecution $exec): ?array
+    {
+        $line = $exec->castingResultLine;
+        if (! $line) {
+            return null;
+        }
+
+        $size = $line->castingOrderLine?->size ?? $line->productionPlan?->size;
+        $lineNumber = self::resolveLineNumber($line->productionPlan?->line_number, $size);
+        $aging = $this->calculateAging($line, $exec);
+        $customer = $line->productionPlan?->customer ?? $line->castingOrderLine?->customer;
+
+        $defects = $exec->defects ? $exec->defects->map(fn ($d) => [
+            'id' => $d->id,
+            'defect_type_id' => $d->defect_type_id,
+            'defect_name' => $d->defectType?->name,
+            'qty' => (int) $d->qty,
+            'notes' => $d->notes,
+        ])->values()->all() : [];
+
+        return [
+            'id' => $exec->id,
+            'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
+            'traveler_number' => $line->traveler_number,
+            'heat_number' => $line->castingResult?->heat_number,
+            'production_code' => $line->productionPlan?->code ?? $line->castingOrderLine?->code,
+            'item_code' => $line->productionPlan?->item_code,
+            'item_name' => $line->productionPlan?->item_name ?? $line->castingOrderLine?->item_name,
+            'customer' => $customer,
+            'customer_badge' => self::resolveCustomerBadge($customer),
+            'size' => $size,
+            'line_number' => $lineNumber,
+            'stage' => $exec->stage,
+            'checkpoint_code' => $exec->checkpoint_code,
+            'checkpoint_label' => str_replace('_', ' ', $exec->checkpoint_code),
+            'input_qty' => (int) $exec->input_qty,
+            'defect_qty' => (int) $exec->defect_qty,
+            'good_qty' => (int) $exec->good_qty,
+            'status' => $exec->status,
+            'physical_done_at' => $exec->physical_done_at?->format('Y-m-d H:i:s'),
+            'defect_entered_at' => $exec->defect_entered_at?->format('Y-m-d H:i:s'),
+            'defect_entered_human' => $exec->defect_entered_at?->diffForHumans(),
+            'defect_entered_by_name' => $exec->defectEnteredBy?->name ?? '-',
+            'qc_verified_at' => $exec->qc_verified_at?->format('Y-m-d H:i:s'),
+            'qc_verified_by_name' => $exec->qcVerifiedBy?->name ?? '-',
+            'operator_name' => $exec->operator?->name ?? '-',
+            'notes' => $exec->notes,
+            'aging' => $aging,
+            'is_urgent' => (bool) $line->is_urgent,
+            'defects' => $defects,
+        ];
+    }
+
+    /**
+     * Get active defect types for a specific stage (or department).
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, \App\Models\DefectType>
+     */
+    public function getStageDefectTypes(string $stage): \Illuminate\Database\Eloquent\Collection
+    {
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage) ?? $stage;
+
+        return \App\Models\DefectType::where(function ($q) use ($canonicalStage) {
+            $q->where('department', $canonicalStage)
+                ->orWhereNull('department')
+                ->orWhere('department', 'all');
+        })
+            ->active()
+            ->orderBy('name', 'asc')
+            ->get();
+    }
 }

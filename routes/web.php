@@ -257,6 +257,25 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/heat/{heatNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupHeat'])->name('heat');
             Route::post('/{stage}/execute', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'execute'])->name('execute');
         });
+
+        // Defect Recording Routes (Admin PPIC)
+        Route::prefix('defects')->name('defects.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\DefectRecordingController::class, 'index'])->name('index');
+            Route::post('/{execution}/record', [\App\Http\Controllers\SandCasting\DefectRecordingController::class, 'record'])->name('record');
+        });
+
+        // QC Defect Verification Routes (Admin QC)
+        Route::prefix('qc-defects')->name('qc-defects.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\QcDefectVerificationController::class, 'index'])->name('index');
+            Route::post('/{execution}/verify', [\App\Http\Controllers\SandCasting\QcDefectVerificationController::class, 'verify'])->name('verify');
+        });
+
+        // Production Report Routes (Sand Casting)
+        Route::prefix('report/production')->name('report.production.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'index'])->name('index');
+            Route::get('/export/excel', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportExcel'])->name('export.excel');
+            Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportPdf'])->name('export.pdf');
+        });
     });
 
     // Generic Scanner Endpoints (Direct alias)
