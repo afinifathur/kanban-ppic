@@ -8,7 +8,7 @@ COPY public ./public
 RUN npm run build
 
 # Stage 2: Serve Application
-FROM php:8.2-apache
+FROM php:8.3-apache
 
 RUN apt-get update && apt-get install -y \
     git \
@@ -45,6 +45,6 @@ COPY . /var/www/html
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
 RUN git config --global --add safe.directory /var/www/html
-RUN composer install --no-interaction --optimize-autoloader --no-dev --ignore-platform-reqs
+RUN composer install --no-interaction --optimize-autoloader --no-dev
 RUN php artisan storage:link || true
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
