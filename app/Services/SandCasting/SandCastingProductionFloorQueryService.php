@@ -238,8 +238,14 @@ class SandCastingProductionFloorQueryService
             return $activeCheckpoint['status'];
         }
 
-        if ($currentInputQty !== null && $currentInputQty > 0) {
-            return self::STATUS_READY;
+        // If no active checkpoint is ready for physical execution in this stage, inspect the last execution
+        $stageCheckpoints = SandCastingStageExecutionService::STAGE_CHECKPOINTS[$line->current_stage] ?? [];
+        if (! empty($stageCheckpoints)) {
+            $lastChkCode = end($stageCheckpoints);
+            $lastExec = $line->stageExecutions->firstWhere('checkpoint_code', $lastChkCode);
+            if ($lastExec) {
+                return $lastExec->status;
+            }
         }
 
         return self::STATUS_HALTED;

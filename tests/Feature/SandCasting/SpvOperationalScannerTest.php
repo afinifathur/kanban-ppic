@@ -350,4 +350,186 @@ class SpvOperationalScannerTest extends TestCase
         $this->assertSame(5, (int) $freshLine->qty_reject);
         $this->assertSame(0, SandCastingStageExecution::where('sand_casting_casting_result_line_id', $line->id)->count());
     }
+
+    /**
+     * TEST A: Fresh NETTO KTR has current_stage = netto, active_checkpoint = NETTO_CUT, and operational_status = READY.
+     */
+    public function test_a_fresh_netto_ktr_is_ready(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+
+        $lookup = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('netto', $lookup['current_stage']);
+        $this->assertSame('NETTO_CUT', $lookup['active_checkpoint']);
+        $this->assertSame('READY', $lookup['operational_status']);
+        $this->assertSame(100, $lookup['current_input_qty']);
+    }
+
+    /**
+     * TEST B: NETTO physical done immediately advances current_stage to bubut_od, allowing OD execution.
+     */
+    public function test_b_netto_physical_done_allows_od_execution(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($line->traveler_number, 'netto', (int) $this->spvNetto->id);
+        $line->refresh();
+
+        $this->assertSame('bubut_od', $line->current_stage);
+
+        $lookup = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('bubut_od', $lookup['current_stage']);
+        $this->assertSame('OD_TURNING', $lookup['active_checkpoint']);
+        $this->assertSame('READY', $lookup['operational_status']);
+        $this->assertSame(100, $lookup['current_input_qty']);
+    }
+
+    /**
+     * TEST C: If a KTR whose stage is already completed or has no active checkpoint is inspected, operational status is not READY.
+     */
+    public function test_c_scan_completed_checkpoint_has_no_active_checkpoint_and_not_ready(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+
+        // Create an execution on netto manually without promoting stage to test un-advanced/duplicate state
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvNetto->id,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        $lookup = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertNull($lookup['active_checkpoint']);
+        $this->assertSame('WAITING_DEFECT', $lookup['operational_status']);
+        $this->assertNotSame('READY', $lookup['operational_status']);
+    }
+
+    /**
+     * TEST D: Duplicate NETTO execution is strictly rejected by backend.
+     */
+    public function test_d_duplicate_netto_execution_rejected(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+
+        $this->actingAs($this->spvNetto)->postJson('/sand-casting/scan/netto/execute', [
+            'traveler_number' => $line->traveler_number,
+        ])->assertStatus(200);
+
+        // Attempting to execute netto again must fail with 422
+        $this->actingAs($this->spvNetto)->postJson('/sand-casting/scan/netto/execute', [
+            'traveler_number' => $line->traveler_number,
+        ])->assertStatus(422);
+    }
+
+    /**
+     * TEST E: Duplicate OD execution is strictly rejected by backend.
+     */
+    public function test_e_duplicate_od_execution_rejected(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($line->traveler_number, 'netto', (int) $this->spvNetto->id);
+
+        $this->actingAs($this->spvBubutOd)->postJson('/sand-casting/scan/bubut-od/execute', [
+            'traveler_number' => $line->traveler_number,
+        ])->assertStatus(200);
+
+        // Second OD execution attempt must fail
+        $this->actingAs($this->spvBubutOd)->postJson('/sand-casting/scan/bubut-od/execute', [
+            'traveler_number' => $line->traveler_number,
+        ])->assertStatus(422);
+    }
+
+    /**
+     * TEST F: OD valid execution after NETTO physical done works without Admin PPIC defect input.
+     */
+    public function test_f_od_execution_works_without_admin_ppic_defect(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 150, 'current_stage' => 'netto']);
+
+        // 1. SPV Netto marks physical done
+        $this->actingAs($this->spvNetto)->postJson('/sand-casting/scan/netto/execute', [
+            'traveler_number' => $line->traveler_number,
+        ])->assertStatus(200);
+
+        // Verify Netto execution is WAITING_DEFECT (Admin PPIC has NOT entered defect)
+        $nettoExec = $line->stageExecutions()->where('checkpoint_code', 'NETTO_CUT')->first();
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_DEFECT, $nettoExec->status);
+        $this->assertNull($nettoExec->defect_entered_at);
+
+        // 2. SPV OD scans and executes physically WITHOUT waiting for Admin PPIC
+        $response = $this->actingAs($this->spvBubutOd)->postJson('/sand-casting/scan/bubut-od/execute', [
+            'traveler_number' => $line->traveler_number,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.checkpoint_code', 'OD_TURNING');
+        $response->assertJsonPath('data.input_qty', 150);
+
+        // Netto execution status remains WAITING_DEFECT and unmutated
+        $nettoExec->refresh();
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_DEFECT, $nettoExec->status);
+    }
+
+    /**
+     * TEST G: OD physical done while NETTO defect still pending advances to bubut_cnc.
+     */
+    public function test_g_od_physical_done_advances_to_bubut_cnc(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 90, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($line->traveler_number, 'netto', (int) $this->spvNetto->id);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_od', (int) $this->spvBubutOd->id);
+
+        $line->refresh();
+        $this->assertSame('bubut_cnc', $line->current_stage);
+
+        $lookup = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('bubut_cnc', $lookup['current_stage']);
+        $this->assertSame('CNC_MACHINING', $lookup['active_checkpoint']);
+        $this->assertSame('READY', $lookup['operational_status']);
+    }
+
+    /**
+     * TEST H: CNC checkpoints remain valid in sequence.
+     */
+    public function test_h_cnc_checkpoints_remain_valid_in_sequence(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 80, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($line->traveler_number, 'netto', (int) $this->spvNetto->id);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_od', (int) $this->spvBubutOd->id);
+
+        // 1. CNC_MACHINING
+        $lookup1 = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('CNC_MACHINING', $lookup1['active_checkpoint']);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', (int) $this->spvBubutCnc->id);
+
+        // 2. QC_POST_CNC
+        $line->refresh();
+        $this->assertSame('bubut_cnc', $line->current_stage);
+        $lookup2 = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('QC_POST_CNC', $lookup2['active_checkpoint']);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', (int) $this->spvBubutCnc->id);
+
+        // 3. QC_PRE_BOR
+        $line->refresh();
+        $this->assertSame('bubut_cnc', $line->current_stage);
+        $lookup3 = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('QC_PRE_BOR', $lookup3['active_checkpoint']);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', (int) $this->spvBubutCnc->id);
+
+        // After QC_PRE_BOR -> advances to 'bor'
+        $line->refresh();
+        $this->assertSame('bor', $line->current_stage);
+        $lookup4 = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('BOR_DRILLING', $lookup4['active_checkpoint']);
+    }
 }

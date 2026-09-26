@@ -514,7 +514,13 @@ document.addEventListener('DOMContentLoaded', function () {
         cardCustomer.textContent = data.customer || '-';
         cardCastInfo.textContent = `${data.cast_date || '-'} / Shift ${data.shift || '-'}`;
         cardInputQty.innerHTML = `${data.current_input_qty ?? 0} <span class="text-sm font-bold text-emerald-800">PCS</span>`;
-        cardActiveCheckpointBadge.textContent = data.active_checkpoint || '-';
+        if (data.active_checkpoint) {
+            cardActiveCheckpointBadge.textContent = data.active_checkpoint;
+            cardActiveCheckpointBadge.className = 'inline-block font-mono font-black text-xs px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 uppercase shadow-sm';
+        } else {
+            cardActiveCheckpointBadge.textContent = 'SELESAI';
+            cardActiveCheckpointBadge.className = 'inline-block font-mono font-black text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-300 uppercase shadow-sm';
+        }
 
         if (data.is_urgent) {
             cardUrgentBadge.classList.remove('hidden');
@@ -543,18 +549,25 @@ document.addEventListener('DOMContentLoaded', function () {
             invalidKtrActionSection.classList.remove('hidden');
         } else if (data.current_stage === 'completed') {
             stageMismatchAlert.classList.remove('hidden');
-            stageMismatchMessage.textContent = `KTR ${data.traveler_number} sudah selesai diproses (Completed).`;
+            stageMismatchMessage.textContent = `KTR ${data.traveler_number} sudah selesai seluruh rangkaian proses (Completed).`;
             invalidKtrActionSection.classList.remove('hidden');
         } else if (!isCurrentStageMatch) {
             stageMismatchAlert.classList.remove('hidden');
             stageMismatchMessage.textContent = `KTR saat ini berada di stage ${stageLabel}. Tahap yang valid untuk stasiun ini adalah ${CONTEXT.stageLabel}.`;
             invalidKtrActionSection.classList.remove('hidden');
+        } else if (!data.active_checkpoint) {
+            statusAlert.classList.remove('hidden');
+            statusAlertMessage.textContent = `Proses fisik ${CONTEXT.stageLabel} untuk KTR ${data.traveler_number} sudah selesai. Silakan scan KTR berikutnya.`;
+            invalidKtrActionSection.classList.remove('hidden');
         } else if (opStatus === 'HALTED' || (data.current_input_qty !== null && data.current_input_qty <= 0)) {
             haltedAlert.classList.remove('hidden');
             invalidKtrActionSection.classList.remove('hidden');
+        } else if (opStatus === 'READY') {
+            // Authorized and Ready for Physical Done
+            executionFormSection.classList.remove('hidden');
         } else if (opStatus === 'WAITING_DEFECT') {
             statusAlert.classList.remove('hidden');
-            statusAlertMessage.textContent = `KTR sudah selesai fisik pada checkpoint ${data.active_checkpoint} dan sedang menunggu input defect oleh Admin PPIC.`;
+            statusAlertMessage.textContent = `Proses fisik ${CONTEXT.stageLabel} untuk KTR ${data.traveler_number} sudah selesai. Silakan scan KTR berikutnya.`;
             invalidKtrActionSection.classList.remove('hidden');
         } else if (opStatus === 'WAITING_QC') {
             statusAlert.classList.remove('hidden');
@@ -562,11 +575,8 @@ document.addEventListener('DOMContentLoaded', function () {
             invalidKtrActionSection.classList.remove('hidden');
         } else if (opStatus === 'CONFIRMED') {
             statusAlert.classList.remove('hidden');
-            statusAlertMessage.textContent = `Eksekusi checkpoint ini sudah terkonfirmasi.`;
+            statusAlertMessage.textContent = `Eksekusi checkpoint ini sudah terkonfirmasi. Silakan scan KTR berikutnya.`;
             invalidKtrActionSection.classList.remove('hidden');
-        } else if (opStatus === 'READY') {
-            // Authorized and Ready for Physical Done
-            executionFormSection.classList.remove('hidden');
         } else {
             stageMismatchAlert.classList.remove('hidden');
             stageMismatchMessage.textContent = `Status KTR (${opStatus}) tidak siap diproses fisik.`;
