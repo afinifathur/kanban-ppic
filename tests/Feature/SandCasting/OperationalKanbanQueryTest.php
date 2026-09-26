@@ -27,6 +27,10 @@ class OperationalKanbanQueryTest extends TestCase
 
     protected User $spvBubutOd;
 
+    protected User $spvBubutCnc;
+
+    protected User $spvBor;
+
     protected User $qcInspector;
 
     protected SandCastingStageExecutionService $executionService;
@@ -62,6 +66,22 @@ class OperationalKanbanQueryTest extends TestCase
             'assigned_stage' => 'bubut_od',
         ]);
         $this->spvBubutOd->assignRole('spv');
+
+        $this->spvBubutCnc = User::create([
+            'name' => 'SPV Bubut CNC',
+            'email' => 'spv_cnc_kanban@peroniks.com',
+            'password' => bcrypt('password'),
+            'assigned_stage' => 'bubut_cnc',
+        ]);
+        $this->spvBubutCnc->assignRole('spv');
+
+        $this->spvBor = User::create([
+            'name' => 'SPV Bor',
+            'email' => 'spv_bor_kanban@peroniks.com',
+            'password' => bcrypt('password'),
+            'assigned_stage' => 'bor',
+        ]);
+        $this->spvBor->assignRole('spv');
 
         $this->qcInspector = User::create([
             'name' => 'QC Inspector',
@@ -146,9 +166,372 @@ class OperationalKanbanQueryTest extends TestCase
     }
 
     /**
-     * Requirement A: Empty stage returns clean structure with 0 counts.
+     * TEST MANDATORI A:
+     * NETTO physical DONE, Admin defect pending -> OD Kanban = READY
      */
-    public function test_a_empty_stage_returns_empty_structure(): void
+    public function test_mandatory_a_netto_physical_done_admin_defect_pending_od_kanban_ready(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
+
+        // SPV Netto marks physical work done
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+
+        $odData = $this->queryService->getStageKanbanData('bubut_od');
+
+        $this->assertEquals(1, $odData['summary']['ready_count']);
+        $this->assertEquals(0, $odData['summary']['incoming_count']);
+        $this->assertEquals(50, $odData['summary']['ready_qty']);
+        $this->assertEquals($ktr->traveler_number, $odData['ready'][0]['traveler_number']);
+        $this->assertEquals('ready', $odData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $odData['ready'][0]['display_status']);
+        $this->assertEquals('OD_TURNING', $odData['ready'][0]['active_checkpoint']);
+    }
+
+    /**
+     * TEST MANDATORI B:
+     * OD physical DONE, Admin defect pending -> CNC Kanban = READY
+     */
+    public function test_mandatory_b_od_physical_done_admin_defect_pending_cnc_kanban_ready(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 45, 'current_stage' => 'netto']);
+
+        // Netto physical done
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+
+        // Bubut OD physical done
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
+
+        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
+
+        $this->assertEquals(1, $cncData['summary']['ready_count']);
+        $this->assertEquals(0, $cncData['summary']['incoming_count']);
+        $this->assertEquals(45, $cncData['summary']['ready_qty']);
+        $this->assertEquals($ktr->traveler_number, $cncData['ready'][0]['traveler_number']);
+        $this->assertEquals('ready', $cncData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $cncData['ready'][0]['display_status']);
+        $this->assertEquals('CNC_MACHINING', $cncData['ready'][0]['active_checkpoint']);
+    }
+
+    /**
+     * TEST MANDATORI C:
+     * CNC_MACHINING physical DONE, Admin defect pending -> QC_POST_CNC READY
+     */
+    public function test_mandatory_c_cnc_machining_physical_done_admin_defect_pending_qc_post_cnc_ready(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
+
+        // CNC Machining physical done
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->spvBubutCnc->id);
+
+        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
+
+        $this->assertEquals(1, $cncData['summary']['ready_count']);
+        $this->assertEquals('QC_POST_CNC', $cncData['ready'][0]['active_checkpoint']);
+        $this->assertEquals('ready', $cncData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $cncData['ready'][0]['display_status']);
+    }
+
+    /**
+     * TEST MANDATORI D:
+     * QC_POST_CNC physical DONE, Admin defect pending -> QC_PRE_BOR READY
+     */
+    public function test_mandatory_d_qc_post_cnc_physical_done_admin_defect_pending_qc_pre_bor_ready(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->spvBubutCnc->id);
+
+        // QC Post CNC physical done
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
+
+        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
+
+        $this->assertEquals(1, $cncData['summary']['ready_count']);
+        $this->assertEquals('QC_PRE_BOR', $cncData['ready'][0]['active_checkpoint']);
+        $this->assertEquals('ready', $cncData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $cncData['ready'][0]['display_status']);
+    }
+
+    /**
+     * TEST MANDATORI E:
+     * QC_PRE_BOR physical DONE, Admin defect pending -> BOR READY
+     */
+    public function test_mandatory_e_qc_pre_bor_physical_done_admin_defect_pending_bor_ready(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
+
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->spvBubutCnc->id);
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
+
+        // QC Pre Bor physical done -> stage advances to bor
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
+
+        $borData = $this->queryService->getStageKanbanData('bor');
+
+        $this->assertEquals(1, $borData['summary']['ready_count']);
+        $this->assertEquals(0, $borData['summary']['incoming_count']);
+        $this->assertEquals('BOR_DRILLING', $borData['ready'][0]['active_checkpoint']);
+        $this->assertEquals('ready', $borData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $borData['ready'][0]['display_status']);
+    }
+
+    /**
+     * TEST MANDATORI F:
+     * Previous stage belum physical DONE -> downstream tetap INCOMING
+     */
+    public function test_mandatory_f_previous_stage_not_physical_done_downstream_remains_incoming(): void
+    {
+        // KTR is in Netto and NOT yet physical done
+        $ktr = $this->createKtrLine(['qty_good' => 70, 'current_stage' => 'netto']);
+
+        $nettoData = $this->queryService->getStageKanbanData('netto');
+        $odData = $this->queryService->getStageKanbanData('bubut_od');
+
+        // Netto sees it as READY
+        $this->assertEquals(1, $nettoData['summary']['ready_count']);
+        $this->assertEquals($ktr->traveler_number, $nettoData['ready'][0]['traveler_number']);
+
+        // OD sees it as INCOMING
+        $this->assertEquals(0, $odData['summary']['ready_count']);
+        $this->assertEquals(1, $odData['summary']['incoming_count']);
+        $this->assertEquals(70, $odData['summary']['incoming_qty']);
+        $this->assertEquals($ktr->traveler_number, $odData['incoming'][0]['traveler_number']);
+        $this->assertEquals('incoming', $odData['incoming'][0]['display_bucket']);
+        $this->assertEquals('INCOMING', $odData['incoming'][0]['display_status']);
+    }
+
+    /**
+     * TEST MANDATORI G:
+     * WAITING_DEFECT tidak membuat card menjadi INCOMING di stage aktifnya
+     */
+    public function test_mandatory_g_waiting_defect_does_not_make_card_incoming(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 80, 'current_stage' => 'netto']);
+
+        // Netto physical done -> current_stage = bubut_od, Netto exec status = WAITING_DEFECT
+        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+
+        $odData = $this->queryService->getStageKanbanData('bubut_od');
+
+        $this->assertEquals(1, $odData['summary']['ready_count']);
+        $this->assertEquals(0, $odData['summary']['incoming_count']);
+        $this->assertEquals('ready', $odData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $odData['ready'][0]['display_status']);
+    }
+
+    /**
+     * TEST MANDATORI H:
+     * WAITING_QC tidak membuat card menjadi INCOMING di stage aktifnya
+     */
+    public function test_mandatory_h_waiting_qc_does_not_make_card_incoming(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 80, 'current_stage' => 'netto']);
+
+        // Netto physical done -> current_stage = bubut_od
+        $exec = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+
+        // PPIC records defect -> Netto exec status = WAITING_QC
+        $this->executionService->recordDefectQty($exec, 2, $this->admin->id);
+
+        $odData = $this->queryService->getStageKanbanData('bubut_od');
+
+        $this->assertEquals(1, $odData['summary']['ready_count']);
+        $this->assertEquals(0, $odData['summary']['incoming_count']);
+        $this->assertEquals('ready', $odData['ready'][0]['display_bucket']);
+        $this->assertEquals('READY', $odData['ready'][0]['display_status']);
+        $this->assertEquals(78, $odData['ready'][0]['qty']); // Provisional good qty is 78
+    }
+
+    /**
+     * TEST MANDATORI I:
+     * Administrative defect queue tetap FIFO
+     */
+    public function test_mandatory_i_administrative_defect_queue_remains_fifo(): void
+    {
+        $ktr1 = $this->createKtrLine(['qty_good' => 10, 'current_stage' => 'netto']);
+        $ktr2 = $this->createKtrLine(['qty_good' => 20, 'current_stage' => 'netto']);
+
+        $e1 = $this->executionService->markPhysicalDone($ktr1->traveler_number, 'netto', $this->spvNetto->id);
+        $e2 = $this->executionService->markPhysicalDone($ktr2->traveler_number, 'netto', $this->spvNetto->id);
+
+        // Manually adjust physical_done_at to test chronological FIFO
+        $e1->update(['physical_done_at' => now()->subMinutes(10)]);
+        $e2->update(['physical_done_at' => now()->subMinutes(5)]);
+
+        $queue = $this->queryService->getDefectRecordingQueue('netto');
+
+        $this->assertCount(2, $queue);
+        $this->assertEquals($ktr1->traveler_number, $queue[0]['traveler_number']);
+        $this->assertEquals($ktr2->traveler_number, $queue[1]['traveler_number']);
+    }
+
+    /**
+     * TEST MANDATORI J:
+     * Administrative QC queue tetap FIFO
+     */
+    public function test_mandatory_j_administrative_qc_queue_remains_fifo(): void
+    {
+        $ktr1 = $this->createKtrLine(['qty_good' => 10, 'current_stage' => 'netto']);
+        $ktr2 = $this->createKtrLine(['qty_good' => 20, 'current_stage' => 'netto']);
+
+        $e1 = $this->executionService->markPhysicalDone($ktr1->traveler_number, 'netto', $this->spvNetto->id);
+        $e2 = $this->executionService->markPhysicalDone($ktr2->traveler_number, 'netto', $this->spvNetto->id);
+
+        $e1 = $this->executionService->recordDefectQty($e1, 1, $this->admin->id);
+        $e2 = $this->executionService->recordDefectQty($e2, 2, $this->admin->id);
+
+        // Manually adjust defect_entered_at to test chronological FIFO
+        $e1->update(['defect_entered_at' => now()->subMinutes(15)]);
+        $e2->update(['defect_entered_at' => now()->subMinutes(5)]);
+
+        $queue = $this->queryService->getQcVerificationQueue('netto');
+
+        $this->assertCount(2, $queue);
+        $this->assertEquals($ktr1->traveler_number, $queue[0]['traveler_number']);
+        $this->assertEquals($ktr2->traveler_number, $queue[1]['traveler_number']);
+    }
+
+    /**
+     * TEST MANDATORI K:
+     * Urgent tetap mengalahkan FIFO normal sesuai existing semantics
+     */
+    public function test_mandatory_k_urgent_beats_normal_fifo(): void
+    {
+        $resEarly = SandCastingCastingResult::create([
+            'heat_number' => 'H101',
+            'cast_date' => '2026-09-10',
+            'shift' => 1,
+            'furnace' => 'F1',
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $resLate = SandCastingCastingResult::create([
+            'heat_number' => 'H102',
+            'cast_date' => '2026-09-18',
+            'shift' => 1,
+            'furnace' => 'F1',
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $cNormalOld = $this->createKtrLine([
+            'sand_casting_casting_result_id' => $resEarly->id,
+            'heat_number' => 'H101',
+            'is_urgent' => false,
+            'current_stage' => 'netto',
+        ]);
+
+        $cUrgentNew = $this->createKtrLine([
+            'sand_casting_casting_result_id' => $resLate->id,
+            'heat_number' => 'H102',
+            'is_urgent' => true,
+            'current_stage' => 'netto',
+        ]);
+
+        $data = $this->queryService->getStageKanbanData('netto');
+        $ready = $data['ready'];
+
+        $this->assertCount(2, $ready);
+        $this->assertEquals($cUrgentNew->traveler_number, $ready[0]['traveler_number'], 'Urgent must be ahead of older non-urgent');
+        $this->assertEquals($cNormalOld->traveler_number, $ready[1]['traveler_number']);
+    }
+
+    /**
+     * TEST MANDATORI L:
+     * Manual queue_position tetap mengalahkan Urgent sesuai existing semantics
+     */
+    public function test_mandatory_l_manual_queue_position_beats_urgent(): void
+    {
+        $cUrgentNoPos = $this->createKtrLine([
+            'is_urgent' => true,
+            'queue_position' => null,
+            'current_stage' => 'netto',
+        ]);
+
+        $cNormalWithPos = $this->createKtrLine([
+            'is_urgent' => false,
+            'queue_position' => 1,
+            'current_stage' => 'netto',
+        ]);
+
+        $data = $this->queryService->getStageKanbanData('netto');
+        $ready = $data['ready'];
+
+        $this->assertCount(2, $ready);
+        $this->assertEquals($cNormalWithPos->traveler_number, $ready[0]['traveler_number'], 'Manual queue_position must beat urgent');
+        $this->assertEquals($cUrgentNoPos->traveler_number, $ready[1]['traveler_number']);
+    }
+
+    /**
+     * TEST MANDATORI M:
+     * Historical KTR tetap dapat diproyeksikan (query history & findByTraveler)
+     */
+    public function test_mandatory_m_historical_ktr_projection(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 60, 'current_stage' => 'netto']);
+
+        // Execute Netto -> OD -> CNC
+        $e1 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+        $this->executionService->recordDefectQty($e1, 2, $this->admin->id);
+        $this->executionService->verifyQcBreakdown($e1, [
+            ['defect_type_id' => $this->defectPinhole->id, 'qty' => 2],
+        ], $this->qcInspector->id);
+
+        $e2 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
+        $this->executionService->recordDefectQty($e2, 0, $this->admin->id);
+        $this->executionService->verifyQcBreakdown($e2, [], $this->qcInspector->id);
+
+        // Verify traveler details and history projection
+        $dto = $this->queryService->findByTraveler($ktr->traveler_number);
+        $this->assertNotNull($dto);
+        $this->assertEquals('bubut_cnc', $dto['current_stage']);
+        $this->assertCount(2, $dto['stage_history']);
+
+        $history = $this->queryService->getStageHistory($ktr->traveler_number);
+        $this->assertCount(2, $history);
+        $this->assertEquals('netto', $history[0]['stage']);
+        $this->assertEquals(2, $history[0]['defect_qty']);
+        $this->assertEquals(58, $history[0]['good_qty']);
+        $this->assertEquals('bubut_od', $history[1]['stage']);
+        $this->assertEquals(0, $history[1]['defect_qty']);
+        $this->assertEquals(58, $history[1]['good_qty']);
+    }
+
+    /**
+     * TEST MANDATORI N:
+     * HALTED behavior untuk good_qty = 0 yang memang sudah confirmed tetap dipertahankan
+     */
+    public function test_mandatory_n_halted_behavior_for_confirmed_zero_good_qty(): void
+    {
+        $ktr = $this->createKtrLine(['qty_good' => 25, 'current_stage' => 'netto']);
+
+        $exec = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
+        $exec = $this->executionService->recordDefectQty($exec, 25, $this->admin->id);
+        $this->executionService->verifyQcBreakdown($exec, [
+            ['defect_type_id' => $this->defectPinhole->id, 'qty' => 25],
+        ], $this->qcInspector->id);
+
+        $odData = $this->queryService->getStageKanbanData('bubut_od');
+
+        // Total scrap in Netto means it is HALTED on Bubut OD
+        $this->assertEquals(0, $odData['summary']['ready_count']);
+        $this->assertEquals(0, $odData['summary']['incoming_count']);
+        $this->assertEquals(1, $odData['summary']['halted_count']);
+        $this->assertEquals('halted', $odData['halted'][0]['display_bucket']);
+        $this->assertEquals('HALTED', $odData['halted'][0]['display_status']);
+        $this->assertEquals(0, $odData['halted'][0]['qty']);
+    }
+
+    /**
+     * Additional Structural Tests for Operational Kanban Data Integrity.
+     */
+    public function test_empty_stage_returns_empty_structure(): void
     {
         $data = $this->queryService->getStageKanbanData('netto');
 
@@ -166,192 +549,13 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertEmpty($data['halted']);
     }
 
-    /**
-     * Requirement B: READY KTR appears in correct stage ready bucket.
-     */
-    public function test_b_ready_ktr_appears_in_correct_stage_ready_bucket(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 80, 'current_stage' => 'netto']);
-
-        $nettoData = $this->queryService->getStageKanbanData('netto');
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(1, $nettoData['summary']['ready_count']);
-        $this->assertEquals(80, $nettoData['summary']['ready_qty']);
-        $this->assertEquals($ktr->traveler_number, $nettoData['ready'][0]['traveler_number']);
-        $this->assertEquals('ready', $nettoData['ready'][0]['display_bucket']);
-        $this->assertEquals('READY', $nettoData['ready'][0]['display_status']);
-
-        // Must not appear in OD
-        $this->assertEquals(0, $odData['summary']['total_count']);
-    }
-
-    /**
-     * Requirement C & D: WAITING_DEFECT leaves origin active queue and appears in next stage INCOMING.
-     */
-    public function test_c_and_d_waiting_defect_leaves_origin_and_appears_in_next_stage_incoming(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
-
-        // SPV Netto marks physical done
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
-
-        $nettoData = $this->queryService->getStageKanbanData('netto');
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        // Netto ready queue is now 0 (left origin active queue)
-        $this->assertEquals(0, $nettoData['summary']['ready_count']);
-        $this->assertEquals(0, $nettoData['summary']['total_count']);
-
-        // OD incoming queue has 1 card in WAITING_DEFECT
-        $this->assertEquals(0, $odData['summary']['ready_count']);
-        $this->assertEquals(1, $odData['summary']['incoming_count']);
-        $this->assertEquals(100, $odData['summary']['incoming_qty']);
-        $this->assertEquals($ktr->traveler_number, $odData['incoming'][0]['traveler_number']);
-        $this->assertEquals('incoming', $odData['incoming'][0]['display_bucket']);
-        $this->assertEquals('WAITING_DEFECT', $odData['incoming'][0]['display_status']);
-    }
-
-    /**
-     * Requirement E & F: WAITING_QC appears in next stage INCOMING and cannot appear READY.
-     */
-    public function test_e_and_f_waiting_qc_appears_in_next_stage_incoming_and_not_ready(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
-        $exec = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
-        $this->executionService->recordDefectQty($exec, 5, $this->admin->id);
-
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(0, $odData['summary']['ready_count']);
-        $this->assertEquals(1, $odData['summary']['incoming_count']);
-        $this->assertEquals(95, $odData['summary']['incoming_qty']); // Projected good qty 95
-        $this->assertEquals($ktr->traveler_number, $odData['incoming'][0]['traveler_number']);
-        $this->assertEquals('incoming', $odData['incoming'][0]['display_bucket']);
-        $this->assertEquals('WAITING_QC', $odData['incoming'][0]['display_status']);
-        $this->assertEquals(95, $odData['incoming'][0]['good_qty']);
-        $this->assertEquals(5, $odData['incoming'][0]['defect_qty']);
-    }
-
-    /**
-     * Requirement G: QC CONFIRMED + good > 0 appears READY in next stage.
-     */
-    public function test_g_qc_confirmed_with_good_qty_appears_ready_in_next_stage(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
-        $exec = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
-        $exec = $this->executionService->recordDefectQty($exec, 5, $this->admin->id);
-        $this->executionService->verifyQcBreakdown($exec, [
-            ['defect_type_id' => $this->defectPinhole->id, 'qty' => 5],
-        ], $this->qcInspector->id);
-
-        $ktr->refresh();
-        $this->assertEquals('bubut_od', $ktr->current_stage);
-
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(1, $odData['summary']['ready_count']);
-        $this->assertEquals(0, $odData['summary']['incoming_count']);
-        $this->assertEquals(95, $odData['summary']['ready_qty']);
-        $this->assertEquals($ktr->traveler_number, $odData['ready'][0]['traveler_number']);
-        $this->assertEquals('ready', $odData['ready'][0]['display_bucket']);
-        $this->assertEquals('READY', $odData['ready'][0]['display_status']);
-        $this->assertEquals('OD_TURNING', $odData['ready'][0]['active_checkpoint']);
-    }
-
-    /**
-     * Requirement H & I: good = 0 becomes HALTED and does not appear in next stage.
-     */
-    public function test_h_and_i_zero_good_qty_becomes_halted_and_not_in_next_stage(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
-        $exec = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
-        $exec = $this->executionService->recordDefectQty($exec, 50, $this->admin->id);
-        $this->executionService->verifyQcBreakdown($exec, [
-            ['defect_type_id' => $this->defectPinhole->id, 'qty' => 50],
-        ], $this->qcInspector->id);
-
-        $ktr->refresh();
-        $this->assertEquals('netto', $ktr->current_stage); // Stage does not advance
-
-        $nettoData = $this->queryService->getStageKanbanData('netto');
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(0, $nettoData['summary']['ready_count']);
-        $this->assertEquals(1, $nettoData['summary']['halted_count']);
-        $this->assertEquals('halted', $nettoData['halted'][0]['display_bucket']);
-        $this->assertEquals('HALTED', $nettoData['halted'][0]['display_status']);
-        $this->assertEquals(0, $nettoData['halted'][0]['qty']);
-
-        // Next stage (OD) is completely empty
-        $this->assertEquals(0, $odData['summary']['total_count']);
-    }
-
-    /**
-     * Requirement J, K, L, M: Deterministic FIFO Ordering (Urgent > cast_date > created_at > ID).
-     */
-    public function test_j_to_m_deterministic_fifo_ordering(): void
-    {
-        $resEarly = SandCastingCastingResult::create([
-            'heat_number' => 'H100',
-            'cast_date' => '2026-09-10',
-            'shift' => 1,
-            'furnace' => 'F1',
-            'recorded_by' => $this->admin->id,
-        ]);
-
-        $resLate = SandCastingCastingResult::create([
-            'heat_number' => 'H200',
-            'cast_date' => '2026-09-15',
-            'shift' => 1,
-            'furnace' => 'F1',
-            'recorded_by' => $this->admin->id,
-        ]);
-
-        // Card 1: Normal early
-        $c1 = $this->createKtrLine([
-            'sand_casting_casting_result_id' => $resEarly->id,
-            'heat_number' => 'H100',
-            'is_urgent' => false,
-            'current_stage' => 'netto',
-        ]);
-
-        // Card 2: Urgent late (should jump to first position)
-        $c2 = $this->createKtrLine([
-            'sand_casting_casting_result_id' => $resLate->id,
-            'heat_number' => 'H200',
-            'is_urgent' => true,
-            'current_stage' => 'netto',
-        ]);
-
-        // Card 3: Normal late
-        $c3 = $this->createKtrLine([
-            'sand_casting_casting_result_id' => $resLate->id,
-            'heat_number' => 'H200',
-            'is_urgent' => false,
-            'current_stage' => 'netto',
-        ]);
-
-        $data = $this->queryService->getStageKanbanData('netto');
-        $ready = $data['ready'];
-
-        $this->assertCount(3, $ready);
-        $this->assertEquals($c2->traveler_number, $ready[0]['traveler_number'], 'Urgent must be first');
-        $this->assertEquals($c1->traveler_number, $ready[1]['traveler_number'], 'Oldest cast_date must be second');
-        $this->assertEquals($c3->traveler_number, $ready[2]['traveler_number'], 'Later cast_date must be third');
-    }
-
-    /**
-     * Requirement N & O: Line grouping and size fallback mapping.
-     */
-    public function test_n_and_o_line_grouping_and_size_fallback(): void
+    public function test_line_grouping_and_size_fallback(): void
     {
         $this->assertEquals(1, SandCastingProductionFloorQueryService::resolveLineNumber(1, '2"'));
         $this->assertEquals(2, SandCastingProductionFloorQueryService::resolveLineNumber(2, '4"'));
         $this->assertEquals(3, SandCastingProductionFloorQueryService::resolveLineNumber(3, '8"'));
         $this->assertEquals(4, SandCastingProductionFloorQueryService::resolveLineNumber(4, '14"'));
 
-        // Fallback when plan line_number is null
         $this->assertEquals(1, SandCastingProductionFloorQueryService::resolveLineNumber(null, '1/2"'));
         $this->assertEquals(1, SandCastingProductionFloorQueryService::resolveLineNumber(null, '2"'));
         $this->assertEquals(2, SandCastingProductionFloorQueryService::resolveLineNumber(null, '2-1/2"'));
@@ -362,13 +566,10 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertEquals(4, SandCastingProductionFloorQueryService::resolveLineNumber(null, 'DN 350'));
     }
 
-    /**
-     * Requirement P: Dynamic aging calculation.
-     */
-    public function test_p_dynamic_aging_calculation(): void
+    public function test_dynamic_aging_calculation(): void
     {
         $result = SandCastingCastingResult::create([
-            'heat_number' => 'H-AGING',
+            'heat_number' => 'H-AGING-TEST',
             'cast_date' => now()->subDays(5)->format('Y-m-d'),
             'shift' => 1,
             'furnace' => 'F1',
@@ -377,7 +578,7 @@ class OperationalKanbanQueryTest extends TestCase
 
         $ktr = $this->createKtrLine([
             'sand_casting_casting_result_id' => $result->id,
-            'heat_number' => 'H-AGING',
+            'heat_number' => 'H-AGING-TEST',
             'current_stage' => 'netto',
         ]);
 
@@ -388,123 +589,7 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertStringContainsString('h', $card['aging']['total_aging_label']);
     }
 
-    /**
-     * Requirement S, T, U: Bubut CNC multi-checkpoint progression in Kanban.
-     */
-    public function test_s_t_u_bubut_cnc_multi_checkpoint_kanban_progression(): void
-    {
-        // 1. Progress a KTR from Netto -> Bubut OD -> Bubut CNC
-        $ktr = $this->createKtrLine(['qty_good' => 40, 'current_stage' => 'netto']);
-
-        // Netto
-        $e1 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->admin->id);
-        $e1 = $this->executionService->recordDefectQty($e1, 0, $this->admin->id);
-        $this->executionService->verifyQcBreakdown($e1, [], $this->qcInspector->id);
-
-        // Bubut OD
-        $e2 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->admin->id);
-        $e2 = $this->executionService->recordDefectQty($e2, 0, $this->admin->id);
-        $this->executionService->verifyQcBreakdown($e2, [], $this->qcInspector->id);
-
-        $ktr->refresh();
-        $this->assertEquals('bubut_cnc', $ktr->current_stage);
-
-        // 2. Initial CNC: CNC_MACHINING is READY in BUBUT CNC
-        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
-        $this->assertEquals(1, $cncData['summary']['ready_count']);
-        $this->assertEquals('CNC_MACHINING', $cncData['ready'][0]['active_checkpoint']);
-
-        // 3. SPV CNC marks physical done -> BUBUT CNC incoming WAITING_DEFECT
-        $eCnc = $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->admin->id);
-        $cncData2 = $this->queryService->getStageKanbanData('bubut_cnc');
-        $this->assertEquals(0, $cncData2['summary']['ready_count']);
-        $this->assertEquals(1, $cncData2['summary']['incoming_count']);
-        $this->assertEquals('WAITING_DEFECT', $cncData2['incoming'][0]['display_status']);
-
-        // 4. Admin records defect -> WAITING_QC
-        $eCnc = $this->executionService->recordDefectQty($eCnc, 2, $this->admin->id);
-        $cncData3 = $this->queryService->getStageKanbanData('bubut_cnc');
-        $this->assertEquals('WAITING_QC', $cncData3['incoming'][0]['display_status']);
-
-        // 5. QC confirms CNC_MACHINING -> Next active checkpoint is QC_POST_CNC
-        $this->executionService->verifyQcBreakdown($eCnc, [
-            ['defect_type_id' => $this->defectPinhole->id, 'qty' => 2],
-        ], $this->qcInspector->id);
-        $cncData4 = $this->queryService->getStageKanbanData('bubut_cnc');
-        $this->assertEquals(1, $cncData4['summary']['incoming_count']);
-        $this->assertEquals('QC_POST_CNC', $cncData4['incoming'][0]['active_checkpoint']);
-
-        // 6. QC executes & confirms QC_POST_CNC
-        $ePostCnc = $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
-        $ePostCnc = $this->executionService->recordDefectQty($ePostCnc, 0, $this->qcInspector->id);
-        $this->executionService->verifyQcBreakdown($ePostCnc, [], $this->qcInspector->id);
-
-        // Next active checkpoint is QC_PRE_BOR (shown in BOR incoming)
-        $borData = $this->queryService->getStageKanbanData('bor');
-        $this->assertEquals(1, $borData['summary']['incoming_count']);
-        $this->assertEquals('QC_PRE_BOR', $borData['incoming'][0]['active_checkpoint']);
-
-        // 7. QC executes & confirms QC_PRE_BOR -> Advances to BOR READY
-        $ePreBor = $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
-        $ePreBor = $this->executionService->recordDefectQty($ePreBor, 0, $this->qcInspector->id);
-        $this->executionService->verifyQcBreakdown($ePreBor, [], $this->qcInspector->id);
-
-        $borData2 = $this->queryService->getStageKanbanData('bor');
-        $this->assertEquals(1, $borData2['summary']['ready_count']);
-        $this->assertEquals('BOR_DRILLING', $borData2['ready'][0]['active_checkpoint']);
-        $this->assertEquals(38, $borData2['summary']['ready_qty']);
-    }
-
-    /**
-     * Requirement Q & R: Active Checkpoints for NETTO and OD.
-     */
-    public function test_q_r_active_checkpoint_netto_and_od(): void
-    {
-        $ktrNetto = $this->createKtrLine(['current_stage' => 'netto']);
-        $cardNetto = $this->queryService->resolveKanbanCard($ktrNetto);
-        $this->assertEquals('NETTO_CUT', $cardNetto['active_checkpoint']);
-
-        $ktrOd = $this->createKtrLine(['current_stage' => 'bubut_od']);
-        $cardOd = $this->queryService->resolveKanbanCard($ktrOd);
-        $this->assertEquals('OD_TURNING', $cardOd['active_checkpoint']);
-    }
-
-    /**
-     * Requirement V & W: Quantity Chain and Defect Quantity accurate on Card DTO.
-     */
-    public function test_v_w_quantity_chain_and_defect_on_card(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
-
-        // Stage 1: Initial Ready
-        $card1 = $this->queryService->resolveKanbanCard($ktr);
-        $this->assertEquals(100, $card1['qty']);
-        $this->assertEquals(100, $card1['input_qty']);
-        $this->assertEquals(0, $card1['defect_qty']);
-
-        // Stage 2: Netto Physical Done & Defect
-        $e1 = $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->admin->id);
-        $e1 = $this->executionService->recordDefectQty($e1, 4, $this->admin->id);
-        $card2 = $this->queryService->resolveKanbanCard($ktr->fresh());
-        $this->assertEquals(96, $card2['qty']);
-        $this->assertEquals(100, $card2['input_qty']);
-        $this->assertEquals(4, $card2['defect_qty']);
-        $this->assertEquals(96, $card2['good_qty']);
-
-        // Stage 3: Confirmed & advanced to OD
-        $this->executionService->verifyQcBreakdown($e1, [
-            ['defect_type_id' => $this->defectPinhole->id, 'qty' => 4],
-        ], $this->qcInspector->id);
-        $card3 = $this->queryService->resolveKanbanCard($ktr->fresh());
-        $this->assertEquals(96, $card3['qty']);
-        $this->assertEquals(96, $card3['input_qty']);
-        $this->assertEquals(0, $card3['defect_qty']);
-    }
-
-    /**
-     * Requirement Y: Full KTR Identity Fields Contract.
-     */
-    public function test_y_ktr_identity_fields_contract(): void
+    public function test_ktr_identity_fields_contract(): void
     {
         $ktr = $this->createKtrLine([
             'qty_good' => 75,
@@ -541,10 +626,7 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertArrayHasKey('aging', $card);
     }
 
-    /**
-     * Requirement Z & AA: Multiple KTRs from same Heat & different items remain independent.
-     */
-    public function test_z_aa_multiple_ktrs_same_heat_different_items_independence(): void
+    public function test_multiple_ktrs_same_heat_different_items_independence(): void
     {
         $result = SandCastingCastingResult::create([
             'heat_number' => 'HEAT-SHARED-99',
@@ -572,8 +654,8 @@ class OperationalKanbanQueryTest extends TestCase
             'current_stage' => 'netto',
         ]);
 
-        // Process only KTR 1 to physical done
-        $this->executionService->markPhysicalDone($ktr1->traveler_number, 'netto', $this->admin->id);
+        // Process only KTR 1 to physical done -> KTR 1 enters bubut_od
+        $this->executionService->markPhysicalDone($ktr1->traveler_number, 'netto', $this->spvNetto->id);
 
         $nettoData = $this->queryService->getStageKanbanData('netto');
         $odData = $this->queryService->getStageKanbanData('bubut_od');
@@ -582,73 +664,16 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertEquals(1, $nettoData['summary']['ready_count']);
         $this->assertEquals($ktr2->traveler_number, $nettoData['ready'][0]['traveler_number']);
 
-        // OD has KTR 1 in Incoming
-        $this->assertEquals(1, $odData['summary']['incoming_count']);
-        $this->assertEquals($ktr1->traveler_number, $odData['incoming'][0]['traveler_number']);
-    }
-
-    /**
-     * Requirement AB: WAITING QC cards from multiple previous stages correctly projected.
-     */
-    public function test_ab_waiting_qc_from_multiple_previous_stages_projected(): void
-    {
-        // Netto KTR waiting QC -> projected to OD incoming
-        $ktr1 = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
-        $e1 = $this->executionService->markPhysicalDone($ktr1->traveler_number, 'netto', $this->admin->id);
-        $this->executionService->recordDefectQty($e1, 2, $this->admin->id);
-
-        // Bubut OD KTR waiting QC -> projected to Bubut CNC incoming
-        $ktr2 = $this->createKtrLine(['qty_good' => 40, 'current_stage' => 'bubut_od']);
-        // Create confirmed Netto exec for KTR 2
-        SandCastingStageExecution::create([
-            'sand_casting_casting_result_line_id' => $ktr2->id,
-            'stage' => 'netto',
-            'checkpoint_code' => 'NETTO_CUT',
-            'input_qty' => 40,
-            'defect_qty' => 0,
-            'good_qty' => 40,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'operator_id' => $this->admin->id,
-            'executed_at' => now(),
-        ]);
-        $e2 = $this->executionService->markPhysicalDone($ktr2->traveler_number, 'bubut_od', $this->admin->id);
-        $this->executionService->recordDefectQty($e2, 1, $this->admin->id);
-
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
-
-        $this->assertEquals(1, $odData['summary']['incoming_count']);
-        $this->assertEquals($ktr1->traveler_number, $odData['incoming'][0]['traveler_number']);
-
-        $this->assertEquals(1, $cncData['summary']['incoming_count']);
-        $this->assertEquals($ktr2->traveler_number, $cncData['incoming'][0]['traveler_number']);
-    }
-
-    /**
-     * Requirement AC: Urgent ordering does not alter stage ownership.
-     */
-    public function test_ac_urgent_ordering_does_not_alter_stage_ownership(): void
-    {
-        // Urgent KTR at Netto
-        $ktrNettoUrgent = $this->createKtrLine(['is_urgent' => true, 'current_stage' => 'netto']);
-
-        // Normal KTR at Bubut OD
-        $ktrOdNormal = $this->createKtrLine(['is_urgent' => false, 'current_stage' => 'bubut_od']);
-
-        $nettoData = $this->queryService->getStageKanbanData('netto');
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(1, $nettoData['summary']['ready_count']);
-        $this->assertEquals($ktrNettoUrgent->traveler_number, $nettoData['ready'][0]['traveler_number']);
-
+        // OD has KTR 1 in Ready (since Netto is physically done)
         $this->assertEquals(1, $odData['summary']['ready_count']);
-        $this->assertEquals($ktrOdNormal->traveler_number, $odData['ready'][0]['traveler_number']);
+        $this->assertEquals($ktr1->traveler_number, $odData['ready'][0]['traveler_number']);
+
+        // OD has KTR 2 in Incoming (since Netto is still processing KTR 2)
+        $this->assertEquals(1, $odData['summary']['incoming_count']);
+        $this->assertEquals($ktr2->traveler_number, $odData['incoming'][0]['traveler_number']);
     }
 
-    /**
-     * Requirement AD: Historical KTR with current_stage = NULL is excluded.
-     */
-    public function test_ad_historical_null_stage_ktr_is_excluded(): void
+    public function test_historical_null_stage_ktr_is_excluded(): void
     {
         $this->createKtrLine(['current_stage' => null]);
 
@@ -656,19 +681,14 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertEquals(0, $nettoData['summary']['total_count']);
     }
 
-    /**
-     * Critical Safety Test: Operational Kanban query makes ZERO database mutations.
-     */
     public function test_safety_kanban_query_is_strictly_read_only(): void
     {
         $ktr = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
 
         $execCountBefore = SandCastingStageExecution::count();
         $lineCountBefore = SandCastingCastingResultLine::count();
-        $dbQueriesCount = 0;
 
-        DB::listen(function ($query) use (&$dbQueriesCount) {
-            $dbQueriesCount++;
+        DB::listen(function ($query) {
             $sql = strtoupper($query->sql);
             $this->assertStringNotContainsString('INSERT', $sql, 'Kanban query must not execute INSERT');
             $this->assertStringNotContainsString('UPDATE', $sql, 'Kanban query must not execute UPDATE');
@@ -682,217 +702,5 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertEquals($execCountBefore, SandCastingStageExecution::count(), 'Executions count must not change');
         $this->assertEquals($lineCountBefore, SandCastingCastingResultLine::count(), 'Line count must not change');
         $this->assertEquals('netto', $ktr->fresh()->current_stage, 'current_stage must not change');
-    }
-
-    /**
-     * TEST A: NETTO WAITING_DEFECT appears in BUBUT OD as INCOMING (not READY).
-     */
-    public function test_a_netto_waiting_defect_appears_in_od_as_incoming(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-
-        // SPV Netto marks physical work done -> execution transitions to WAITING_DEFECT
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(0, $odData['summary']['ready_count']);
-        $this->assertEquals(1, $odData['summary']['incoming_count']);
-        $this->assertEquals(12, $odData['summary']['incoming_qty']);
-
-        $incomingCard = $odData['incoming'][0];
-        $this->assertEquals($ktr->traveler_number, $incomingCard['traveler_number']);
-        $this->assertEquals('bubut_od', $incomingCard['display_stage']);
-        $this->assertEquals('incoming', $incomingCard['display_bucket']);
-        $this->assertEquals('WAITING_DEFECT', $incomingCard['display_status']);
-        $this->assertEquals(12, $incomingCard['qty']);
-    }
-
-    /**
-     * TEST B: WAITING_DEFECT cannot be processed / scanned by SPV OD.
-     */
-    public function test_b_waiting_defect_cannot_be_processed_by_od(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        // 1. Direct service attempt throws InvalidArgumentException
-        $this->expectException(\InvalidArgumentException::class);
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'bubut_od',
-            operatorId: $this->spvBubutOd->id
-        );
-    }
-
-    /**
-     * TEST B2: WAITING_DEFECT execution endpoint rejected for OD SPV.
-     */
-    public function test_b2_waiting_defect_execute_endpoint_rejected_for_od(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        $response = $this->actingAs($this->spvBubutOd)->postJson(route('sand-casting.scan.execute', 'bubut-od'), [
-            'traveler_number' => $ktr->traveler_number,
-        ]);
-
-        $response->assertStatus(422);
-        $response->assertJson([
-            'success' => false,
-        ]);
-
-        // Verify only the 1 Netto execution exists, no OD execution created
-        $this->assertEquals(1, SandCastingStageExecution::count());
-        $this->assertEquals('netto', SandCastingStageExecution::first()->stage);
-    }
-
-    /**
-     * TEST C: KTR does NOT appear as READY in NETTO when WAITING_DEFECT.
-     */
-    public function test_c_ktr_does_not_appear_as_ready_in_netto_when_waiting_defect(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        $nettoData = $this->queryService->getStageKanbanData('netto');
-
-        $this->assertEquals(0, $nettoData['summary']['ready_count']);
-        $this->assertEquals(0, $nettoData['summary']['incoming_count']);
-        $this->assertEquals(0, $nettoData['summary']['halted_count']);
-        $this->assertEquals(0, $nettoData['summary']['total_count']);
-    }
-
-    /**
-     * TEST D: After Defect + QC confirmed, KTR becomes READY in OD with verified good qty.
-     */
-    public function test_d_after_defect_and_qc_confirmed_ktr_becomes_ready_in_od(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-
-        $exec = $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        // Admin records 2 defect -> good_qty becomes 10, status becomes WAITING_QC
-        $execWaitingQc = $this->executionService->recordDefectQty(
-            executionOrId: $exec->id,
-            defectQty: 2,
-            adminId: $this->admin->id
-        );
-
-        // QC confirms with 2 pinhole defects
-        $this->executionService->verifyQcBreakdown(
-            executionOrId: $execWaitingQc->id,
-            defects: [
-                ['defect_type_id' => $this->defectPinhole->id, 'qty' => 2],
-            ],
-            qcUserId: $this->qcInspector->id
-        );
-
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(1, $odData['summary']['ready_count']);
-        $this->assertEquals(0, $odData['summary']['incoming_count']);
-        $this->assertEquals(10, $odData['summary']['ready_qty']);
-
-        $readyCard = $odData['ready'][0];
-        $this->assertEquals($ktr->traveler_number, $readyCard['traveler_number']);
-        $this->assertEquals('bubut_od', $readyCard['display_stage']);
-        $this->assertEquals('ready', $readyCard['display_bucket']);
-        $this->assertEquals('READY', $readyCard['display_status']);
-        $this->assertEquals(10, $readyCard['qty']);
-    }
-
-    /**
-     * TEST E: No duplicate cards across the pipeline.
-     */
-    public function test_e_no_duplicate_card_for_waiting_defect(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        $stages = ['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
-        $foundCount = 0;
-
-        foreach ($stages as $stg) {
-            $data = $this->queryService->getStageKanbanData($stg);
-            $allCards = array_merge($data['ready'], $data['incoming'], $data['halted']);
-            foreach ($allCards as $c) {
-                if ($c['traveler_number'] === $ktr->traveler_number) {
-                    $foundCount++;
-                }
-            }
-        }
-
-        $this->assertEquals(1, $foundCount, 'KTR in WAITING_DEFECT must appear exactly once across all stage boards.');
-    }
-
-    /**
-     * TEST F: Existing READY cards in OD are unaffected and remain fully functional.
-     */
-    public function test_f_existing_ready_in_od_is_unaffected(): void
-    {
-        // 1 KTR advanced through Netto and currently READY in OD
-        $ktrOd = $this->createKtrLine(['qty_good' => 20, 'current_stage' => 'netto']);
-        $execOdNetto = $this->executionService->markPhysicalDone(
-            travelerNumber: $ktrOd->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-        $execOdWaitingQc = $this->executionService->recordDefectQty(
-            executionOrId: $execOdNetto->id,
-            defectQty: 0,
-            adminId: $this->admin->id
-        );
-        $this->executionService->verifyQcBreakdown(
-            executionOrId: $execOdWaitingQc->id,
-            defects: [],
-            qcUserId: $this->qcInspector->id
-        );
-
-        // 1 KTR currently WAITING_DEFECT in Netto (incoming for OD)
-        $ktrNetto = $this->createKtrLine(['qty_good' => 12, 'current_stage' => 'netto']);
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktrNetto->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
-        $odData = $this->queryService->getStageKanbanData('bubut_od');
-
-        $this->assertEquals(1, $odData['summary']['ready_count']);
-        $this->assertEquals(1, $odData['summary']['incoming_count']);
-        $this->assertEquals(20, $odData['summary']['ready_qty']);
-        $this->assertEquals(12, $odData['summary']['incoming_qty']);
-
-        $this->assertEquals($ktrOd->traveler_number, $odData['ready'][0]['traveler_number']);
-        $this->assertEquals($ktrNetto->traveler_number, $odData['incoming'][0]['traveler_number']);
     }
 }

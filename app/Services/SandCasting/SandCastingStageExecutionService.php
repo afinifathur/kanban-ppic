@@ -114,6 +114,15 @@ class SandCastingStageExecutionService
             return null;
         }
 
+        // If any confirmed execution has good_qty === 0, KTR is halted (no subsequent physical checkpoint can run)
+        $hasHalted = $line->relationLoaded('stageExecutions')
+            ? $line->stageExecutions->contains(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0)
+            : $line->stageExecutions()->where('status', SandCastingStageExecution::STATUS_CONFIRMED)->where('good_qty', 0)->exists();
+
+        if ($hasHalted) {
+            return null;
+        }
+
         $stageCheckpoints = self::STAGE_CHECKPOINTS[$line->current_stage] ?? [];
         if (empty($stageCheckpoints)) {
             return null;
@@ -131,20 +140,6 @@ class SandCastingStageExecutionService
                     'status' => SandCastingStageExecution::STATUS_READY,
                 ];
             }
-
-            if ($exec->status !== SandCastingStageExecution::STATUS_CONFIRMED) {
-                return [
-                    'code' => $chkCode,
-                    'stage' => $line->current_stage,
-                    'status' => $exec->status,
-                    'execution' => $exec,
-                ];
-            }
-
-            // If confirmed with good_qty === 0, it is halted (no subsequent checkpoint can run)
-            if ($exec->good_qty === 0) {
-                return null;
-            }
         }
 
         return null;
@@ -152,7 +147,7 @@ class SandCastingStageExecutionService
 
     /**
      * Step 1: Operator / SPV marks physical work done for active checkpoint.
-     * Transitions checkpoint to WAITING_DEFECT.
+     * Transitions checkpoint to WAITING_DEFECT and immediately advances physical current_stage.
      */
     public function markPhysicalDone(
         string $travelerNumber,
@@ -215,18 +210,17 @@ class SandCastingStageExecutionService
 
             $checkpointCode = $active['code'];
 
-            // 3. Resolve input quantity strictly server-side
+            // 3. Resolve input quantity strictly server-side using provisional physical output of previous checkpoint
             if ($checkpointCode === 'NETTO_CUT') {
                 $inputQty = (int) $line->qty_good;
             } else {
                 $prevCode = self::PREVIOUS_CHECKPOINT[$checkpointCode];
                 $prevExec = $line->stageExecutions()
                     ->where('checkpoint_code', $prevCode)
-                    ->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
                     ->first();
 
                 if (! $prevExec) {
-                    throw new InvalidArgumentException("Riwayat eksekusi checkpoint sebelumnya ({$prevCode}) belum dikonfirmasi untuk KTR {$travelerNumber}.");
+                    throw new InvalidArgumentException("Riwayat eksekusi checkpoint sebelumnya ({$prevCode}) belum ditemukan untuk KTR {$travelerNumber}.");
                 }
 
                 $inputQty = (int) $prevExec->good_qty;
@@ -255,6 +249,22 @@ class SandCastingStageExecutionService
                     throw new InvalidArgumentException("KTR {$travelerNumber} sudah pernah dieksekusi pada checkpoint {$checkpointCode}.");
                 }
                 throw $e;
+            }
+
+            // 5. Advance physical current_stage immediately upon physical completion
+            $nextCheckpoint = self::NEXT_CHECKPOINT[$checkpointCode] ?? null;
+            if ($nextCheckpoint !== null) {
+                $nextStage = self::CHECKPOINT_STAGE[$nextCheckpoint];
+                if ($nextStage !== $line->current_stage) {
+                    $line->current_stage = $nextStage;
+                    $line->queue_position = null;
+                    $line->save();
+                }
+            } else {
+                // Final checkpoint in entire flow (GUDANG_RECEIVE) completed physically
+                $line->current_stage = 'completed';
+                $line->queue_position = null;
+                $line->save();
             }
 
             return $execution->load(['castingResultLine', 'operator']);
@@ -335,7 +345,7 @@ class SandCastingStageExecutionService
 
     /**
      * Step 3: QC Inspector verifies defect classification breakdown.
-     * Transitions checkpoint from WAITING_QC to CONFIRMED and opens downstream stage/checkpoint.
+     * Transitions checkpoint from WAITING_QC to CONFIRMED.
      */
     public function verifyQcBreakdown(
         int|SandCastingStageExecution $executionOrId,
@@ -430,26 +440,6 @@ class SandCastingStageExecutionService
                 $execution->notes = trim($notes);
             }
             $execution->save();
-
-            // Advance process stage only if good_qty > 0 and this is the last checkpoint of current process
-            if ($execution->good_qty > 0) {
-                $nextCheckpoint = self::NEXT_CHECKPOINT[$execution->checkpoint_code] ?? null;
-
-                if ($nextCheckpoint !== null) {
-                    $nextStage = self::CHECKPOINT_STAGE[$nextCheckpoint];
-                    if ($nextStage !== $line->current_stage) {
-                        $line->current_stage = $nextStage;
-                        $line->queue_position = null;
-                        $line->save();
-                    }
-                } else {
-                    // Final checkpoint in entire flow (GUDANG_RECEIVE) confirmed
-                    $line->current_stage = 'completed';
-                    $line->queue_position = null;
-                    $line->save();
-                }
-            }
-            // If good_qty === 0, current_stage remains unchanged (halted, does not advance, not completed)
 
             return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'qcVerifiedBy', 'defects.defectType']);
         });

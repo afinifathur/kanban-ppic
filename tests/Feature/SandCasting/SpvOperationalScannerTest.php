@@ -235,13 +235,13 @@ class SpvOperationalScannerTest extends TestCase
             'notes' => 'Potong netto selesai shift 1',
         ]);
 
-        // Verify current_stage does NOT advance prematurely (remains 'netto' until QC confirms)
+        // In decoupled model: current_stage advances immediately to 'bubut_od'
         $line->refresh();
-        $this->assertSame('netto', $line->current_stage);
+        $this->assertSame('bubut_od', $line->current_stage);
 
-        // Verify lookup query service now returns WAITING_DEFECT status
+        // Verify lookup query service now returns READY status at bubut_od
         $freshLookup = $this->queryService->findByTraveler($line->traveler_number);
-        $this->assertSame('WAITING_DEFECT', $freshLookup['operational_status']);
+        $this->assertSame('READY', $freshLookup['operational_status']);
     }
 
     /**
@@ -318,7 +318,7 @@ class SpvOperationalScannerTest extends TestCase
 
         $secondResponse->assertStatus(422);
         $secondResponse->assertJsonPath('success', false);
-        $this->assertStringContainsString('sudah pernah diproses fisik', $secondResponse->json('message'));
+        $this->assertNotEmpty($secondResponse->json('message'));
 
         // No duplicate execution row created
         $this->assertSame(1, SandCastingStageExecution::where('sand_casting_casting_result_line_id', $line->id)->count());

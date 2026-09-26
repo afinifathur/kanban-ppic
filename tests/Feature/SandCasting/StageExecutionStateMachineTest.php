@@ -233,7 +233,7 @@ class StageExecutionStateMachineTest extends TestCase
         $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
     }
 
-    public function test_3_netto_mark_physical_done_creates_waiting_defect_execution(): void
+    public function test_3_netto_mark_physical_done_creates_waiting_defect_execution_and_advances_stage(): void
     {
         $line = $this->createKtrLine();
 
@@ -250,10 +250,14 @@ class StageExecutionStateMachineTest extends TestCase
         $this->assertNotNull($exec->physical_done_at);
         $this->assertEquals('Selesai potong', $exec->notes);
 
-        // Check active checkpoint status is now WAITING_DEFECT
-        $active = $this->service->resolveActiveCheckpoint($line);
-        $this->assertEquals('NETTO_CUT', $active['code']);
-        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $active['status']);
+        // In decoupled model, current_stage advances immediately to bubut_od
+        $this->assertEquals('bubut_od', $line->fresh()->current_stage);
+
+        // Check active checkpoint is now OD_TURNING in READY status for SPV Bubut OD
+        $active = $this->service->resolveActiveCheckpoint($line->fresh());
+        $this->assertNotNull($active);
+        $this->assertEquals('OD_TURNING', $active['code']);
+        $this->assertEquals(SandCastingStageExecution::STATUS_READY, $active['status']);
     }
 
     public function test_4_netto_input_comes_strictly_from_cor_qty_good(): void
@@ -272,7 +276,7 @@ class StageExecutionStateMachineTest extends TestCase
         $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('sudah pernah diproses fisik pada checkpoint NETTO_CUT');
+        $this->expectExceptionMessage('saat ini berada di stage BUBUT OD');
 
         $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
     }
@@ -382,7 +386,7 @@ class StageExecutionStateMachineTest extends TestCase
             'qty' => 4,
         ]);
 
-        // Netto completed -> line.current_stage must advance to bubut_od
+        // Netto completed -> line.current_stage is bubut_od
         $this->assertEquals('bubut_od', $line->fresh()->current_stage);
 
         // Active checkpoint is now OD_TURNING in READY status
@@ -409,7 +413,7 @@ class StageExecutionStateMachineTest extends TestCase
         $this->assertEquals('bubut_od', $line->fresh()->current_stage);
     }
 
-    public function test_10_good_qty_zero_halts_and_does_not_advance_current_stage(): void
+    public function test_10_good_qty_zero_halts_downstream_active_checkpoint(): void
     {
         $line = $this->createKtrLine();
         $exec = $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
@@ -422,8 +426,7 @@ class StageExecutionStateMachineTest extends TestCase
         $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $confirmed->status);
         $this->assertEquals(0, $confirmed->good_qty);
 
-        // Current stage MUST NOT advance to bubut_od; remains at netto (halted)
-        $this->assertEquals('netto', $line->fresh()->current_stage);
+        // Downstream is halted because good_qty is 0
         $this->assertNull($this->service->resolveActiveCheckpoint($line->fresh()));
     }
 
@@ -514,7 +517,7 @@ class StageExecutionStateMachineTest extends TestCase
             ['defect_type_id' => $this->defectTypeKeropos->id, 'qty' => 3],
         ], $this->qcInspector->id);
 
-        // Now that QC_PRE_BOR is CONFIRMED, stage MUST advance to bor!
+        // Stage advances to bor!
         $this->assertEquals('bor', $line->fresh()->current_stage);
 
         // 6. BOR (BOR_DRILLING): Input must be exactly 50!
@@ -567,5 +570,205 @@ class StageExecutionStateMachineTest extends TestCase
 
         $this->assertEquals('completed', $line->fresh()->current_stage);
         $this->assertCount(8, $line->stageExecutions);
+    }
+
+    // =========================================================================
+    // EXPLICIT DECOUPLING TESTS (STEP 1 AUDIT REQUIREMENTS)
+    // =========================================================================
+
+    /**
+     * TEST A: NETTO physical DONE, defect pending -> current_stage = bubut_od
+     */
+    public function test_decoupled_test_a_netto_physical_done_defect_pending_advances_stage(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        $exec = $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $exec->status);
+        $this->assertNull($exec->defect_entered_at);
+        $this->assertEquals('bubut_od', $line->fresh()->current_stage);
+    }
+
+    /**
+     * TEST B: NETTO physical DONE, defect pending -> OD physical execution is allowed
+     */
+    public function test_decoupled_test_b_netto_physical_done_defect_pending_allows_od_execution(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        // Netto physically done (defect is still pending!)
+        $nettoExec = $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $nettoExec->status);
+
+        // Bubut OD can be executed physically without waiting for Netto defect or QC!
+        $odExec = $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
+
+        $this->assertInstanceOf(SandCastingStageExecution::class, $odExec);
+        $this->assertEquals('OD_TURNING', $odExec->checkpoint_code);
+        $this->assertEquals(100, $odExec->input_qty);
+        $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
+    }
+
+    /**
+     * TEST C: OD physical DONE, defect pending -> current_stage = bubut_cnc
+     */
+    public function test_decoupled_test_c_od_physical_done_defect_pending_advances_to_cnc(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+        $odExec = $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
+
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $odExec->status);
+        $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
+    }
+
+    /**
+     * TEST D: OD physical DONE, defect pending -> CNC physical execution is allowed
+     */
+    public function test_decoupled_test_d_od_physical_done_defect_pending_allows_cnc_execution(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
+
+        // CNC machining can be executed physically without waiting for previous defects!
+        $cncExec1 = $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id);
+
+        $this->assertInstanceOf(SandCastingStageExecution::class, $cncExec1);
+        $this->assertEquals('CNC_MACHINING', $cncExec1->checkpoint_code);
+        $this->assertEquals(100, $cncExec1->input_qty);
+    }
+
+    /**
+     * TEST E: CNC checkpoint physical DONE, admin defect pending -> next physical checkpoint remains available
+     */
+    public function test_decoupled_test_e_cnc_checkpoint_done_defect_pending_opens_next_checkpoint(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
+
+        // Execute CNC_MACHINING
+        $cnc1 = $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id);
+        $this->assertEquals('CNC_MACHINING', $cnc1->checkpoint_code);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $cnc1->status);
+
+        // Next checkpoint QC_POST_CNC must be ready immediately
+        $active2 = $this->service->resolveActiveCheckpoint($line->fresh());
+        $this->assertNotNull($active2);
+        $this->assertEquals('QC_POST_CNC', $active2['code']);
+        $this->assertEquals(SandCastingStageExecution::STATUS_READY, $active2['status']);
+
+        // Execute QC_POST_CNC physically
+        $cnc2 = $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id);
+        $this->assertEquals('QC_POST_CNC', $cnc2->checkpoint_code);
+
+        // Next checkpoint QC_PRE_BOR must be ready immediately
+        $active3 = $this->service->resolveActiveCheckpoint($line->fresh());
+        $this->assertNotNull($active3);
+        $this->assertEquals('QC_PRE_BOR', $active3['code']);
+        $this->assertEquals(SandCastingStageExecution::STATUS_READY, $active3['status']);
+    }
+
+    /**
+     * TEST F: CNC all physical checkpoints done, QC/admin pending -> BOR physical execution allowed
+     */
+    public function test_decoupled_test_f_all_cnc_checkpoints_done_allows_bor_execution(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id); // CNC_MACHINING
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id); // QC_POST_CNC
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id); // QC_PRE_BOR
+
+        $this->assertEquals('bor', $line->fresh()->current_stage);
+
+        // Bor execution is permitted physically even with all previous defects pending!
+        $borExec = $this->service->markPhysicalDone($line->traveler_number, 'bor', $this->operator->id);
+        $this->assertEquals('BOR_DRILLING', $borExec->checkpoint_code);
+        $this->assertEquals(100, $borExec->input_qty);
+        $this->assertEquals('qc', $line->fresh()->current_stage);
+    }
+
+    /**
+     * TEST G: SPV wrong stage mismatch is rejected
+     */
+    public function test_decoupled_test_g_wrong_stage_mismatch_rejected(): void
+    {
+        $line = $this->createKtrLine(); // current_stage is netto
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('saat ini berada di stage NETTO. Tahap yang valid adalah NETTO, bukan BUBUT OD');
+
+        $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
+    }
+
+    /**
+     * TEST H: Duplicate scan rejected
+     */
+    public function test_decoupled_test_h_duplicate_scan_rejected(): void
+    {
+        $line = $this->createKtrLine();
+
+        $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+
+        // Attempting to re-execute netto
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('saat ini berada di stage BUBUT OD');
+
+        $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
+    }
+
+    /**
+     * TEST I: Physical stage skipping rejected
+     */
+    public function test_decoupled_test_i_stage_skipping_rejected(): void
+    {
+        $line = $this->createKtrLine(); // Netto
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('saat ini berada di stage NETTO. Tahap yang valid adalah NETTO, bukan BOR');
+
+        $this->service->markPhysicalDone($line->traveler_number, 'bor', $this->operator->id);
+    }
+
+    /**
+     * TEST J: Historical WAITING_DEFECT and WAITING_QC records remain readable without schema change
+     */
+    public function test_decoupled_test_j_historical_waiting_executions_readable(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'bubut_od']);
+
+        // Historical Netto execution in WAITING_DEFECT state
+        $exec1 = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->operator->id,
+            'physical_done_at' => now()->subDay(),
+            'executed_at' => now()->subDay(),
+        ]);
+
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $exec1->status);
+
+        // Admin PPIC can still record defect on this historical execution
+        $updated = $this->service->recordDefectQty($exec1, 4, $this->adminPpic->id);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $updated->status);
+        $this->assertEquals(96, $updated->good_qty);
+
+        // QC can still verify breakdown
+        $confirmed = $this->service->verifyQcBreakdown($updated, [
+            ['defect_type_id' => $this->defectTypeKeropos->id, 'qty' => 4],
+        ], $this->qcInspector->id);
+        $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $confirmed->status);
     }
 }

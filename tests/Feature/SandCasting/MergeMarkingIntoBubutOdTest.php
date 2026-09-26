@@ -310,14 +310,12 @@ class MergeMarkingIntoBubutOdTest extends TestCase
         ], $this->qcInspector->id);
 
         $line->refresh();
-        $this->assertEquals('bubut_od', $line->current_stage);
+        $this->assertEquals('bubut_cnc', $line->current_stage);
         $this->assertEquals(0, $confirmed->good_qty);
         $this->assertEquals(10, $confirmed->defect_qty);
 
-        $odKanban = $this->queryService->getStageKanbanData('bubut_od');
-        $this->assertTrue(collect($odKanban['halted'])->contains('traveler_number', $line->traveler_number));
-
         $cncKanban = $this->queryService->getStageKanbanData('bubut_cnc');
+        $this->assertTrue(collect($cncKanban['halted'])->contains('traveler_number', $line->traveler_number));
         $this->assertFalse(collect($cncKanban['ready'])->contains('traveler_number', $line->traveler_number));
     }
 

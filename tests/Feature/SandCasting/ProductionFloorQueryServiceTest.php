@@ -252,7 +252,7 @@ class ProductionFloorQueryServiceTest extends TestCase
         $data = $this->queryService->findByTraveler($line->traveler_number);
 
         // current_stage was halted at netto in Phase 2
-        $this->assertEquals('netto', $data['current_stage']);
+        $this->assertEquals('bubut_od', $data['current_stage']);
         $this->assertEquals('HALTED', $data['operational_status']);
     }
 

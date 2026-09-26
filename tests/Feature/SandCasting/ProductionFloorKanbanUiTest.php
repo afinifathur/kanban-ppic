@@ -493,7 +493,7 @@ class ProductionFloorKanbanUiTest extends TestCase
     /**
      * Incoming card (e.g. from Netto WAITING_DEFECT) renders in HTML view for Bubut OD.
      */
-    public function test_incoming_card_renders_in_html_view_with_waiting_defect_status(): void
+    public function test_incoming_card_renders_in_html_view_when_upstream_in_progress(): void
     {
         $ktr = $this->createKtrLine([
             'traveler_number' => 'KTR-20260912-0005',
@@ -503,22 +503,26 @@ class ProductionFloorKanbanUiTest extends TestCase
             'heat_number' => 'A212092604',
         ]);
 
-        // SPV Netto marks physical work done
-        $this->executionService->markPhysicalDone(
-            travelerNumber: $ktr->traveler_number,
-            targetStage: 'netto',
-            operatorId: $this->spvNetto->id
-        );
-
+        // KTR is in Netto (upstream) -> Bubut OD renders it as INCOMING
         $response = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od');
 
         $response->assertOk();
         $response->assertSee('CS Q235 SORF FLANGE 2"');
         $response->assertSee('Heat A212092604');
         $response->assertSee('12');
-        $response->assertSee('WAITING DEFECT');
-        $response->assertSee('MENUNGGU INPUT DEFECT');
         $response->assertSee('INCOMING');
+
+        // When SPV Netto marks physical work done -> Bubut OD renders it as READY
+        $this->executionService->markPhysicalDone(
+            travelerNumber: $ktr->traveler_number,
+            targetStage: 'netto',
+            operatorId: $this->spvNetto->id
+        );
+
+        $responseAfter = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od');
+        $responseAfter->assertOk();
+        $responseAfter->assertSee('CS Q235 SORF FLANGE 2"');
+        $responseAfter->assertSee('READY');
     }
 
     /**

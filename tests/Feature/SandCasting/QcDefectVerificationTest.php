@@ -522,7 +522,7 @@ class QcDefectVerificationTest extends TestCase
         ])->assertStatus(200);
 
         $line2->refresh();
-        $this->assertEquals('netto', $line2->current_stage);
+        $this->assertEquals('bubut_od', $line2->current_stage);
         $this->assertNull($this->executionService->resolveActiveCheckpoint($line2));
     }
 

@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../kpi-bubut"
+		},
+		{
+			"path": "../../../masterdataKPI"
+		}
+	],
+	"settings": {
+		"powershell.cwd": "kanban-ppic"
+	}
+}

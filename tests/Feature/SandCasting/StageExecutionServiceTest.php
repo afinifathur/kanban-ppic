@@ -294,7 +294,7 @@ class StageExecutionServiceTest extends TestCase
 
     /**
      * TEST 10: goodQty = 0
-     * Execution recorded, NOT completed, current_stage halted at targetStage (no auto advance)
+     * Execution recorded, downstream checkpoint is halted (resolveActiveCheckpoint returns null)
      */
     public function test_zero_good_qty_records_execution_and_halts_stage_without_auto_advancing(): void
     {
@@ -308,8 +308,8 @@ class StageExecutionServiceTest extends TestCase
         $this->assertEquals(0, $execution->good_qty);
 
         $line->refresh();
-        // current_stage remains at netto (halted, does not move to bubut_od, and is NOT marked completed)
-        $this->assertEquals('netto', $line->current_stage);
+        // Downstream is halted because good_qty is 0
+        $this->assertNull($this->service->resolveActiveCheckpoint($line));
         $this->assertCount(1, $line->stageExecutions);
     }
 
@@ -433,7 +433,7 @@ class StageExecutionServiceTest extends TestCase
     {
         $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
 
-        // Insert stage execution directly into DB to simulate race condition where check passed before lock
+        // Insert stage execution directly into DB to simulate already executed stage
         SandCastingStageExecution::create([
             'sand_casting_casting_result_line_id' => $line->id,
             'stage' => 'netto',
@@ -441,13 +441,13 @@ class StageExecutionServiceTest extends TestCase
             'input_qty' => 100,
             'defect_qty' => 0,
             'good_qty' => 100,
-            'status' => SandCastingStageExecution::STATUS_READY,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
             'operator_id' => $this->user->id,
             'executed_at' => now(),
         ]);
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage("KTR {$line->traveler_number} sudah pernah dieksekusi pada checkpoint NETTO_CUT");
+        $this->expectExceptionMessage("KTR {$line->traveler_number} tidak memiliki checkpoint aktif yang siap diproses.");
 
         $this->service->execute($line->traveler_number, 'netto', 5, $this->user->id);
     }

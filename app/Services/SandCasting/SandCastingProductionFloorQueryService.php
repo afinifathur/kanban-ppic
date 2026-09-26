@@ -181,18 +181,16 @@ class SandCastingProductionFloorQueryService
             return (int) $line->qty_good;
         }
 
-        // Loop through checkpoints of current stage to find active unconfirmed or latest input
+        // Loop through checkpoints of current stage to find active unexecuted or latest input
         foreach ($stageCheckpoints as $chkCode) {
             $exec = $line->stageExecutions->firstWhere('checkpoint_code', $chkCode);
 
-            if (! $exec || $exec->status !== SandCastingStageExecution::STATUS_CONFIRMED) {
-                // Input for this checkpoint comes from its immediately preceding checkpoint
+            if (! $exec) {
+                // Input for this unexecuted checkpoint comes from its immediately preceding checkpoint
                 $prevChkCode = SandCastingStageExecutionService::PREVIOUS_CHECKPOINT[$chkCode] ?? null;
                 if ($prevChkCode) {
                     $prevExec = $line->stageExecutions
-                        ->where('checkpoint_code', $prevChkCode)
-                        ->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
-                        ->first();
+                        ->firstWhere('checkpoint_code', $prevChkCode);
 
                     return $prevExec ? (int) $prevExec->good_qty : 0;
                 }
@@ -201,12 +199,12 @@ class SandCastingProductionFloorQueryService
             }
 
             // If this checkpoint is CONFIRMED and good_qty === 0, halted with 0
-            if ($exec->good_qty === 0) {
+            if ($exec->status === SandCastingStageExecution::STATUS_CONFIRMED && $exec->good_qty === 0) {
                 return 0;
             }
         }
 
-        // If all checkpoints in this stage are confirmed, return the good_qty of the last checkpoint
+        // If all checkpoints in this stage have an execution, return the good_qty of the last checkpoint
         $lastChkCode = end($stageCheckpoints);
         $lastExec = $line->stageExecutions->firstWhere('checkpoint_code', $lastChkCode);
 
@@ -227,6 +225,13 @@ class SandCastingProductionFloorQueryService
 
         if ($line->current_stage === 'completed') {
             return self::STATUS_COMPLETED;
+        }
+
+        // Check if halted anywhere in execution chain
+        $haltedExec = $line->stageExecutions
+            ->firstWhere(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0);
+        if ($haltedExec) {
+            return self::STATUS_HALTED;
         }
 
         if ($activeCheckpoint !== null && isset($activeCheckpoint['status'])) {
@@ -326,6 +331,9 @@ class SandCastingProductionFloorQueryService
             throw new \InvalidArgumentException("Tahap operasional '{$stage}' tidak valid dalam alur Sand Casting.");
         }
 
+        // Previous stage in pipeline that feeds into this stage
+        $prevStage = array_search($canonicalStage, SandCastingStageExecutionService::STAGE_FLOW, true) ?: null;
+
         // Query all active KTR lines (excluding historical NULL stage and completed)
         $lines = SandCastingCastingResultLine::whereNotNull('current_stage')
             ->where('current_stage', '!=', 'completed')
@@ -342,25 +350,19 @@ class SandCastingProductionFloorQueryService
         $incoming = [];
         $halted = [];
 
-        foreach ($lines as $line) {
-            $card = $this->resolveKanbanCard($line);
-            if ($card === null || $card['display_stage'] !== $canonicalStage) {
-                continue;
-            }
-
-            // Apply optional filters
+        $passesFilters = function (array $card) use ($filters): bool {
             if (isset($filters['line_number']) && $filters['line_number'] !== null && (int) $filters['line_number'] !== (int) $card['line_number']) {
-                continue;
+                return false;
             }
 
             if (isset($filters['is_urgent']) && (bool) $filters['is_urgent'] !== (bool) $card['is_urgent']) {
-                continue;
+                return false;
             }
 
             if (! empty($filters['customer'])) {
                 $custFilter = strtolower(trim((string) $filters['customer']));
                 if (! str_contains(strtolower((string) $card['customer']), $custFilter)) {
-                    continue;
+                    return false;
                 }
             }
 
@@ -375,16 +377,40 @@ class SandCastingProductionFloorQueryService
                     ($card['customer'] ?? '')
                 );
                 if (! str_contains($haystack, $search)) {
-                    continue;
+                    return false;
                 }
             }
 
-            if ($card['display_bucket'] === self::BUCKET_READY) {
-                $ready[] = $card;
-            } elseif ($card['display_bucket'] === self::BUCKET_INCOMING) {
+            return true;
+        };
+
+        foreach ($lines as $line) {
+            if ($line->current_stage === $canonicalStage) {
+                $card = $this->resolveKanbanCard($line);
+                if ($card === null) {
+                    continue;
+                }
+
+                if (! $passesFilters($card)) {
+                    continue;
+                }
+
+                if ($card['display_bucket'] === self::BUCKET_HALTED) {
+                    $halted[] = $card;
+                } else {
+                    $ready[] = $card;
+                }
+            } elseif ($prevStage !== null && $line->current_stage === $prevStage) {
+                $card = $this->resolveIncomingKanbanCard($line, $canonicalStage);
+                if ($card === null) {
+                    continue;
+                }
+
+                if (! $passesFilters($card)) {
+                    continue;
+                }
+
                 $incoming[] = $card;
-            } elseif ($card['display_bucket'] === self::BUCKET_HALTED) {
-                $halted[] = $card;
             }
         }
 
@@ -510,76 +536,20 @@ class SandCastingProductionFloorQueryService
             }
 
             $chkCode = $activeCheckpoint['code'];
-            $chkStatus = $activeCheckpoint['status'];
-            $activeExec = $activeCheckpoint['execution'] ?? null;
-            $nextStage = $this->resolveNextStage($line->current_stage);
-
             $currentInputQty = $this->resolveCurrentInputQty($line);
 
-            if ($chkStatus === self::STATUS_WAITING_DEFECT) {
-                // Physical done completed on this checkpoint
-                $displayStatus = self::STATUS_WAITING_DEFECT;
-                $displayBucket = self::BUCKET_INCOMING;
+            // Latest execution on this line (if any)
+            $activeExec = $line->stageExecutions->last();
 
-                if ($chkCode === 'CNC_MACHINING') {
-                    // Inside bubut_cnc multi-checkpoint pipeline
-                    $displayStage = 'bubut_cnc';
-                } else {
-                    // Final checkpoint of stage -> leaves origin, shows in next stage incoming
-                    $displayStage = $nextStage ?? $line->current_stage;
-                }
-
-                $activeChkCode = $chkCode;
-                $activeChkStatus = $chkStatus;
-                $inputQty = $activeExec ? (int) $activeExec->input_qty : ($currentInputQty ?? (int) $line->qty_good);
-                $defectQty = 0;
-                $goodQty = 0;
-                $effectiveQty = $inputQty;
-            } elseif ($chkStatus === self::STATUS_WAITING_QC) {
-                // Defect recorded, awaiting QC clearance
-                $displayStatus = self::STATUS_WAITING_QC;
-                $displayBucket = self::BUCKET_INCOMING;
-
-                if ($chkCode === 'CNC_MACHINING' || $chkCode === 'QC_POST_CNC') {
-                    $displayStage = 'bubut_cnc';
-                } elseif ($chkCode === 'QC_PRE_BOR') {
-                    // QC Pre-Bor clearance right before BOR
-                    $displayStage = 'bor';
-                } else {
-                    $displayStage = $nextStage ?? $line->current_stage;
-                }
-
-                $activeChkCode = $chkCode;
-                $activeChkStatus = $chkStatus;
-                $inputQty = $activeExec ? (int) $activeExec->input_qty : ($currentInputQty ?? (int) $line->qty_good);
-                $defectQty = $activeExec ? (int) $activeExec->defect_qty : 0;
-                $goodQty = $activeExec ? (int) $activeExec->good_qty : max(0, $inputQty - $defectQty);
-                $effectiveQty = $goodQty > 0 ? $goodQty : $inputQty;
-            } else {
-                // Checkpoint is READY for processing
-                if ($chkCode === 'QC_PRE_BOR') {
-                    // Ready for QC Pre-Bor clearance right before BOR
-                    $displayStage = 'bor';
-                    $displayBucket = self::BUCKET_INCOMING;
-                    $displayStatus = self::STATUS_WAITING_QC;
-                } elseif ($chkCode === 'QC_POST_CNC') {
-                    // Ready for QC Post-CNC clearance
-                    $displayStage = 'bubut_cnc';
-                    $displayBucket = self::BUCKET_INCOMING;
-                    $displayStatus = self::STATUS_WAITING_QC;
-                } else {
-                    $displayStage = $line->current_stage;
-                    $displayBucket = self::BUCKET_READY;
-                    $displayStatus = self::STATUS_READY;
-                }
-
-                $activeChkCode = $chkCode;
-                $activeChkStatus = self::STATUS_READY;
-                $inputQty = $currentInputQty ?? (int) $line->qty_good;
-                $defectQty = 0;
-                $goodQty = $inputQty;
-                $effectiveQty = $inputQty;
-            }
+            $displayStage = $line->current_stage;
+            $displayBucket = self::BUCKET_READY;
+            $displayStatus = self::STATUS_READY;
+            $activeChkCode = $chkCode;
+            $activeChkStatus = self::STATUS_READY;
+            $inputQty = $currentInputQty ?? (int) $line->qty_good;
+            $defectQty = 0;
+            $goodQty = $inputQty;
+            $effectiveQty = $inputQty;
         }
 
         $size = $line->castingOrderLine?->size ?? $line->productionPlan?->size;
@@ -612,6 +582,69 @@ class SandCastingProductionFloorQueryService
             'display_status' => $displayStatus,
             'active_checkpoint' => $activeChkCode,
             'execution_status' => $activeChkStatus,
+            'is_urgent' => (bool) $line->is_urgent,
+            'cast_date' => $line->castingResult?->cast_date?->format('Y-m-d'),
+            'aging' => $aging,
+            'physical_done_at' => $activeExec?->physical_done_at?->format('Y-m-d H:i:s'),
+            'qc_verified_at' => $activeExec?->qc_verified_at?->format('Y-m-d H:i:s'),
+            'operator_name' => $activeExec?->operator?->name,
+            'created_at_raw' => $line->created_at?->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * Resolve single KTR traveler into an Incoming Operational Kanban card DTO for target stage.
+     */
+    public function resolveIncomingKanbanCard(SandCastingCastingResultLine $line, string $targetStage): ?array
+    {
+        if ($line->current_stage === null || $line->current_stage === 'completed') {
+            return null;
+        }
+
+        // Check if KTR is halted in previous stage
+        $haltedExec = $line->stageExecutions
+            ->firstWhere(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0);
+
+        if ($haltedExec) {
+            // Halted items in previous stage will NOT arrive at targetStage
+            return null;
+        }
+
+        $activeCheckpoint = $this->executionService->resolveActiveCheckpoint($line);
+        $currentInputQty = $this->resolveCurrentInputQty($line);
+        $activeExec = $line->stageExecutions->last();
+
+        $size = $line->castingOrderLine?->size ?? $line->productionPlan?->size;
+        $lineNumber = self::resolveLineNumber($line->productionPlan?->line_number, $size);
+        $unitWeight = (float) ($line->unit_weight_kg ?? 0);
+        $effectiveQty = $currentInputQty ?? (int) $line->qty_good;
+        $totalWeight = round($effectiveQty * $unitWeight, 2);
+        $aging = $this->calculateAging($line, $activeExec);
+
+        return [
+            'id' => $line->id,
+            'traveler_number' => $line->traveler_number,
+            'heat_number' => $line->castingResult?->heat_number,
+            'production_code' => $line->productionPlan?->code ?? $line->castingOrderLine?->code,
+            'item_code' => $line->productionPlan?->item_code,
+            'item_name' => $line->productionPlan?->item_name ?? $line->castingOrderLine?->item_name,
+            'customer' => $line->productionPlan?->customer ?? $line->castingOrderLine?->customer,
+            'size' => $size,
+            'line_number' => $lineNumber,
+            'qty' => $effectiveQty,
+            'input_qty' => $effectiveQty,
+            'good_qty' => $effectiveQty,
+            'defect_qty' => 0,
+            'unit_weight_kg' => $unitWeight,
+            'total_weight_kg' => $totalWeight,
+            'current_stage' => $line->current_stage,
+            'queue_position' => $line->queue_position,
+            'customer_badge' => self::resolveCustomerBadge($line->productionPlan?->customer ?? $line->castingOrderLine?->customer),
+            'display_stage' => $targetStage,
+            'display_bucket' => self::BUCKET_INCOMING,
+            'display_status' => 'INCOMING',
+            'active_checkpoint' => $activeCheckpoint['code'] ?? null,
+            'execution_status' => $activeCheckpoint['status'] ?? 'IN_PROGRESS',
             'is_urgent' => (bool) $line->is_urgent,
             'cast_date' => $line->castingResult?->cast_date?->format('Y-m-d'),
             'aging' => $aging,

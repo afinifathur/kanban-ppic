@@ -170,19 +170,19 @@ class ProductionFloorScannerUiTest extends TestCase
                     'defect_qty' => 0,
                     'good_qty' => 100,
                     'status' => 'WAITING_DEFECT',
-                    'current_stage' => 'netto',
+                    'current_stage' => 'bubut_od',
                     'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
 
-        // Step 3: Verify subsequent lookup shows fresh status WAITING_DEFECT
+        // Step 3: Verify subsequent lookup shows fresh stage bubut_od with READY status
         $subsequentLookup = $this->actingAs($this->user)->getJson("/sand-casting/scan/ktr/{$line->traveler_number}");
         $subsequentLookup->assertStatus(200)
             ->assertJson([
                 'data' => [
-                    'current_stage' => 'netto',
+                    'current_stage' => 'bubut_od',
                     'current_input_qty' => 100,
-                    'operational_status' => 'WAITING_DEFECT',
+                    'operational_status' => 'READY',
                 ],
             ]);
     }

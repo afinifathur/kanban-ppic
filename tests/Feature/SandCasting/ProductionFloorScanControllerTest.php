@@ -226,13 +226,13 @@ class ProductionFloorScanControllerTest extends TestCase
                     'defect_qty' => 0,
                     'good_qty' => 100,
                     'status' => 'WAITING_DEFECT',
-                    'current_stage' => 'netto',
+                    'current_stage' => 'bubut_od',
                     'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
 
         $line->refresh();
-        $this->assertEquals('netto', $line->current_stage);
+        $this->assertEquals('bubut_od', $line->current_stage);
     }
 
     /**
@@ -264,7 +264,7 @@ class ProductionFloorScanControllerTest extends TestCase
                     'defect_qty' => 0,
                     'good_qty' => 95,
                     'status' => 'WAITING_DEFECT',
-                    'current_stage' => 'bubut_od',
+                    'current_stage' => 'bubut_cnc',
                     'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);
@@ -443,7 +443,7 @@ class ProductionFloorScanControllerTest extends TestCase
                     'defect_qty' => 0,
                     'good_qty' => 100,
                     'status' => 'WAITING_DEFECT',
-                    'current_stage' => 'netto',
+                    'current_stage' => 'bubut_od',
                     'operational_status' => 'WAITING_DEFECT',
                 ],
             ]);

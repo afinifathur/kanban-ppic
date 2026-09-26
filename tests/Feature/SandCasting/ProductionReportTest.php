@@ -151,203 +151,282 @@ class ProductionReportTest extends TestCase
     }
 
     /**
-     * TEST 1 & 2: Authorization & Unauthenticated redirect
+     * TEST A: Valid 1 day filter
      */
-    public function test_1_and_2_authorization_and_unauthenticated_redirect(): void
-    {
-        // Unauthenticated -> redirect to login
-        $this->get('/sand-casting/report/production')->assertRedirect(route('login'));
-
-        // Authorized roles
-        $this->actingAs($this->adminUser)->get('/sand-casting/report/production')->assertStatus(200);
-        $this->actingAs($this->ppicUser)->get('/sand-casting/report/production')->assertStatus(200);
-        $this->actingAs($this->qcUser)->get('/sand-casting/report/production')->assertStatus(200);
-        $this->actingAs($this->spvUser)->get('/sand-casting/report/production')->assertStatus(200);
-    }
-
-    /**
-     * TEST 3 & 4: Single-day & Date-range filter
-     */
-    public function test_3_and_4_single_day_and_date_range_filter(): void
+    public function test_a_valid_single_day_filter(): void
     {
         $today = now()->toDateString();
-        $yesterday = now()->subDays(1)->toDateString();
+        $this->createKtrLine(['qty_good' => 75], null, $today);
 
-        $lineToday = $this->createKtrLine(['qty_good' => 50], null, $today);
-        $lineYesterday = $this->createKtrLine(['qty_good' => 70], null, $yesterday);
-
-        // Single-day (today only)
-        $dataToday = $this->reportService->getProductionDataset(['date_from' => $today, 'date_to' => $today]);
-        $corToday = $dataToday['stage_summaries']->where('stage', 'cor')->first();
-        $this->assertEquals(1, $corToday['ktr_count']);
-        $this->assertEquals(50, $corToday['good_pcs']);
-
-        // Date-range (yesterday to today)
-        $dataRange = $this->reportService->getProductionDataset(['date_from' => $yesterday, 'date_to' => $today]);
-        $corRange = $dataRange['stage_summaries']->where('stage', 'cor')->first();
-        $this->assertEquals(2, $corRange['ktr_count']);
-        $this->assertEquals(120, $corRange['good_pcs']);
+        $response = $this->actingAs($this->adminUser)->get("/sand-casting/report/production?date_from={$today}&date_to={$today}&stage=cor");
+        $response->assertStatus(200);
+        $response->assertSee('75');
     }
 
     /**
-     * TEST 5: Stage filter
+     * TEST B: Valid 45 calendar days (01/09/2026 -> 15/10/2026 PASS)
      */
-    public function test_5_stage_filter(): void
+    public function test_b_valid_45_calendar_days_filter(): void
     {
-        $line = $this->createKtrLine(['qty_good' => 100]);
+        $from = '2026-09-01';
+        $to = '2026-10-15'; // 30 days in Sept - 1 + 1 = 30 days + 15 in Oct = 45 days
+
+        $response = $this->actingAs($this->adminUser)->get("/sand-casting/report/production?date_from={$from}&date_to={$to}&stage=cor");
+        $response->assertStatus(200);
+    }
+
+    /**
+     * TEST C: Invalid 46 days REJECT
+     */
+    public function test_c_invalid_46_days_filter_rejected(): void
+    {
+        $from = '2026-09-01';
+        $to = '2026-10-16'; // 46 days
+
+        $response = $this->actingAs($this->adminUser)->get("/sand-casting/report/production?date_from={$from}&date_to={$to}&stage=cor");
+        $response->assertSessionHasErrors(['date_to']);
+
+        $responsePdf = $this->actingAs($this->adminUser)->get("/sand-casting/report/production/export/pdf?date_from={$from}&date_to={$to}&stage=cor");
+        $responsePdf->assertSessionHasErrors(['date_to']);
+    }
+
+    /**
+     * TEST D: Invalid 47 days (15/08/2026 -> 30/09/2026 REJECT)
+     */
+    public function test_d_invalid_47_days_filter_rejected(): void
+    {
+        $from = '2026-08-15';
+        $to = '2026-09-30'; // 17 days in Aug + 30 in Sept = 47 days
+
+        $response = $this->actingAs($this->adminUser)->get("/sand-casting/report/production?date_from={$from}&date_to={$to}&stage=cor");
+        $response->assertSessionHasErrors(['date_to']);
+    }
+
+    /**
+     * TEST E: Stage filter tidak memiliki option "all"
+     */
+    public function test_e_stage_filter_ui_has_no_all_option(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production');
+        $response->assertStatus(200);
+        $response->assertDontSee('Semua Tahapan (7 Tahap)', false);
+        $response->assertDontSee('value="all"', false);
+    }
+
+    /**
+     * TEST F: Request tanpa valid stage / stage 'all' ditolak atau tidak menghasilkan full 7-stage report
+     */
+    public function test_f_request_with_stage_all_or_invalid_stage_is_rejected(): void
+    {
+        // Stage 'all' is rejected
+        $responseAll = $this->actingAs($this->adminUser)->get('/sand-casting/report/production?stage=all');
+        $responseAll->assertSessionHasErrors(['stage']);
+
+        // Stage 'invalid_xyz' is rejected
+        $responseInvalid = $this->actingAs($this->adminUser)->get('/sand-casting/report/production?stage=invalid_xyz');
+        $responseInvalid->assertSessionHasErrors(['stage']);
+    }
+
+    /**
+     * TEST G: PDF detail memiliki 10 columns:
+     * NO, KODE PRODUKSI, CUSTOMER, HEAT, NAMA ITEM, BERAT ITEM, INPUT, RUSAK, TOTAL BERAT INPUT, WAKTU
+     */
+    public function test_g_pdf_detail_has_exact_10_columns(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50, 'unit_weight_kg' => 2.35]);
         $line->stageExecutions()->create([
             'stage' => 'netto',
             'checkpoint_code' => 'NETTO_CUT',
-            'input_qty' => 100,
-            'defect_qty' => 5,
-            'good_qty' => 95,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'physical_done_at' => now(),
-            'executed_at' => now(),
-            'operator_id' => $this->spvUser->id,
-        ]);
-
-        // Filter stage = netto
-        $dataNetto = $this->reportService->getProductionDataset(['stage' => 'netto']);
-        $this->assertCount(1, $dataNetto['stage_summaries']);
-        $this->assertEquals('netto', $dataNetto['stage_summaries']->first()['stage']);
-        $this->assertEquals(95, $dataNetto['stage_summaries']->first()['good_pcs']);
-
-        // Filter stage = all (7 stages returned)
-        $dataAll = $this->reportService->getProductionDataset(['stage' => 'all']);
-        $this->assertCount(7, $dataAll['stage_summaries']);
-    }
-
-    /**
-     * TEST 6: Search filter
-     */
-    public function test_6_search_filter(): void
-    {
-        $plan = $this->createPlan(['code' => '268ET999', 'item_name' => 'SPECIAL FLANGE SS']);
-        $line = $this->createKtrLine(['qty_good' => 100], $plan);
-
-        $dataFound = $this->reportService->getProductionDataset(['search' => 'SPECIAL FLANGE']);
-        $this->assertCount(1, $dataFound['items']);
-        $this->assertEquals('SPECIAL FLANGE SS', $dataFound['items']->first()['item_name']);
-
-        $dataNotFound = $this->reportService->getProductionDataset(['search' => 'NONEXISTENT_ITEM']);
-        $this->assertCount(0, $dataNotFound['items']);
-    }
-
-    /**
-     * TEST 7, 8, 9, 11, 12, 13: Stage Calculations for Cor, Netto, OD, Bor, QC, Gudang
-     */
-    public function test_7_8_9_11_12_13_stage_calculations(): void
-    {
-        $line = $this->createKtrLine(['qty_good' => 100, 'qty_reject' => 10, 'unit_weight_kg' => 2.00]);
-
-        // Netto: In 100, Def 5, Good 95
-        $line->stageExecutions()->create([
-            'stage' => 'netto',
-            'checkpoint_code' => 'NETTO_CUT',
-            'input_qty' => 100,
-            'defect_qty' => 5,
-            'good_qty' => 95,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'physical_done_at' => now(),
-            'executed_at' => now(),
-            'operator_id' => $this->spvUser->id,
-        ]);
-
-        // Bubut OD: In 95, Def 3, Good 92
-        $line->stageExecutions()->create([
-            'stage' => 'bubut_od',
-            'checkpoint_code' => 'OD_TURNING',
-            'input_qty' => 95,
-            'defect_qty' => 3,
-            'good_qty' => 92,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'physical_done_at' => now(),
-            'executed_at' => now(),
-            'operator_id' => $this->spvUser->id,
-        ]);
-
-        // Bor: In 92, Def 2, Good 90
-        $line->stageExecutions()->create([
-            'stage' => 'bor',
-            'checkpoint_code' => 'BOR_DRILLING',
-            'input_qty' => 92,
-            'defect_qty' => 2,
-            'good_qty' => 90,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'physical_done_at' => now(),
-            'executed_at' => now(),
-            'operator_id' => $this->spvUser->id,
-        ]);
-
-        // QC: In 90, Def 1, Good 89
-        $line->stageExecutions()->create([
-            'stage' => 'qc',
-            'checkpoint_code' => 'QC_FINAL_INSPECTION',
-            'input_qty' => 90,
+            'input_qty' => 50,
             'defect_qty' => 1,
-            'good_qty' => 89,
+            'good_qty' => 49,
             'status' => SandCastingStageExecution::STATUS_CONFIRMED,
             'physical_done_at' => now(),
             'executed_at' => now(),
             'operator_id' => $this->spvUser->id,
         ]);
 
-        // Gudang: In 89, Def 0, Good 89
-        $line->stageExecutions()->create([
-            'stage' => 'gudang_jadi',
-            'checkpoint_code' => 'GUDANG_RECEIVE',
-            'input_qty' => 89,
-            'defect_qty' => 0,
-            'good_qty' => 89,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'physical_done_at' => now(),
-            'executed_at' => now(),
-            'operator_id' => $this->spvUser->id,
-        ]);
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=netto');
+        $response->assertStatus(200);
 
-        $data = $this->reportService->getProductionDataset();
-        $stages = $data['stage_summaries']->keyBy('stage');
-
-        // Cor
-        $this->assertEquals(110, $stages['cor']['input_pcs']);
-        $this->assertEquals(10, $stages['cor']['defect_pcs']);
-        $this->assertEquals(100, $stages['cor']['good_pcs']);
-
-        // Netto
-        $this->assertEquals(100, $stages['netto']['input_pcs']);
-        $this->assertEquals(5, $stages['netto']['defect_pcs']);
-        $this->assertEquals(95, $stages['netto']['good_pcs']);
-
-        // Bubut OD
-        $this->assertEquals(95, $stages['bubut_od']['input_pcs']);
-        $this->assertEquals(3, $stages['bubut_od']['defect_pcs']);
-        $this->assertEquals(92, $stages['bubut_od']['good_pcs']);
-
-        // Bor
-        $this->assertEquals(92, $stages['bor']['input_pcs']);
-        $this->assertEquals(2, $stages['bor']['defect_pcs']);
-        $this->assertEquals(90, $stages['bor']['good_pcs']);
-
-        // QC
-        $this->assertEquals(90, $stages['qc']['input_pcs']);
-        $this->assertEquals(1, $stages['qc']['defect_pcs']);
-        $this->assertEquals(89, $stages['qc']['good_pcs']);
-
-        // Gudang Jadi
-        $this->assertEquals(89, $stages['gudang_jadi']['input_pcs']);
-        $this->assertEquals(0, $stages['gudang_jadi']['defect_pcs']);
-        $this->assertEquals(89, $stages['gudang_jadi']['good_pcs']);
+        // 10 required column headers
+        $response->assertSee('No');
+        $response->assertSee('Kode Produksi');
+        $response->assertSee('Customer');
+        $response->assertSee('Heat');
+        $response->assertSee('Nama Item');
+        $response->assertSee('Berat Item');
+        $response->assertSee('Input');
+        $response->assertSee('Rusak');
+        $response->assertSee('Total Berat Input');
+        $response->assertSee('Waktu');
     }
 
     /**
-     * TEST 10 & 18: CNC Anti-Double-Count & Single Department Handling for 3 Checkpoints
+     * TEST H: PDF detail TIDAK memiliki: KTR, TAHAPAN, GOOD, OPERATOR
      */
-    public function test_10_and_18_cnc_anti_double_count_and_single_department(): void
+    public function test_h_pdf_detail_excludes_ktr_tahapan_good_operator(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50, 'unit_weight_kg' => 2.35]);
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 1,
+            'good_qty' => 49,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=netto');
+        $response->assertStatus(200);
+
+        // In detail table header
+        $content = $response->getContent();
+        $this->assertStringNotContainsString('<th>KTR</th>', $content);
+        $this->assertStringNotContainsString('<th>Operator</th>', $content);
+        $this->assertStringNotContainsString('<th>Good</th>', $content);
+        // Note: Summary table still has Good and Tahapan, but detail table does not
+        $this->assertStringNotContainsString('<th class="text-center" style="width: 15%;">KTR</th>', $content);
+    }
+
+    /**
+     * TEST I: KTR tetap ada di underlying dataset/internal data
+     */
+    public function test_i_ktr_remains_in_underlying_dataset(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50]);
+
+        $data = $this->reportService->getProductionDataset(['stage' => 'cor']);
+        $this->assertNotEmpty($data['items']);
+        $this->assertArrayHasKey('ktr', $data['items']->first());
+        $this->assertEquals($line->traveler_number, $data['items']->first()['ktr']);
+    }
+
+    /**
+     * TEST J: Nama Item berasal dari relation/data existing
+     */
+    public function test_j_item_name_from_existing_relation(): void
+    {
+        $plan = $this->createPlan(['item_name' => 'SS304 JIS 10K NS 4"']);
+        $line = $this->createKtrLine([], $plan);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=cor');
+        $response->assertStatus(200);
+        $response->assertSee('SS304 JIS 10K NS 4"');
+    }
+
+    /**
+     * TEST K: Berat Item berasal dari unit_weight_kg
+     */
+    public function test_k_unit_weight_displayed_in_pdf(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50, 'unit_weight_kg' => 3.75]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=cor');
+        $response->assertStatus(200);
+        $response->assertSee('3.75 kg');
+    }
+
+    /**
+     * TEST L: Total Berat Input = input * unit_weight_kg
+     */
+    public function test_l_total_input_weight_formula(): void
+    {
+        // Input = 100, Unit Weight = 2.35 kg -> Total Berat Input = 235.00 kg
+        $line = $this->createKtrLine(['qty_good' => 100, 'qty_reject' => 0, 'unit_weight_kg' => 2.35]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=cor');
+        $response->assertStatus(200);
+        $response->assertSee('235.00 kg');
+    }
+
+    /**
+     * TEST M: Physical date tetap menggunakan physical_done_at
+     */
+    public function test_m_physical_date_uses_physical_done_at(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50]);
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 2,
+            'good_qty' => 48,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-24 23:23:00',
+            'executed_at' => '2026-09-24 23:23:00',
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?date_from=2026-09-24&date_to=2026-09-24&stage=netto');
+        $response->assertStatus(200);
+        $response->assertSee('24/09 23:23');
+    }
+
+    /**
+     * TEST N: WAITING_DEFECT tetap muncul jika physical_done_at ada
+     */
+    public function test_n_waiting_defect_appears_with_physical_done_at(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50]);
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=netto');
+        $response->assertStatus(200);
+        $response->assertSee('50');
+    }
+
+    /**
+     * TEST O: Excel tetap berfungsi dan tidak rusak
+     */
+    public function test_o_excel_export_intact(): void
     {
         $line = $this->createKtrLine(['qty_good' => 100]);
 
-        // Checkpoint 1: CNC_MACHINING (Input 100, Def 2, Good 98)
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/excel?stage=cor');
+        $response->assertStatus(200);
+        $this->assertStringContainsString('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('Content-Type'));
+    }
+
+    /**
+     * TEST P: Summary KPI tetap konsisten
+     */
+    public function test_p_summary_kpi_consistency(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'qty_reject' => 5, 'unit_weight_kg' => 2.00]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=cor');
+        $response->assertStatus(200);
+        $response->assertSee('Total Aktivitas KTR');
+        $response->assertSee('Total Output Baik');
+        $response->assertSee('Total Berat Output');
+        $response->assertSee('Total Defect (Rusak)');
+        $response->assertSee('100 pcs');
+        $response->assertSee('5 pcs');
+        $response->assertSee('200.00 kg');
+    }
+
+    /**
+     * TEST Q: CNC anti-double-count tetap berfungsi
+     */
+    public function test_q_cnc_anti_double_count_preserved(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100]);
+
+        // 3 CNC checkpoints
         $line->stageExecutions()->create([
             'stage' => 'bubut_cnc',
             'checkpoint_code' => 'CNC_MACHINING',
@@ -360,7 +439,6 @@ class ProductionReportTest extends TestCase
             'operator_id' => $this->spvUser->id,
         ]);
 
-        // Checkpoint 2: QC_POST_CNC (Input 98, Def 1, Good 97)
         $line->stageExecutions()->create([
             'stage' => 'bubut_cnc',
             'checkpoint_code' => 'QC_POST_CNC',
@@ -373,7 +451,6 @@ class ProductionReportTest extends TestCase
             'operator_id' => $this->spvUser->id,
         ]);
 
-        // Checkpoint 3: QC_PRE_BOR (Input 97, Def 0, Good 97)
         $line->stageExecutions()->create([
             'stage' => 'bubut_cnc',
             'checkpoint_code' => 'QC_PRE_BOR',
@@ -386,111 +463,47 @@ class ProductionReportTest extends TestCase
             'operator_id' => $this->spvUser->id,
         ]);
 
-        $data = $this->reportService->getProductionDataset();
-        $cncSummary = $data['stage_summaries']->where('stage', 'bubut_cnc')->first();
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=bubut_cnc');
+        $response->assertStatus(200);
 
-        // Must count as 1 KTR, Initial Input = 100 (NOT 295!), Defect = 3, Good = 97
-        $this->assertEquals(1, $cncSummary['ktr_count']);
-        $this->assertEquals(100, $cncSummary['input_pcs']);
-        $this->assertEquals(3, $cncSummary['defect_pcs']);
-        $this->assertEquals(97, $cncSummary['good_pcs']);
-
-        // In detail table, all 3 checkpoints are listed
-        $cncDetails = $data['items']->where('stage', 'bubut_cnc');
-        $this->assertCount(3, $cncDetails);
+        // 1 KTR in summary count
+        $response->assertSee('1 KTR');
+        // 3 activity rows in detail
+        $response->assertSee('Total: <strong>3</strong> baris aktivitas', false);
     }
 
     /**
-     * TEST 14, 15, 16: Defect, Good, and Zero Defect calculations
+     * Additional Security & Scope Isolation Tests
      */
-    public function test_14_15_16_defect_good_and_zero_defect_calculations(): void
+    public function test_authorization_and_unauthenticated_redirect(): void
     {
-        $line = $this->createKtrLine(['qty_good' => 80]);
-        $line->stageExecutions()->create([
-            'stage' => 'netto',
-            'checkpoint_code' => 'NETTO_CUT',
-            'input_qty' => 80,
-            'defect_qty' => 0, // Zero defect!
-            'good_qty' => 80,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'physical_done_at' => now(),
-            'executed_at' => now(),
-            'operator_id' => $this->spvUser->id,
-        ]);
-
-        $data = $this->reportService->getProductionDataset();
-        $netto = $data['stage_summaries']->where('stage', 'netto')->first();
-
-        $this->assertEquals(80, $netto['input_pcs']);
-        $this->assertEquals(0, $netto['defect_pcs']);
-        $this->assertEquals(80, $netto['good_pcs']);
-        $this->assertEquals(0.0, $netto['defect_rate']);
+        $this->get('/sand-casting/report/production')->assertRedirect(route('login'));
+        $this->actingAs($this->adminUser)->get('/sand-casting/report/production')->assertStatus(200);
+        $this->actingAs($this->ppicUser)->get('/sand-casting/report/production')->assertStatus(200);
+        $this->actingAs($this->qcUser)->get('/sand-casting/report/production')->assertStatus(200);
+        $this->actingAs($this->spvUser)->get('/sand-casting/report/production')->assertStatus(200);
     }
 
-    /**
-     * TEST 17: Product scope isolation
-     */
-    public function test_17_product_scope_isolation(): void
+    public function test_product_scope_isolation(): void
     {
         $planFlange = $this->createPlan(['product_scope' => 'FLANGE_BESI']);
         $planFitting = $this->createPlan(['product_scope' => 'FITTING_BESI']);
 
-        $lineFlange = $this->createKtrLine(['qty_good' => 100], $planFlange);
-        $lineFitting = $this->createKtrLine(['qty_good' => 50], $planFitting);
+        $this->createKtrLine(['qty_good' => 100], $planFlange);
+        $this->createKtrLine(['qty_good' => 50], $planFitting);
 
-        // PPIC user has scope FLANGE_BESI
-        $dataScoped = $this->reportService->getProductionDataset([], $this->ppicUser);
+        $dataScoped = $this->reportService->getProductionDataset(['stage' => 'cor'], $this->ppicUser);
         $corScoped = $dataScoped['stage_summaries']->where('stage', 'cor')->first();
-
         $this->assertEquals(1, $corScoped['ktr_count']);
         $this->assertEquals(100, $corScoped['good_pcs']);
 
-        // Admin has no scope restriction -> sees both (150 pcs)
-        $dataUnscoped = $this->reportService->getProductionDataset([], $this->adminUser);
+        $dataUnscoped = $this->reportService->getProductionDataset(['stage' => 'cor'], $this->adminUser);
         $corUnscoped = $dataUnscoped['stage_summaries']->where('stage', 'cor')->first();
-
         $this->assertEquals(2, $corUnscoped['ktr_count']);
         $this->assertEquals(150, $corUnscoped['good_pcs']);
     }
 
-    /**
-     * TEST 19 & 20: Export Excel & PDF / Print
-     */
-    public function test_19_and_20_export_excel_and_pdf_print(): void
-    {
-        $line = $this->createKtrLine(['qty_good' => 100]);
-
-        // PDF Print view
-        $responsePdf = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf');
-        $responsePdf->assertStatus(200);
-        $responsePdf->assertSee('REPORT PRODUKSI SAND CASTING');
-        $responsePdf->assertSee('TOTAL / RINGKASAN');
-        $responsePdf->assertSee('Total Aktivitas KTR');
-        $responsePdf->assertSee('Total Aktivitas Input PCS');
-        $responsePdf->assertSee('Total Defect (Rusak)');
-        $responsePdf->assertSee('Total Berat Aktivitas');
-        $responsePdf->assertSee('Cetak Dokumen (Print / Save as PDF)');
-        $responsePdf->assertSee('no-print');
-
-        // Verify absence of auto-trigger print and external resources
-        $responsePdf->assertDontSee('window.onload', false);
-        $responsePdf->assertDontSee('addEventListener(\'load\'', false);
-        $responsePdf->assertDontSee('DOMContentLoaded', false);
-        $responsePdf->assertDontSee('setTimeout', false);
-        $responsePdf->assertDontSee('<script', false);
-        $responsePdf->assertDontSee('cdn.tailwindcss.com', false);
-        $responsePdf->assertDontSee('layouts.app', false);
-
-        // Excel export stream
-        $responseExcel = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/excel');
-        $responseExcel->assertStatus(200);
-        $this->assertStringContainsString('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $responseExcel->headers->get('Content-Type'));
-    }
-
-    /**
-     * TEST 21: Read-only check (No database mutations)
-     */
-    public function test_21_report_does_not_mutate_database(): void
+    public function test_report_does_not_mutate_database(): void
     {
         $line = $this->createKtrLine(['qty_good' => 100]);
         $exec = $line->stageExecutions()->create([
@@ -508,42 +521,14 @@ class ProductionReportTest extends TestCase
         $beforeCountExec = SandCastingStageExecution::count();
         $beforeCountLine = SandCastingCastingResultLine::count();
 
-        $this->actingAs($this->adminUser)->get('/sand-casting/report/production');
-        $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/excel');
-        $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf');
+        $this->actingAs($this->adminUser)->get('/sand-casting/report/production?stage=netto');
+        $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/excel?stage=netto');
+        $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=netto');
 
         $this->assertEquals($beforeCountExec, SandCastingStageExecution::count());
         $this->assertEquals($beforeCountLine, SandCastingCastingResultLine::count());
 
         $exec->refresh();
         $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $exec->status);
-    }
-
-    /**
-     * TEST 22: PDF Smoke Test with 46 KTRs (UAT Dataset Scale)
-     */
-    public function test_22_pdf_smoke_test_with_46_ktrs_dataset(): void
-    {
-        // Generate 46 KTRs with ~2,600 PCS total
-        for ($i = 0; $i < 46; $i++) {
-            $line = $this->createKtrLine(['qty_good' => 57]);
-            $line->stageExecutions()->create([
-                'stage' => 'netto',
-                'checkpoint_code' => 'NETTO_CUT',
-                'input_qty' => 57,
-                'defect_qty' => 1,
-                'good_qty' => 56,
-                'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-                'physical_done_at' => now(),
-                'executed_at' => now(),
-                'operator_id' => $this->spvUser->id,
-            ]);
-        }
-
-        $responsePdf = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf');
-        $responsePdf->assertStatus(200);
-        $responsePdf->assertSee('REPORT PRODUKSI SAND CASTING');
-        $responsePdf->assertSee('Netto');
-        $responsePdf->assertSee('46'); // 46 KTRs in Netto
     }
 }

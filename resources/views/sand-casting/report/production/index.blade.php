@@ -22,6 +22,18 @@
 @section('content')
 <div class="max-w-7xl mx-auto space-y-6">
 
+    {{-- Validation Error Alert --}}
+    @if ($errors->any())
+        <div class="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs">
+            <i class="fas fa-exclamation-circle text-rose-600 text-base shrink-0"></i>
+            <div>
+                @foreach ($errors->all() as $error)
+                    <div>{{ $error }}</div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     {{-- Filter Panel --}}
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
         <form action="{{ route('sand-casting.report.production.index') }}" method="GET" class="space-y-4">
@@ -54,7 +66,7 @@
                     >
                 </div>
 
-                {{-- 3. Stage Dropdown --}}
+                {{-- 3. Stage Dropdown (Single Stage Only) --}}
                 <div>
                     <label for="stage" class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                         <i class="fas fa-layer-group text-blue-600 mr-1"></i> Tahapan (Stage)
@@ -64,7 +76,6 @@
                         id="stage"
                         class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-semibold focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
                     >
-                        <option value="all" {{ $activeFilters['stage'] === 'all' ? 'selected' : '' }}>Semua Tahapan (7 Tahap)</option>
                         @foreach($stages as $stKey => $stLabel)
                             <option value="{{ $stKey }}" {{ $activeFilters['stage'] === $stKey ? 'selected' : '' }}>{{ $stLabel }}</option>
                         @endforeach

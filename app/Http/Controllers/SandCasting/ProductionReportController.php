@@ -16,14 +16,67 @@ class ProductionReportController extends Controller
 {
     public function __construct(private readonly SandCastingProductionReportService $reportService) {}
 
+    /**
+     * Validate and normalize filter inputs for Sand Casting Production Report.
+     *
+     * @return array{date_from: string, date_to: string, stage: string, search: string}
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    protected function validateReportFilters(Request $request): array
+    {
+        $validStages = array_keys(SandCastingProductionReportService::STAGES);
+        $defaultStage = $validStages[0] ?? 'cor';
+
+        // 1. Initial field validation
+        $validated = $request->validate([
+            'date_from' => 'nullable|date_format:Y-m-d',
+            'date_to' => 'nullable|date_format:Y-m-d',
+            'stage' => 'nullable|string',
+            'search' => 'nullable|string|max:100',
+        ]);
+
+        $dateFrom = $validated['date_from'] ?? date('Y-m-d');
+        $dateTo = $validated['date_to'] ?? date('Y-m-d');
+        $stage = $validated['stage'] ?? $defaultStage;
+        $search = $validated['search'] ?? '';
+
+        // 2. Validate stage is one of the 7 valid stages (reject 'all' or invalid strings)
+        if (! in_array($stage, $validStages, true)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'stage' => ["Tahapan (stage) '{$stage}' tidak valid. Pilih salah satu tahapan spesifik."],
+            ]);
+        }
+
+        // 3. Validate chronological order: date_from <= date_to
+        $fromCarbon = \Carbon\Carbon::parse($dateFrom)->startOfDay();
+        $toCarbon = \Carbon\Carbon::parse($dateTo)->startOfDay();
+
+        if ($fromCarbon->gt($toCarbon)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'date_from' => ['Tanggal Dari tidak boleh lebih besar dari Tanggal Sampai.'],
+            ]);
+        }
+
+        // 4. Validate Maximum 45 calendar days inclusive
+        $inclusiveDays = $fromCarbon->diffInDays($toCarbon) + 1;
+        if ($inclusiveDays > 45) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'date_to' => ['Rentang tanggal laporan maksimal 45 hari.'],
+            ]);
+        }
+
+        return [
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'stage' => $stage,
+            'search' => $search,
+        ];
+    }
+
     public function index(Request $request)
     {
-        $filters = [
-            'date_from' => $request->query('date_from', date('Y-m-d')),
-            'date_to' => $request->query('date_to', date('Y-m-d')),
-            'stage' => $request->query('stage', 'all'),
-            'search' => $request->query('search', ''),
-        ];
+        $filters = $this->validateReportFilters($request);
 
         $data = $this->reportService->getProductionDataset($filters, null, true);
 
@@ -44,22 +97,19 @@ class ProductionReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $filters = [
-            'date_from' => $request->query('date_from', date('Y-m-d')),
-            'date_to' => $request->query('date_to', date('Y-m-d')),
-            'stage' => $request->query('stage', 'all'),
-            'search' => $request->query('search', ''),
-        ];
+        $filters = $this->validateReportFilters($request);
 
-        $data = $this->reportService->getProductionDataset($filters, null, false);
+        $data = $this->reportService->getProductionDataset($filters, null, true);
 
         $stageSummaries = $data['stage_summaries'];
+        $items = $data['items'];
         $summary = $data['summary'];
         $activeFilters = $data['filters'];
         $stages = $data['stages'];
 
         return view('sand-casting.report.production.print', compact(
             'stageSummaries',
+            'items',
             'summary',
             'activeFilters',
             'stages'
@@ -68,12 +118,7 @@ class ProductionReportController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        $filters = [
-            'date_from' => $request->query('date_from', date('Y-m-d')),
-            'date_to' => $request->query('date_to', date('Y-m-d')),
-            'stage' => $request->query('stage', 'all'),
-            'search' => $request->query('search', ''),
-        ];
+        $filters = $this->validateReportFilters($request);
 
         $data = $this->reportService->getProductionDataset($filters, null, true);
         $stageSummaries = $data['stage_summaries'];
