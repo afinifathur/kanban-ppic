@@ -491,7 +491,8 @@ class ProductionFloorKanbanUiTest extends TestCase
     }
 
     /**
-     * Incoming card (e.g. from Netto WAITING_DEFECT) renders in HTML view for Bubut OD.
+     * Incoming card (e.g. from Netto WAITING_DEFECT) is NOT rendered in Floor Kanban HTML view (UI policy),
+     * but once upstream completes physical work, it transitions to READY and appears.
      */
     public function test_incoming_card_renders_in_html_view_when_upstream_in_progress(): void
     {
@@ -503,14 +504,12 @@ class ProductionFloorKanbanUiTest extends TestCase
             'heat_number' => 'A212092604',
         ]);
 
-        // KTR is in Netto (upstream) -> Bubut OD renders it as INCOMING
+        // KTR is in Netto (upstream) -> Bubut OD does NOT render it in HTML view (Floor Kanban only shows physically ready items)
         $response = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od');
 
         $response->assertOk();
-        $response->assertSee('CS Q235 SORF FLANGE 2"');
-        $response->assertSee('Heat A212092604');
-        $response->assertSee('12');
-        $response->assertSee('INCOMING');
+        $response->assertDontSee('CS Q235 SORF FLANGE 2"');
+        $response->assertDontSee('INCOMING');
 
         // When SPV Netto marks physical work done -> Bubut OD renders it as READY
         $this->executionService->markPhysicalDone(
@@ -522,7 +521,8 @@ class ProductionFloorKanbanUiTest extends TestCase
         $responseAfter = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od');
         $responseAfter->assertOk();
         $responseAfter->assertSee('CS Q235 SORF FLANGE 2"');
-        $responseAfter->assertSee('READY');
+        $responseAfter->assertSee('BELUM SELESAI (READY)');
+        $responseAfter->assertDontSee('INCOMING');
     }
 
     /**

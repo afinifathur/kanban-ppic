@@ -37,20 +37,11 @@
     $totalBacklogPcs = (int) array_sum(array_column($readyCards, 'qty'));
     $totalBacklogKg = (float) array_sum(array_column($readyCards, 'total_weight_kg'));
 
-    $totalIncomingPcs = (int) array_sum(array_column($incomingCards, 'qty'));
-    $totalIncomingKg = (float) array_sum(array_column($incomingCards, 'total_weight_kg'));
-
     // Group cards by Line Number (1 to 4)
     $readyByLine = [];
     foreach ($readyCards as $c) {
         $lNum = $c['line_number'] ?? 1;
         $readyByLine[$lNum][] = $c;
-    }
-
-    $incomingByLine = [];
-    foreach ($incomingCards as $c) {
-        $lNum = $c['line_number'] ?? 1;
-        $incomingByLine[$lNum][] = $c;
     }
 
     // Determine lines to render based on filter
@@ -142,12 +133,6 @@
                 <div class="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400">
                     BELUM SELESAI (READY)
                 </div>
-                @if(count($incomingCards) > 0)
-                    <div class="text-[10px] sm:text-xs font-bold text-amber-300 bg-amber-950/80 border border-amber-600/60 px-2 py-0.5 rounded-full flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                        <span>INCOMING: {{ number_format($totalIncomingPcs) }} PCS ({{ count($incomingCards) }} KTR)</span>
-                    </div>
-                @endif
             </div>
             <div class="mt-1 flex items-baseline justify-between gap-4 font-mono">
                 <div class="text-xl sm:text-2xl font-black text-white tracking-tight">
@@ -186,7 +171,7 @@
     </div>
 
     {{-- SCROLL AREA: WORK QUEUE CARDS --}}
-    @if(count($readyCards) === 0 && count($incomingCards) === 0)
+    @if(count($readyCards) === 0)
         <div class="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-400">
             <i class="fas fa-clipboard-check text-3xl text-slate-300 mb-2"></i>
             <p class="text-sm font-bold text-slate-700">Tidak ada antrean pekerjaan.</p>
@@ -199,7 +184,6 @@
                 @foreach($linesToRender as $lineNo)
                     @php
                         $cardsInLine = $readyByLine[$lineNo] ?? [];
-                        $incomingInLine = $incomingByLine[$lineNo] ?? [];
                         $linePcs = array_sum(array_column($cardsInLine, 'qty'));
                         $lineKg = array_sum(array_column($cardsInLine, 'total_weight_kg'));
                     @endphp
@@ -216,7 +200,7 @@
 
                         {{-- Independent Scroll Container for this Line (desktop only, natural scroll on mobile) --}}
                         <div class="md:overflow-y-auto md:overscroll-contain space-y-2 md:pr-1 md:custom-scrollbar md:h-[calc(100vh-250px)] min-h-[50px]" data-line-scroll="{{ $lineNo }}">
-                            @if(count($cardsInLine) === 0 && count($incomingInLine) === 0)
+                            @if(count($cardsInLine) === 0)
                                 <div class="p-4 text-center text-slate-400 text-xs italic bg-white/60 rounded-lg border border-dashed border-slate-200">
                                     Tidak ada antrean Line {{ $lineNo }}
                                 </div>
@@ -228,7 +212,7 @@
                                     @endphp
                                     <div class="bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs">
                                         <div>
-                                            {{-- Top Row: Nama Barang & Nomor Antrian --}}
+                                             {{-- Top Row: Nama Barang & Nomor Antrian --}}
                                             <div class="flex items-start justify-between gap-1.5">
                                                 <div class="font-bold text-slate-900 text-xs sm:text-sm leading-snug tracking-tight line-clamp-2">
                                                     {{ $card['item_name'] ?? '-' }}
@@ -275,85 +259,6 @@
                                         </div>
                                     </div>
                                 @endforeach
-
-                                {{-- 2. INCOMING CARDS (WAITING DEFECT / WAITING QC) --}}
-                                @if(count($incomingInLine) > 0)
-                                    <div class="pt-2 pb-1 flex items-center justify-between border-t border-slate-300 mt-2">
-                                        <span class="text-[10px] font-black text-amber-800 uppercase tracking-wider flex items-center gap-1">
-                                            <i class="fas fa-hourglass-half text-amber-600 text-[9px]"></i> INCOMING
-                                        </span>
-                                        <span class="text-[10px] font-mono font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200">
-                                            {{ count($incomingInLine) }} KTR &bull; {{ number_format(array_sum(array_column($incomingInLine, 'qty'))) }} PCS
-                                        </span>
-                                    </div>
-
-                                    @foreach($incomingInLine as $card)
-                                        @php
-                                            $agingInfo = $getAgingInfo($card['aging'] ?? null);
-                                        @endphp
-                                        <div class="bg-amber-50/60 rounded-xl border border-amber-300/90 p-2.5 sm:p-3 flex flex-col justify-between transition-all shadow-xs">
-                                            <div>
-                                                {{-- Top Row: Nama Barang & Status Badge --}}
-                                                <div class="flex items-start justify-between gap-1.5">
-                                                    <div class="font-bold text-slate-900 text-xs sm:text-sm leading-snug tracking-tight line-clamp-2">
-                                                        {{ $card['item_name'] ?? '-' }}
-                                                    </div>
-                                                    <span class="font-mono text-[9px] font-black text-amber-900 bg-amber-200/80 px-1.5 py-0.5 rounded border border-amber-300 shrink-0 uppercase tracking-tight">
-                                                        @if($card['display_status'] === 'WAITING_DEFECT')
-                                                            WAITING DEFECT
-                                                        @elseif($card['display_status'] === 'WAITING_QC')
-                                                            WAITING QC
-                                                        @else
-                                                            INCOMING
-                                                        @endif
-                                                    </span>
-                                                </div>
-
-                                                {{-- 2. Heat Number & Sub-Status --}}
-                                                <div class="flex items-center justify-between text-[11px] sm:text-xs font-mono mt-0.5">
-                                                    <span class="text-slate-600 font-medium">Heat {{ $card['heat_number'] ?? '-' }}</span>
-                                                    <span class="text-[9.5px] text-amber-800 font-black uppercase tracking-tight">
-                                                        @if($card['display_status'] === 'WAITING_DEFECT')
-                                                            MENUNGGU INPUT DEFECT
-                                                        @elseif($card['display_status'] === 'WAITING_QC')
-                                                            MENUNGGU VERIFIKASI QC
-                                                        @endif
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                {{-- 3. Quantity PCS & Berat KG --}}
-                                                <div class="mt-2 pt-1.5 border-t border-amber-200/80 flex items-baseline justify-between font-mono">
-                                                    <div class="text-xs sm:text-sm font-black text-amber-950">
-                                                        {{ number_format($card['qty'], 0, ',', '.') }} <span class="text-[10px] sm:text-xs font-bold text-amber-800/80">PCS</span>
-                                                    </div>
-                                                    <div class="text-xs sm:text-sm font-black text-amber-950">
-                                                        {{ number_format($card['total_weight_kg'], 0, ',', '.') }} <span class="text-[10px] sm:text-xs font-bold text-amber-800/80">KG</span>
-                                                    </div>
-                                                </div>
-
-                                                {{-- 4. Bottom Row: Aging (Left) & Customer Badge (Right) --}}
-                                                <div class="mt-1.5 flex items-center justify-between gap-1">
-                                                    <div class="flex items-center gap-1">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border {{ $agingInfo['badgeClass'] }}">
-                                                            <span class="w-1.5 h-1.5 rounded-full {{ $agingInfo['dotClass'] }} shrink-0"></span>
-                                                            <span>{{ $agingInfo['label'] }}</span>
-                                                        </span>
-                                                        @if(!empty($card['is_urgent']))
-                                                            <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-600 text-white animate-pulse">URGENT</span>
-                                                        @endif
-                                                    </div>
-                                                    @if(!empty($card['customer_badge']))
-                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-black border {{ $card['customer_badge']['bg'] }} {{ $card['customer_badge']['text'] }} {{ $card['customer_badge']['border'] }}" title="Customer: {{ $card['customer'] ?? '-' }}">
-                                                            [{{ $card['customer_badge']['label'] }}]
-                                                        </span>
-                                                    @endif
-                                                </div>
-                                            </div>
-                                        </div>
-                                    @endforeach
-                                @endif
                             @endif
                         </div>
                     </div>
@@ -364,7 +269,6 @@
             @php
                 $lineNo = $selectedLine;
                 $cardsInLine = $readyByLine[$lineNo] ?? [];
-                $incomingInLine = $incomingByLine[$lineNo] ?? [];
                 $linePcs = array_sum(array_column($cardsInLine, 'qty'));
                 $lineKg = array_sum(array_column($cardsInLine, 'total_weight_kg'));
             @endphp
@@ -375,7 +279,7 @@
                         <h2 class="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight">
                             LINE {{ $lineNo }}
                         </h2>
-                        <span class="text-[11px] font-mono text-slate-500 font-semibold">{{ count($cardsInLine) }} READY ({{ number_format($linePcs) }} PCS) @if(count($incomingInLine) > 0) &bull; {{ count($incomingInLine) }} INCOMING @endif</span>
+                        <span class="text-[11px] font-mono text-slate-500 font-semibold">{{ count($cardsInLine) }} READY ({{ number_format($linePcs) }} PCS)</span>
                     </div>
                     <div class="text-xs sm:text-sm font-black text-slate-800 font-mono">
                         {{ number_format($lineKg, 0, ',', '.') }} KG
@@ -384,7 +288,7 @@
 
                 {{-- Scroll Container for Filtered Line (desktop only, natural scroll on mobile) --}}
                 <div class="md:overflow-y-auto md:overscroll-contain md:pr-1 md:custom-scrollbar md:h-[calc(100vh-250px)] space-y-3" data-line-scroll="{{ $lineNo }}">
-                    @if(count($cardsInLine) === 0 && count($incomingInLine) === 0)
+                    @if(count($cardsInLine) === 0)
                         <div class="p-8 text-center text-slate-400 text-xs italic bg-white rounded-lg border border-dashed border-slate-200">
                             Tidak ada antrean pada Line {{ $lineNo }}
                         </div>
@@ -428,86 +332,6 @@
                                             <div class="mt-1.5 flex items-center justify-between gap-1">
                                                 <div class="flex items-center gap-1">
                                                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border {{ $agingInfo['badgeClass'] }}" data-aging-color="{{ $agingInfo['color'] }}">
-                                                        <span class="w-1.5 h-1.5 rounded-full {{ $agingInfo['dotClass'] }} shrink-0"></span>
-                                                        <span>{{ $agingInfo['label'] }}</span>
-                                                    </span>
-                                                    @if(!empty($card['is_urgent']))
-                                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-600 text-white animate-pulse">URGENT</span>
-                                                    @endif
-                                                </div>
-                                                @if(!empty($card['customer_badge']))
-                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-black border {{ $card['customer_badge']['bg'] }} {{ $card['customer_badge']['text'] }} {{ $card['customer_badge']['border'] }}" title="Customer: {{ $card['customer'] ?? '-' }}">
-                                                        [{{ $card['customer_badge']['label'] }}]
-                                                    </span>
-                                                @endif
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        @if(count($incomingInLine) > 0)
-                            <div class="pt-2 pb-1 flex items-center justify-between border-t border-slate-300">
-                                <span class="text-xs font-black text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
-                                    <i class="fas fa-hourglass-half text-amber-600"></i> INCOMING (Menunggu Defect / QC)
-                                </span>
-                                <span class="text-xs font-mono font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                                    {{ count($incomingInLine) }} KTR &bull; {{ number_format(array_sum(array_column($incomingInLine, 'qty'))) }} PCS
-                                </span>
-                            </div>
-
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-                                @foreach($incomingInLine as $card)
-                                    @php
-                                        $agingInfo = $getAgingInfo($card['aging'] ?? null);
-                                    @endphp
-                                    <div class="bg-amber-50/60 rounded-xl border border-amber-300/90 p-2.5 sm:p-3 flex flex-col justify-between transition-all shadow-xs">
-                                        <div>
-                                            {{-- Top Row: Nama Barang & Status Badge --}}
-                                            <div class="flex items-start justify-between gap-1.5">
-                                                <div class="font-bold text-slate-900 text-xs sm:text-sm leading-snug tracking-tight line-clamp-2">
-                                                    {{ $card['item_name'] ?? '-' }}
-                                                </div>
-                                                <span class="font-mono text-[9px] font-black text-amber-900 bg-amber-200/80 px-1.5 py-0.5 rounded border border-amber-300 shrink-0 uppercase tracking-tight">
-                                                    @if($card['display_status'] === 'WAITING_DEFECT')
-                                                        WAITING DEFECT
-                                                    @elseif($card['display_status'] === 'WAITING_QC')
-                                                        WAITING QC
-                                                    @else
-                                                        INCOMING
-                                                    @endif
-                                                </span>
-                                            </div>
-
-                                            {{-- 2. Heat Number & Sub-Status --}}
-                                            <div class="flex items-center justify-between text-[11px] sm:text-xs font-mono mt-0.5">
-                                                <span class="text-slate-600 font-medium">Heat {{ $card['heat_number'] ?? '-' }}</span>
-                                                <span class="text-[9.5px] text-amber-800 font-black uppercase tracking-tight">
-                                                    @if($card['display_status'] === 'WAITING_DEFECT')
-                                                        MENUNGGU INPUT DEFECT
-                                                    @elseif($card['display_status'] === 'WAITING_QC')
-                                                        MENUNGGU VERIFIKASI QC
-                                                    @endif
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            {{-- 3. Quantity PCS & Berat KG --}}
-                                            <div class="mt-2 pt-1.5 border-t border-amber-200/80 flex items-baseline justify-between font-mono">
-                                                <div class="text-xs sm:text-sm font-black text-amber-950">
-                                                    {{ number_format($card['qty'], 0, ',', '.') }} <span class="text-[10px] sm:text-xs font-bold text-amber-800/80">PCS</span>
-                                                </div>
-                                                <div class="text-xs sm:text-sm font-black text-amber-950">
-                                                    {{ number_format($card['total_weight_kg'], 0, ',', '.') }} <span class="text-[10px] sm:text-xs font-bold text-amber-800/80">KG</span>
-                                                </div>
-                                            </div>
-
-                                            {{-- 4. Bottom Row: Aging (Left) & Customer Badge (Right) --}}
-                                            <div class="mt-1.5 flex items-center justify-between gap-1">
-                                                <div class="flex items-center gap-1">
-                                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border {{ $agingInfo['badgeClass'] }}">
                                                         <span class="w-1.5 h-1.5 rounded-full {{ $agingInfo['dotClass'] }} shrink-0"></span>
                                                         <span>{{ $agingInfo['label'] }}</span>
                                                     </span>
