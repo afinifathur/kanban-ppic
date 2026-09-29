@@ -24,7 +24,18 @@
 @endsection
 
 @section('content')
-<div class="space-y-6">
+    <!-- Duplicate Alert Banner -->
+    @if(session('duplicate_error'))
+        <div class="bg-amber-50 border border-amber-300 text-amber-900 text-xs px-4 py-3 rounded-lg shadow-sm flex items-start gap-2.5">
+            <i class="fas fa-exclamation-triangle text-amber-600 text-base shrink-0 mt-0.5"></i>
+            <div class="space-y-1">
+                <div class="font-bold text-amber-900">⚠️ HASIL COR SUDAH TERCATAT</div>
+                <p>{{ session('duplicate_error') }}</p>
+            </div>
+            <button type="button" onclick="this.parentElement.remove()" class="text-amber-500 hover:text-amber-700 ml-auto text-sm">&times;</button>
+        </div>
+    @endif
+
     <!-- Error / Flash Alert -->
     @if(session('error'))
         <div class="bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg flex items-center justify-between shadow-sm">
@@ -287,6 +298,54 @@
             datalist.appendChild(opt);
         });
 
+        @if(session('duplicate_info'))
+            const dup = @json(session('duplicate_info'));
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '<span class="text-base font-bold text-slate-800">⚠️ HASIL COR SUDAH TERCATAT</span>',
+                    html: `
+                        <div class="text-left text-xs text-slate-700 space-y-2 bg-slate-50 p-3.5 rounded-lg border border-slate-200 mt-2 font-sans">
+                            <p class="text-amber-800 font-semibold mb-2 leading-relaxed">
+                                Sistem tidak membuat KTR baru karena kombinasi Heat Number dan Production Code tersebut sudah memiliki Hasil Cor.
+                            </p>
+                            <div class="space-y-1.5 divide-y divide-slate-200/80">
+                                <div class="grid grid-cols-3 gap-1 pt-1.5">
+                                    <span class="font-bold text-slate-500">Heat Number:</span>
+                                    <span class="col-span-2 font-mono font-bold text-slate-900">${dup.heat_number || '-'}</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1 pt-1.5">
+                                    <span class="font-bold text-slate-500">Production Code:</span>
+                                    <span class="col-span-2 font-mono font-bold text-blue-700">${dup.production_code || '-'}</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1 pt-1.5">
+                                    <span class="font-bold text-slate-500">Item:</span>
+                                    <span class="col-span-2 font-semibold text-slate-800">${dup.item_name || '-'}</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1 pt-1.5">
+                                    <span class="font-bold text-slate-500">KTR yang sudah ada:</span>
+                                    <span class="col-span-2 font-mono font-bold text-indigo-700">${dup.existing_traveler_number || '-'}</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1 pt-1.5">
+                                    <span class="font-bold text-slate-500">Qty Good:</span>
+                                    <span class="col-span-2 font-bold text-emerald-700">${dup.existing_qty_good !== undefined ? dup.existing_qty_good + ' PCS' : '-'}</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1 pt-1.5">
+                                    <span class="font-bold text-slate-500">Stage:</span>
+                                    <span class="col-span-2 font-bold text-slate-700 uppercase">${dup.existing_current_stage || '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-3 text-left leading-relaxed">
+                            Jika ini merupakan penambahan qty dari hasil cor yang sama, periksa KTR yang sudah ada di menu Hasil Cor.
+                        </p>
+                    `,
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#4f46e5'
+                });
+            }
+        @endif
+
         // If preselected order was provided, we can optionally pre-filter
         const preselectedOrderId = {{ $preselectedOrderId ? $preselectedOrderId : 'null' }};
         if (preselectedOrderId) {
@@ -296,6 +355,7 @@
                     const rem = getRemainingQuota(l);
                     stagedItems.push({
                         lineId: l.id,
+                        planId: l.production_plan_id || null,
                         orderNumber: l.casting_order ? l.casting_order.casting_order_number : '-',
                         code: l.code,
                         itemName: l.item_name,
@@ -443,10 +503,13 @@
             return;
         }
 
-        // Duplicate line protection: check if exact PCOR line already staged
-        const isAlreadyStaged = stagedItems.some(item => item.lineId === selectedLineData.id);
+        // Duplicate line protection: check if exact PCOR line or same Production Plan already staged
+        const isAlreadyStaged = stagedItems.some(item => 
+            item.lineId === selectedLineData.id || 
+            (item.planId && selectedLineData.production_plan_id && item.planId === selectedLineData.production_plan_id)
+        );
         if (isAlreadyStaged) {
-            alert(`Item dari Perintah Cor ini (${selectedLineData.code}) sudah ditambahkan ke dalam Heat. Silakan ubah kuantitas langsung pada tabel di bawah.`);
+            alert(`Item (${selectedLineData.code} - ${selectedLineData.item_name}) sudah ditambahkan ke dalam Heat. Silakan ubah kuantitas langsung pada tabel di bawah.`);
             return;
         }
 
@@ -454,6 +517,7 @@
 
         stagedItems.push({
             lineId: selectedLineData.id,
+            planId: selectedLineData.production_plan_id || null,
             orderNumber: selectedLineData.casting_order ? selectedLineData.casting_order.casting_order_number : '-',
             code: selectedLineData.code,
             itemName: selectedLineData.item_name,

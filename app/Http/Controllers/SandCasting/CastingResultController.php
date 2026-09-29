@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\SandCasting;
 
+use App\Exceptions\DuplicateCastingResultException;
 use App\Http\Controllers\Controller;
 use App\Models\SandCastingCastingOrderLine;
 use App\Models\SandCastingCastingResult;
@@ -145,6 +146,20 @@ class CastingResultController extends Controller
 
             return redirect()->route('sand-casting.casting-results.show', $result)
                 ->with('success', "Hasil Cor untuk Heat {$result->heat_number} berhasil dicatat (Total: {$result->total_qty_good} pcs).");
+        } catch (DuplicateCastingResultException $e) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'error_type' => 'DUPLICATE_CASTING_RESULT',
+                    'message' => $e->getMessage(),
+                    'duplicate_info' => $e->getDuplicateInfo(),
+                ], 422);
+            }
+
+            return back()
+                ->withInput()
+                ->with('duplicate_error', $e->getMessage())
+                ->with('duplicate_info', $e->getDuplicateInfo());
         } catch (InvalidArgumentException $e) {
             if (str_contains($e->getMessage(), 'bukan bagian dari domain Sand Casting') || str_contains($e->getMessage(), 'Unauthorized')) {
                 abort(403, $e->getMessage());

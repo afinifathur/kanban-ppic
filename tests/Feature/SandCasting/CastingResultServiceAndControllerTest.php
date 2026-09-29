@@ -779,4 +779,348 @@ class CastingResultServiceAndControllerTest extends TestCase
         $this->assertEquals(85, $heat->total_qty_good);
         $this->assertEquals(3, $heat->total_qty_reject);
     }
+
+    /**
+     * TEST 1: Same Heat + Same Production Plan -> REJECT
+     */
+    public function test_same_heat_same_production_plan_is_rejected(): void
+    {
+        $plan = $this->createPlan(['code' => '268ET001', 'item_name' => '2" JIS 10K', 'qty_planned' => 100]);
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T1-01', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $line = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => '268ET001', 'item_name' => '2" JIS 10K']);
+
+        // First submission (40 PCS) -> Success
+        $this->service->recordResult(
+            ['heat_number' => 'A229092602', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 40, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+
+        $this->assertDatabaseCount('sand_casting_casting_result_lines', 1);
+
+        // Second submission with same Heat + same Plan (30 PCS) -> Must be rejected
+        $this->expectException(\App\Exceptions\DuplicateCastingResultException::class);
+        $this->expectExceptionMessage("Hasil Cor untuk Heat 'A229092602' dengan Item '268ET001'");
+
+        $this->service->recordResult(
+            ['heat_number' => 'A229092602', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 30, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+    }
+
+    /**
+     * TEST 2: Same Heat + Different Production Plan -> ALLOW
+     */
+    public function test_same_heat_different_production_plan_is_allowed(): void
+    {
+        $planA = $this->createPlan(['code' => '268ET001', 'item_name' => 'Item A', 'qty_planned' => 50]);
+        $planB = $this->createPlan(['code' => '268AB002', 'item_name' => 'Item B', 'qty_planned' => 50]);
+
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T2-01', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $lineA = $order->lines()->create(['production_plan_id' => $planA->id, 'qty_ordered' => 50, 'code' => '268ET001', 'item_name' => 'Item A']);
+        $lineB = $order->lines()->create(['production_plan_id' => $planB->id, 'qty_ordered' => 50, 'code' => '268AB002', 'item_name' => 'Item B']);
+
+        // First submission with Plan A in Heat A
+        $result1 = $this->service->recordResult(
+            ['heat_number' => 'HEAT-MULTI-01', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $lineA->id, 'qty_good' => 20, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+
+        // Second submission with Plan B in SAME Heat A -> Allowed
+        $result2 = $this->service->recordResult(
+            ['heat_number' => 'HEAT-MULTI-01', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $lineB->id, 'qty_good' => 30, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+
+        $this->assertEquals('HEAT-MULTI-01', $result1->heat_number);
+        $this->assertEquals('HEAT-MULTI-01', $result2->heat_number);
+        $this->assertDatabaseCount('sand_casting_casting_result_lines', 2);
+    }
+
+    /**
+     * TEST 3: Different Heat + Same Production Plan -> ALLOW
+     */
+    public function test_different_heat_same_production_plan_is_allowed(): void
+    {
+        $plan = $this->createPlan(['code' => '268ET001', 'item_name' => 'Item 1', 'qty_planned' => 100]);
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T3-01', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $line = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => '268ET001', 'item_name' => 'Item 1']);
+
+        // First submission in Heat A
+        $resultA = $this->service->recordResult(
+            ['heat_number' => 'HEAT-A', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 40, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+
+        // Second submission in Heat B (different heat, same plan) -> Allowed
+        $resultB = $this->service->recordResult(
+            ['heat_number' => 'HEAT-B', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 30, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+
+        $this->assertEquals('HEAT-A', $resultA->heat_number);
+        $this->assertEquals('HEAT-B', $resultB->heat_number);
+        $this->assertDatabaseCount('sand_casting_casting_result_lines', 2);
+    }
+
+    /**
+     * TEST 4: Two identical production_plan_id in same request -> REJECT
+     */
+    public function test_two_identical_production_plan_id_in_same_request_is_rejected(): void
+    {
+        $plan = $this->createPlan(['code' => '268ET001', 'item_name' => 'Item 1', 'qty_planned' => 100]);
+        $order1 = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T4-01', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $order2 = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T4-02', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+
+        $line1 = $order1->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 50, 'code' => '268ET001', 'item_name' => 'Item 1']);
+        $line2 = $order2->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 50, 'code' => '268ET001', 'item_name' => 'Item 1']);
+
+        $this->expectException(\App\Exceptions\DuplicateCastingResultException::class);
+        $this->expectExceptionMessage('dimasukkan lebih dari satu kali dalam request Heat yang sama');
+
+        $this->service->recordResult(
+            ['heat_number' => 'HEAT-INTRA-DUP', 'cast_date' => '2026-09-29'],
+            [
+                ['sand_casting_casting_order_line_id' => $line1->id, 'qty_good' => 20, 'qty_reject' => 0],
+                ['sand_casting_casting_order_line_id' => $line2->id, 'qty_good' => 20, 'qty_reject' => 0],
+            ],
+            $this->ppicUser->id
+        );
+    }
+
+    /**
+     * TEST 5: Request with multiple lines: Plan A + Plan B + Plan C -> ALLOW
+     */
+    public function test_request_with_multiple_distinct_plans_is_allowed(): void
+    {
+        $planA = $this->createPlan(['code' => 'P-A', 'item_name' => 'Item A', 'qty_planned' => 30]);
+        $planB = $this->createPlan(['code' => 'P-B', 'item_name' => 'Item B', 'qty_planned' => 30]);
+        $planC = $this->createPlan(['code' => 'P-C', 'item_name' => 'Item C', 'qty_planned' => 30]);
+
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T5', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $lineA = $order->lines()->create(['production_plan_id' => $planA->id, 'qty_ordered' => 30, 'code' => 'P-A', 'item_name' => 'Item A']);
+        $lineB = $order->lines()->create(['production_plan_id' => $planB->id, 'qty_ordered' => 30, 'code' => 'P-B', 'item_name' => 'Item B']);
+        $lineC = $order->lines()->create(['production_plan_id' => $planC->id, 'qty_ordered' => 30, 'code' => 'P-C', 'item_name' => 'Item C']);
+
+        $result = $this->service->recordResult(
+            ['heat_number' => 'HEAT-3PLANS', 'cast_date' => '2026-09-29'],
+            [
+                ['sand_casting_casting_order_line_id' => $lineA->id, 'qty_good' => 10, 'qty_reject' => 0],
+                ['sand_casting_casting_order_line_id' => $lineB->id, 'qty_good' => 10, 'qty_reject' => 0],
+                ['sand_casting_casting_order_line_id' => $lineC->id, 'qty_good' => 10, 'qty_reject' => 0],
+            ],
+            $this->ppicUser->id
+        );
+
+        $this->assertCount(3, $result->lines);
+        $this->assertDatabaseCount('sand_casting_casting_result_lines', 3);
+    }
+
+    /**
+     * TEST 6: Request with Plan A + Plan A (same line repeated) -> REJECT
+     */
+    public function test_request_with_same_line_repeated_is_rejected(): void
+    {
+        $planA = $this->createPlan(['code' => 'P-A', 'item_name' => 'Item A', 'qty_planned' => 50]);
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T6', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $lineA = $order->lines()->create(['production_plan_id' => $planA->id, 'qty_ordered' => 50, 'code' => 'P-A', 'item_name' => 'Item A']);
+
+        $this->expectException(\App\Exceptions\DuplicateCastingResultException::class);
+
+        $this->service->recordResult(
+            ['heat_number' => 'HEAT-REPEAT', 'cast_date' => '2026-09-29'],
+            [
+                ['sand_casting_casting_order_line_id' => $lineA->id, 'qty_good' => 10, 'qty_reject' => 0],
+                ['sand_casting_casting_order_line_id' => $lineA->id, 'qty_good' => 15, 'qty_reject' => 0],
+            ],
+            $this->ppicUser->id
+        );
+    }
+
+    /**
+     * TEST 7: Existing duplicate historical data remains readable by system
+     */
+    public function test_existing_duplicate_historical_data_remains_readable(): void
+    {
+        $plan = $this->createPlan(['code' => 'S784', 'item_name' => 'SS304 JIS 10K 1-1/2"', 'qty_planned' => 100]);
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-HIST-01', 'scheduled_date' => '2026-09-18', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => 'S784', 'item_name' => 'SS304 JIS 10K 1-1/2"']);
+
+        // Simulate 2 historical result headers with same heat and same line
+        $histResult1 = SandCastingCastingResult::create(['heat_number' => 'A217092602', 'cast_date' => '2026-09-17', 'recorded_by' => $this->ppicUser->id]);
+        $line1 = $histResult1->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-20260917-0015',
+            'qty_good' => 36,
+            'qty_reject' => 0,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        $histResult2 = SandCastingCastingResult::create(['heat_number' => 'A217092602', 'cast_date' => '2026-09-17', 'recorded_by' => $this->ppicUser->id]);
+        $line2 = $histResult2->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-20260917-0035',
+            'qty_good' => 36,
+            'qty_reject' => 0,
+            'current_stage' => 'netto',
+        ]);
+
+        // Show endpoint works
+        $response1 = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.show', $histResult1));
+        $response1->assertOk();
+        $response1->assertSee('KTR-20260917-0015');
+
+        $response2 = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.show', $histResult2));
+        $response2->assertOk();
+        $response2->assertSee('KTR-20260917-0035');
+
+        // Kitir print preview works
+        $responseKitir = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$histResult1, $line1]));
+        $responseKitir->assertOk();
+        $responseKitir->assertSee('KTR-20260917-0015');
+    }
+
+    /**
+     * TEST 8: If duplicate found on line 4 of 5 lines -> 0 lines inserted (Atomic Rollback)
+     */
+    public function test_no_partial_insert_if_duplicate_found_in_multi_line_request(): void
+    {
+        $plan1 = $this->createPlan(['code' => 'P-1', 'item_name' => 'Item 1']);
+        $plan2 = $this->createPlan(['code' => 'P-2', 'item_name' => 'Item 2']);
+        $plan3 = $this->createPlan(['code' => 'P-3', 'item_name' => 'Item 3']);
+        $plan4 = $this->createPlan(['code' => 'P-4', 'item_name' => 'Item 4']);
+        $plan5 = $this->createPlan(['code' => 'P-5', 'item_name' => 'Item 5']);
+
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T8', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $l1 = $order->lines()->create(['production_plan_id' => $plan1->id, 'qty_ordered' => 10, 'code' => 'P-1', 'item_name' => 'Item 1']);
+        $l2 = $order->lines()->create(['production_plan_id' => $plan2->id, 'qty_ordered' => 10, 'code' => 'P-2', 'item_name' => 'Item 2']);
+        $l3 = $order->lines()->create(['production_plan_id' => $plan3->id, 'qty_ordered' => 10, 'code' => 'P-3', 'item_name' => 'Item 3']);
+        $l4 = $order->lines()->create(['production_plan_id' => $plan4->id, 'qty_ordered' => 10, 'code' => 'P-4', 'item_name' => 'Item 4']);
+        $l5 = $order->lines()->create(['production_plan_id' => $plan5->id, 'qty_ordered' => 10, 'code' => 'P-5', 'item_name' => 'Item 5']);
+
+        // Pre-record Plan 4 in HEAT-ATOMIC
+        $this->service->recordResult(
+            ['heat_number' => 'HEAT-ATOMIC', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $l4->id, 'qty_good' => 5, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+
+        $this->assertDatabaseCount('sand_casting_casting_result_lines', 1);
+        $this->assertDatabaseCount('sand_casting_casting_results', 1);
+
+        // Now attempt to record 5 lines for HEAT-ATOMIC where line 4 is duplicate Plan 4
+        try {
+            $this->service->recordResult(
+                ['heat_number' => 'HEAT-ATOMIC', 'cast_date' => '2026-09-29'],
+                [
+                    ['sand_casting_casting_order_line_id' => $l1->id, 'qty_good' => 5, 'qty_reject' => 0],
+                    ['sand_casting_casting_order_line_id' => $l2->id, 'qty_good' => 5, 'qty_reject' => 0],
+                    ['sand_casting_casting_order_line_id' => $l3->id, 'qty_good' => 5, 'qty_reject' => 0],
+                    ['sand_casting_casting_order_line_id' => $l4->id, 'qty_good' => 5, 'qty_reject' => 0], // DUPLICATE!
+                    ['sand_casting_casting_order_line_id' => $l5->id, 'qty_good' => 5, 'qty_reject' => 0],
+                ],
+                $this->ppicUser->id
+            );
+            $this->fail('Should have thrown DuplicateCastingResultException');
+        } catch (\App\Exceptions\DuplicateCastingResultException $e) {
+            // Assert no new lines were saved (remains exactly 1)
+            $this->assertDatabaseCount('sand_casting_casting_result_lines', 1);
+            $this->assertDatabaseCount('sand_casting_casting_results', 1);
+        }
+    }
+
+    /**
+     * TEST 9: Duplicate rejection returns structured info via Controller HTTP and JSON
+     */
+    public function test_duplicate_rejection_returns_structured_payload_via_http(): void
+    {
+        $plan = $this->createPlan(['code' => '268ET001', 'item_name' => '2" JIS 10K', 'qty_planned' => 100]);
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T9', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $line = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => '268ET001', 'item_name' => '2" JIS 10K']);
+
+        // First creation
+        $res = $this->service->recordResult(
+            ['heat_number' => 'A229092602', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 40, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+        $ktrNumber = $res->lines->first()->traveler_number;
+
+        $payload = [
+            'heat_number' => 'A229092602',
+            'cast_date' => '2026-09-29',
+            'items' => [
+                ['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 30, 'qty_reject' => 0],
+            ],
+        ];
+
+        // 1. JSON Request -> 422 with structured payload
+        $jsonResponse = $this->actingAs($this->ppicUser)
+            ->postJson(route('sand-casting.casting-results.store'), $payload);
+
+        $jsonResponse->assertStatus(422);
+        $jsonResponse->assertJson([
+            'success' => false,
+            'error_type' => 'DUPLICATE_CASTING_RESULT',
+            'duplicate_info' => [
+                'heat_number' => 'A229092602',
+                'production_plan_id' => $plan->id,
+                'production_code' => '268ET001',
+                'item_name' => '2" JIS 10K',
+                'existing_traveler_number' => $ktrNumber,
+                'existing_qty_good' => 40,
+                'existing_current_stage' => 'NETTO',
+            ],
+        ]);
+
+        // 2. Normal Web Form Request -> Redirect back with session flash
+        $webResponse = $this->actingAs($this->ppicUser)
+            ->post(route('sand-casting.casting-results.store'), $payload);
+
+        $webResponse->assertRedirect();
+        $webResponse->assertSessionHas('duplicate_error');
+        $webResponse->assertSessionHas('duplicate_info');
+    }
+
+    /**
+     * TEST 10: Existing KTR does not change when second submission is rejected
+     */
+    public function test_existing_ktr_remains_unmodified_when_duplicate_is_rejected(): void
+    {
+        $plan = $this->createPlan(['code' => '268ET001', 'item_name' => '2" JIS 10K', 'qty_planned' => 100]);
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T10', 'scheduled_date' => '2026-09-29', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $line = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 100, 'code' => '268ET001', 'item_name' => '2" JIS 10K']);
+
+        $result = $this->service->recordResult(
+            ['heat_number' => 'HEAT-IMMUTABLE', 'cast_date' => '2026-09-29'],
+            [['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 40, 'qty_reject' => 0]],
+            $this->ppicUser->id
+        );
+        $firstLine = $result->lines->first();
+
+        // Attempt second submission
+        $payload = [
+            'heat_number' => 'HEAT-IMMUTABLE',
+            'cast_date' => '2026-09-29',
+            'items' => [
+                ['sand_casting_casting_order_line_id' => $line->id, 'qty_good' => 30, 'qty_reject' => 0],
+            ],
+        ];
+
+        $this->actingAs($this->ppicUser)->post(route('sand-casting.casting-results.store'), $payload);
+
+        // Verify original KTR is unmodified
+        $refreshed = $firstLine->fresh();
+        $this->assertEquals(40, $refreshed->qty_good);
+        $this->assertEquals(0, $refreshed->qty_reject);
+        $this->assertEquals('netto', $refreshed->current_stage);
+        $this->assertEquals($firstLine->traveler_number, $refreshed->traveler_number);
+    }
 }

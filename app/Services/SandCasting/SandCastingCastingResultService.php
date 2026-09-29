@@ -2,9 +2,11 @@
 
 namespace App\Services\SandCasting;
 
+use App\Exceptions\DuplicateCastingResultException;
 use App\Jobs\SyncCastingResultToMasterDataJob;
 use App\Models\SandCastingCastingOrderLine;
 use App\Models\SandCastingCastingResult;
+use App\Models\SandCastingCastingResultLine;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -21,6 +23,7 @@ class SandCastingCastingResultService
      * @param  array  $linesData  Array of ['sand_casting_casting_order_line_id', 'qty_good', 'qty_reject', 'unit_weight_kg', 'total_weight_kg', 'notes']
      * @param  int  $recordedBy  User ID
      *
+     * @throws DuplicateCastingResultException
      * @throws InvalidArgumentException
      */
     public function recordResult(
@@ -49,6 +52,7 @@ class SandCastingCastingResultService
             $validLines = [];
 
             $seenLineIds = [];
+            $seenPlanIds = [];
 
             foreach ($linesData as $index => $itemData) {
                 $lineId = (int) ($itemData['sand_casting_casting_order_line_id'] ?? 0);
@@ -64,15 +68,80 @@ class SandCastingCastingResultService
                     continue;
                 }
 
-                if (in_array($lineId, $seenLineIds, true)) {
-                    throw new InvalidArgumentException("Baris Perintah Cor ID {$lineId} tidak boleh dimasukkan lebih dari satu kali dalam satu Heat.");
-                }
-                $seenLineIds[] = $lineId;
-
                 // Lock the individual order line
                 $orderLine = SandCastingCastingOrderLine::lockForUpdate()->find($lineId);
                 if (! $orderLine) {
                     throw new InvalidArgumentException("Baris Perintah Cor ID {$lineId} tidak valid atau tidak ditemukan.");
+                }
+
+                $planId = $orderLine->production_plan_id;
+                $planCode = $orderLine->productionPlan ? $orderLine->productionPlan->code : ($orderLine->code ?? '-');
+                $planItem = $orderLine->productionPlan ? $orderLine->productionPlan->item_name : ($orderLine->item_name ?? '-');
+
+                // 1. Intra-request duplicate check by order line ID
+                if (in_array($lineId, $seenLineIds, true)) {
+                    throw new DuplicateCastingResultException(
+                        "Baris Perintah Cor ID {$lineId} ({$planCode} - {$planItem}) tidak boleh dimasukkan lebih dari satu kali dalam satu Heat.",
+                        [
+                            'heat_number' => $heatNumber,
+                            'production_plan_id' => $planId,
+                            'production_code' => $planCode,
+                            'item_name' => $planItem,
+                            'existing_traveler_number' => 'Dalam Request Ini',
+                            'existing_qty_good' => $qtyGood,
+                            'existing_current_stage' => 'NEW',
+                        ]
+                    );
+                }
+                $seenLineIds[] = $lineId;
+
+                // 2. Intra-request duplicate check by production plan ID
+                if ($planId && in_array($planId, $seenPlanIds, true)) {
+                    throw new DuplicateCastingResultException(
+                        "Item {$planCode} ({$planItem}) dimasukkan lebih dari satu kali dalam request Heat yang sama.",
+                        [
+                            'heat_number' => $heatNumber,
+                            'production_plan_id' => $planId,
+                            'production_code' => $planCode,
+                            'item_name' => $planItem,
+                            'existing_traveler_number' => 'Dalam Request Ini',
+                            'existing_qty_good' => $qtyGood,
+                            'existing_current_stage' => 'NEW',
+                        ]
+                    );
+                }
+                if ($planId) {
+                    $seenPlanIds[] = $planId;
+                }
+
+                // 3. Database cross-request duplicate check: SAME HEAT + SAME PRODUCTION PLAN
+                if ($planId) {
+                    $existingResultLine = SandCastingCastingResultLine::where('production_plan_id', $planId)
+                        ->whereHas('castingResult', function ($q) use ($heatNumber) {
+                            $q->where('heat_number', $heatNumber);
+                        })
+                        ->with(['productionPlan', 'castingResult'])
+                        ->first();
+
+                    if ($existingResultLine) {
+                        $existingPlan = $existingResultLine->productionPlan ?? $orderLine->productionPlan;
+                        $existingCode = $existingPlan ? $existingPlan->code : ($orderLine->code ?? '-');
+                        $existingItem = $existingPlan ? $existingPlan->item_name : ($orderLine->item_name ?? '-');
+                        $existingStage = strtoupper(str_replace('_', ' ', $existingResultLine->current_stage ?? 'netto'));
+
+                        throw new DuplicateCastingResultException(
+                            "Hasil Cor untuk Heat '{$heatNumber}' dengan Item '{$existingCode}' ({$existingItem}) sudah pernah dicatat dengan nomor KTR {$existingResultLine->traveler_number} (Qty Good: {$existingResultLine->qty_good} pcs, Stage: {$existingStage}).",
+                            [
+                                'heat_number' => $heatNumber,
+                                'production_plan_id' => $planId,
+                                'production_code' => $existingCode,
+                                'item_name' => $existingItem,
+                                'existing_traveler_number' => $existingResultLine->traveler_number,
+                                'existing_qty_good' => $existingResultLine->qty_good,
+                                'existing_current_stage' => $existingStage,
+                            ]
+                        );
+                    }
                 }
 
                 $order = $orderLine->castingOrder;
