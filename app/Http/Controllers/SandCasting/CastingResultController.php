@@ -220,9 +220,21 @@ class CastingResultController extends Controller
         ]);
 
         $generator = new BarcodeGeneratorPNG;
-        $barcodeBase64 = base64_encode($generator->getBarcode($line->traveler_number, $generator::TYPE_CODE_128, 3, 90));
+        $barcodeBase64 = base64_encode($generator->getBarcode($line->traveler_number, $generator::TYPE_CODE_128, 2, 45));
 
-        return view('sand-casting.casting-results.kitir', compact('castingResult', 'line', 'barcodeBase64'));
+        $qrRenderer = new \BaconQrCode\Renderer\ImageRenderer(
+            new \BaconQrCode\Renderer\RendererStyle\RendererStyle(200, 1),
+            new \BaconQrCode\Renderer\Image\SvgImageBackEnd
+        );
+        $qrWriter = new \BaconQrCode\Writer($qrRenderer);
+        $rawQrSvg = $qrWriter->writeString(
+            $line->traveler_number,
+            \BaconQrCode\Encoder\Encoder::DEFAULT_BYTE_MODE_ENCODING,
+            \BaconQrCode\Common\ErrorCorrectionLevel::H()
+        );
+        $qrCodeSvg = preg_replace('/^<\?xml[^>]*\?>\s*/i', '', $rawQrSvg);
+
+        return view('sand-casting.casting-results.kitir', compact('castingResult', 'line', 'barcodeBase64', 'qrCodeSvg'));
     }
 
     /**

@@ -141,8 +141,8 @@
             <!-- 3. Main Section: Left Panel (Heat/Barcode/Item/PCOR/KTR) & Right Panel (Full-height Process Table) -->
             <div class="flex flex-row w-full items-stretch">
 
-                <!-- Left Panel: Heat Number, Horizontal Barcode, Prominently Scaled Wrapped Item Name, PCOR & KITIR -->
-                <div class="w-[76mm] shrink-0 border-r-black-solid p-2.5 flex flex-col justify-between bg-white">
+                <!-- Left Panel: Heat Number, Prominently Scaled Item Name, Dual Machine-Readable Code (QR + Code 128) -->
+                <div class="w-[82mm] shrink-0 border-r-black-solid p-2.5 flex flex-col justify-between bg-white">
                     <div>
                         <!-- Heat Number -->
                         <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 leading-none">HEAT NUMBER :</div>
@@ -151,14 +151,6 @@
                         </div>
                         <div class="text-[9px] font-mono text-slate-700 leading-snug border-b border-slate-200 pb-1 mb-2">
                             Tgl : {{ $castingResult->cast_date ? $castingResult->cast_date->format('d/m/Y') : '-' }} | F : {{ $castingResult->furnace ?: '-' }} | Shift : {{ $castingResult->shift ?: '-' }}
-                        </div>
-
-                        <!-- Horizontal Barcode in Left Panel -->
-                        <div class="bg-slate-50/70 border border-slate-300 rounded p-1.5 mb-2.5 flex flex-col items-center justify-center">
-                            <img src="data:image/png;base64,{{ $barcodeBase64 }}" alt="Barcode" class="h-8 w-full max-w-[220px] object-fill">
-                            <div class="font-mono font-black text-xs tracking-widest text-black mt-0.5 leading-none">
-                                {{ $line->traveler_number }}
-                            </div>
                         </div>
 
                         <!-- Item Name (Prominent & Flexible multi-line wrapping) -->
@@ -170,15 +162,39 @@
                         </div>
                     </div>
 
-                    <!-- PCOR & KITIR Identifiers -->
-                    <div class="space-y-1 text-[10px] font-mono pt-1">
-                        <div class="bg-slate-50/80 border border-slate-300 rounded p-1.5">
-                            <div class="text-[8px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5">PCOR :</div>
-                            <div class="font-bold text-black text-xs truncate leading-tight">{{ $line->castingOrderLine->castingOrder->casting_order_number ?? '-' }}</div>
+                    <!-- Dual Machine-Readable Codes (QR Code Primary + Code 128 Backup) below NAMA ITEM -->
+                    <div class="grid grid-cols-12 gap-1.5 items-stretch pt-1">
+                        <!-- Left: Large QR Code (Primary Camera Scanning) -->
+                        <div class="col-span-6 bg-slate-50/80 border border-slate-300 rounded p-1 flex flex-col items-center justify-between">
+                            <div class="text-[7.5px] font-sans font-black text-slate-500 uppercase tracking-wider leading-none text-center">PRIMARY SCAN</div>
+                            <div class="w-full aspect-square flex items-center justify-center p-0.5 bg-white border border-slate-200 rounded my-0.5 [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full">
+                                {!! $qrCodeSvg !!}
+                            </div>
+                            <div class="text-[7px] font-mono font-bold text-slate-600 leading-none text-center">QR (ECC LEVEL H)</div>
                         </div>
-                        <div class="bg-slate-50/80 border border-slate-300 rounded p-1.5">
-                            <div class="text-[8px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5">KITIR :</div>
-                            <div class="font-bold text-black text-xs truncate leading-tight">{{ $line->traveler_number }}</div>
+
+                        <!-- Right: PCOR, KTR, and Backup Code 128 -->
+                        <div class="col-span-6 flex flex-col justify-between gap-1">
+                            <!-- PCOR -->
+                            <div class="bg-slate-50/80 border border-slate-300 rounded p-1">
+                                <div class="text-[7.5px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5">PCOR :</div>
+                                <div class="font-mono font-bold text-black text-[10px] truncate leading-tight">{{ $line->castingOrderLine->castingOrder->casting_order_number ?? '-' }}</div>
+                            </div>
+
+                            <!-- KTR -->
+                            <div class="bg-slate-50/80 border border-slate-300 rounded p-1">
+                                <div class="text-[7.5px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5">KTR :</div>
+                                <div class="font-mono font-black text-black text-[10px] truncate leading-tight">{{ $line->traveler_number }}</div>
+                            </div>
+
+                            <!-- Backup Code 128 Barcode -->
+                            <div class="bg-slate-50/80 border border-slate-300 rounded p-1 flex flex-col items-center justify-center">
+                                <div class="text-[7px] font-sans font-bold text-slate-500 uppercase leading-none mb-0.5 text-center">BACKUP CODE 128</div>
+                                <img src="data:image/png;base64,{{ $barcodeBase64 }}" alt="Code 128 Barcode" class="h-6 w-full max-w-[110px] object-fill">
+                                <div class="font-mono font-bold text-[8px] tracking-tight text-black mt-0.5 leading-none text-center">
+                                    {{ $line->traveler_number }}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

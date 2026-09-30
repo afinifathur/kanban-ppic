@@ -495,4 +495,81 @@ class KitirProduksiTest extends TestCase
         $this->assertEquals(80, $resultLine->qty_good);
         $this->assertEquals(5, $resultLine->print_count);
     }
+
+    public function test_kitir_renders_dual_barcode_qr_and_code128_with_identical_ktr_payload(): void
+    {
+        $plan = $this->createPlan();
+
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260928-0001',
+            'scheduled_date' => '2026-09-28',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+            'customer' => $plan->customer,
+            'size' => '3"',
+            'aisi' => 'SS304',
+        ]);
+
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'H20260928-01',
+            'cast_date' => '2026-09-28',
+            'furnace' => 'F-02',
+            'shift' => '2',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+
+        $traveler = 'KTR-20260928-0020';
+
+        $resultLine = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $traveler,
+            'qty_good' => 150,
+            'qty_reject' => 0,
+            'unit_weight_kg' => 4.5,
+            'total_weight_kg' => 675.0,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.kitir', [$result, $resultLine]));
+
+        $response->assertOk();
+
+        // 1. Dual machine-readable codes present
+        $response->assertSee('<svg', false); // QR SVG element
+        $response->assertSee('PRIMARY SCAN');
+        $response->assertSee('QR (ECC LEVEL H)');
+        $response->assertSee('BACKUP CODE 128');
+        $response->assertSee('data:image/png;base64,', false); // Code 128 Image
+
+        // 2. Both encode identical KTR string
+        $viewData = $response->viewData('qrCodeSvg');
+        $this->assertNotEmpty($viewData);
+        $this->assertStringContainsString('<svg', $viewData);
+        $this->assertStringNotContainsString('<?xml', $viewData); // Clean inline SVG
+
+        $barcodeBase64 = $response->viewData('barcodeBase64');
+        $this->assertNotEmpty($barcodeBase64);
+
+        // 3. Identifiers remain unchanged
+        $response->assertSee('PCOR-20260928-0001');
+        $response->assertSee('KTR-20260928-0020');
+        $response->assertSee('H20260928-01');
+        $response->assertSee($plan->code);
+        $response->assertSee($plan->item_name);
+        $response->assertSee('150 PCS');
+
+        // 4. No external QR / barcode CDN URLs
+        $content = $response->getContent();
+        $this->assertStringNotContainsString('api.qrserver.com', $content);
+        $this->assertStringNotContainsString('chart.googleapis.com', $content);
+        $this->assertStringNotContainsString('quickchart.io', $content);
+    }
 }
