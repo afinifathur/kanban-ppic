@@ -232,6 +232,8 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/casting-results/create', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'create'])->name('casting-results.create');
             Route::post('/casting-results', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'store'])->name('casting-results.store');
             Route::get('/casting-results/{castingResult}', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'show'])->name('casting-results.show');
+            Route::get('/casting-results/{castingResult}/edit', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'edit'])->name('casting-results.edit');
+            Route::put('/casting-results/{castingResult}', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'update'])->name('casting-results.update');
             Route::get('/casting-results/{castingResult}/lines/{line}/kitir', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'kitir'])->name('casting-results.kitir');
 
             // Backward compatibility shortcut: redirect /casting-orders/{castingOrder}/results/create to pool create with filter

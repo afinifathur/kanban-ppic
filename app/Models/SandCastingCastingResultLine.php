@@ -18,6 +18,7 @@ class SandCastingCastingResultLine extends Model
         'notes',
         'printed_at',
         'print_count',
+        'needs_reprint',
         'last_printed_by',
         'current_stage',
         'queue_position',
@@ -28,6 +29,7 @@ class SandCastingCastingResultLine extends Model
 
     protected $attributes = [
         'is_urgent' => false,
+        'needs_reprint' => false,
     ];
 
     protected $casts = [
@@ -37,6 +39,7 @@ class SandCastingCastingResultLine extends Model
         'total_weight_kg' => 'decimal:2',
         'printed_at' => 'datetime',
         'print_count' => 'integer',
+        'needs_reprint' => 'boolean',
         'queue_position' => 'integer',
         'is_urgent' => 'boolean',
         'urgent_set_at' => 'datetime',
@@ -70,6 +73,21 @@ class SandCastingCastingResultLine extends Model
     public function stageExecutions()
     {
         return $this->hasMany(SandCastingStageExecution::class, 'sand_casting_casting_result_line_id');
+    }
+
+    public function corrections()
+    {
+        return $this->hasMany(SandCastingCastingResultCorrection::class, 'sand_casting_casting_result_line_id')
+            ->orderBy('created_at', 'desc');
+    }
+
+    public function hasPhysicalExecution(): bool
+    {
+        if ($this->relationLoaded('stageExecutions')) {
+            return $this->stageExecutions->isNotEmpty();
+        }
+
+        return $this->stageExecutions()->exists();
     }
 
     public function getQtyTotalAttribute(): int

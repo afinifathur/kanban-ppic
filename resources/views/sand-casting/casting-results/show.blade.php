@@ -13,6 +13,11 @@
         </div>
 
         <div class="flex items-center gap-2">
+            @if(auth()->user() && (auth()->user()->hasRole('ppic') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('super_admin')))
+                <a href="{{ route('sand-casting.casting-results.edit', $castingResult) }}" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition">
+                    <i class="fas fa-edit"></i> Koreksi Hasil Cor
+                </a>
+            @endif
             <a href="{{ route('sand-casting.casting-results.index') }}" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition">
                 <i class="fas fa-arrow-left"></i> Daftar Hasil Cor
             </a>
@@ -33,6 +38,18 @@
                     <span>{{ session('success') }}</span>
                 </div>
                 <button type="button" onclick="this.parentElement.remove()" class="text-emerald-400 hover:text-emerald-600 text-sm">&times;</button>
+            </div>
+        @endif
+
+        @if($castingResult->lines->contains('needs_reprint', true))
+            <div class="bg-amber-50 border-2 border-amber-400 text-amber-950 p-4 rounded-xl shadow-sm flex items-start gap-3">
+                <i class="fas fa-triangle-exclamation text-amber-600 text-xl mt-0.5 shrink-0"></i>
+                <div>
+                    <div class="font-bold text-sm tracking-wide uppercase text-amber-900">PERLU CETAK ULANG KITIR</div>
+                    <p class="text-xs text-amber-800 mt-0.5">
+                        Kitir fisik versi sebelumnya sudah pernah dicetak. Setelah koreksi data identitas/kuantitas cor, Kitir lama tidak boleh digunakan lagi di lantai produksi. Silakan cetak ulang Kitir terbaru pada baris yang ditandai.
+                    </p>
+                </div>
             </div>
         @endif
 
@@ -222,7 +239,12 @@
                                         <i class="fas fa-barcode text-[10px] mr-1 text-slate-500"></i>
                                         {{ $line->traveler_number }}
                                     </span>
-                                    <div class="mt-1">
+                                    <div class="mt-1 flex flex-col items-center gap-1">
+                                        @if($line->needs_reprint)
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-400 animate-pulse shadow-sm">
+                                                <i class="fas fa-exclamation-triangle text-[9px] mr-1 text-amber-600"></i> PERLU REPRINT
+                                            </span>
+                                        @endif
                                         @if(($line->print_count ?? 0) === 0)
                                             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
                                                 BELUM CETAK
@@ -272,5 +294,80 @@
                 </table>
             </div>
         </div>
+
+        <!-- Audit Trail / Correction History Card -->
+        @php
+            $allCorrections = $castingResult->corrections;
+        @endphp
+        @if($allCorrections->isNotEmpty())
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div>
+                        <h2 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fas fa-clock-rotate-left text-amber-600"></i> Riwayat Koreksi Hasil Cor (Audit Trail)
+                        </h2>
+                        <p class="text-slate-400 text-[11px]">Catatan perubahan, nilai lama, nilai baru, alasan, dan pelaksana koreksi</p>
+                    </div>
+                    <span class="text-xs font-mono font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-sm">
+                        {{ $allCorrections->count() }} Perubahan Dicatat
+                    </span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                            <tr>
+                                <th class="p-3 text-left w-36">Waktu Koreksi</th>
+                                <th class="p-3 text-left w-24">Target</th>
+                                <th class="p-3 text-left w-32">KTR / Line</th>
+                                <th class="p-3 text-left w-32">Field</th>
+                                <th class="p-3 text-left">Nilai Lama</th>
+                                <th class="p-3 text-left">Nilai Baru</th>
+                                <th class="p-3 text-left">Alasan Koreksi</th>
+                                <th class="p-3 text-left w-36">Diubah Oleh</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            @foreach($allCorrections as $corr)
+                                <tr class="hover:bg-slate-50 transition">
+                                    <td class="p-3 font-mono text-slate-500 whitespace-nowrap">
+                                        {{ $corr->corrected_at ? $corr->corrected_at->format('d/m/Y H:i:s') : ($corr->created_at ? $corr->created_at->format('d/m/Y H:i:s') : '-') }}
+                                    </td>
+                                    <td class="p-3 font-semibold">
+                                        @if($corr->target_type === 'HEADER')
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                HEADER
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                LINE
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="p-3 font-mono font-bold text-slate-700">
+                                        {{ $corr->castingResultLine ? $corr->castingResultLine->traveler_number : 'Seluruh Heat' }}
+                                    </td>
+                                    <td class="p-3 font-mono font-bold text-slate-800">
+                                        {{ $corr->field_name }}
+                                    </td>
+                                    <td class="p-3 font-mono text-red-600 bg-red-50/50 rounded">
+                                        {{ $corr->old_value ?? '-' }}
+                                    </td>
+                                    <td class="p-3 font-mono font-bold text-emerald-700 bg-emerald-50/50 rounded">
+                                        {{ $corr->new_value ?? '-' }}
+                                    </td>
+                                    <td class="p-3 text-slate-600 italic">
+                                        {{ $corr->reason ?: '-' }}
+                                    </td>
+                                    <td class="p-3 font-medium text-slate-800">
+                                        {{ $corr->corrector->name ?? '-' }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
     </div>
 @endsection
