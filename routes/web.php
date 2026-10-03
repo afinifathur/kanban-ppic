@@ -278,6 +278,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/export/excel', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportExcel'])->name('export.excel');
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportPdf'])->name('export.pdf');
         });
+
+        // Production Status (Sand Casting Read Model)
+        Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
     });
 
     // Generic Scanner Endpoints (Direct alias)

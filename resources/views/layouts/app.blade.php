@@ -70,16 +70,29 @@
             }
         });
 
+        function toggleSandCastingMenu() {
+            if (typeof handleCollapsedClick === 'function' && handleCollapsedClick('sandCastingMenu', 'sandCastingMenuIcon')) return;
+            const menu = document.getElementById('sandCastingMenu') || document.getElementById('corPasirMenu');
+            const icon = document.getElementById('sandCastingMenuIcon') || document.getElementById('corPasirMenuIcon');
+            if (menu) menu.classList.toggle('hidden');
+            if (icon) icon.classList.toggle('rotate-90');
+        }
         function toggleCorPasirMenu() {
-            const menu = document.getElementById('corPasirMenu');
-            const icon = document.getElementById('corPasirMenuIcon');
+            toggleSandCastingMenu();
+        }
+
+        function toggleLostWaxMenu() {
+            if (typeof handleCollapsedClick === 'function' && handleCollapsedClick('lostWaxMenu', 'lostWaxMenuIcon')) return;
+            const menu = document.getElementById('lostWaxMenu');
+            const icon = document.getElementById('lostWaxMenuIcon');
             if (menu) menu.classList.toggle('hidden');
             if (icon) icon.classList.toggle('rotate-90');
         }
 
-        function toggleLostWaxMenu() {
-            const menu = document.getElementById('lostWaxMenu');
-            const icon = document.getElementById('lostWaxMenuIcon');
+        function toggleSettingsMenu() {
+            if (typeof handleCollapsedClick === 'function' && handleCollapsedClick('settingsMenu', 'settingsMenuIcon')) return;
+            const menu = document.getElementById('settingsMenu');
+            const icon = document.getElementById('settingsMenuIcon');
             if (menu) menu.classList.toggle('hidden');
             if (icon) icon.classList.toggle('rotate-90');
         }
@@ -242,50 +255,21 @@
                 </li>
                 <li>
                     <a href="{{ route('dashboard') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('dashboard') ? 'bg-blue-600 text-white' : 'text-slate-300' }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('dashboard') ? 'bg-blue-600 text-white font-medium' : 'text-slate-300' }}"
                         title="Dashboard">
                         <i class="fas fa-chart-line w-6 shrink-0 text-center"></i>
                         <span class="text-sm sidebar-text ml-2">Dashboard</span>
                     </a>
                 </li>
-                <li>
-                    <a href="{{ route('dashboard.defects') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('dashboard.defects') ? 'bg-blue-600 text-white border-l-4 border-red-400' : 'text-slate-300' }}"
-                        title="Dashboard Kerusakan">
-                        <i class="fas fa-chart-pie w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Dashboard Kerusakan</span>
-                    </a>
-                </li>
 
-                <!-- 4. MONITORING -->
-                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">Monitoring</span>
-                </li>
-                <li>
-                    <a href="{{ route('lost-wax.production-status') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'bg-blue-600 text-white' : 'text-slate-300' }}"
-                        title="Production Status">
-                        <i class="fas fa-table w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Production Status</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ route('lost-wax.rack-monitor.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.rack-monitor.index') ? 'bg-blue-600 text-white' : 'text-slate-300' }}"
-                        title="Rack Monitoring">
-                        <i class="fas fa-desktop w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Rack Monitoring</span>
-                    </a>
-                </li>
-
-                <!-- 2. PLANNING -->
+                <!-- 2. PLANNING / SHARED -->
                 @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Planning</span>
                 </li>
                 <li>
                     <a href="{{ route('plan.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('plan.index') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}"
+                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('plan.index') ? 'bg-blue-600 text-white font-medium border-l-4 border-blue-300' : 'text-slate-300' }}"
                         title="Daftar Rencana">
                         <i class="fas fa-clipboard-list w-6 shrink-0 text-center"></i>
                         <span class="text-sm sidebar-text ml-2">Daftar Rencana</span>
@@ -293,26 +277,24 @@
                 </li>
                 @endif
 
-                <!-- 3. PRODUKSI -->
+                <!-- 3. SAND CASTING -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">Produksi</span>
+                    <span class="sidebar-text">Sand Casting</span>
                 </li>
-
-                <!-- 3A. COR PASIR -->
                 @php
-                    $isCorPasirActive = request()->is('kanban*') || (request()->is('input*') && request()->query('source') !== 'lost-wax') || request()->is('sand-casting*');
+                    $isSandCastingActive = request()->is('sand-casting*');
                 @endphp
                 <li>
-                    <button onclick="toggleCorPasirMenu()"
-                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ $isCorPasirActive ? 'bg-slate-800/80 text-blue-400 border-l-4 border-blue-500 font-bold' : '' }}"
-                        title="Cor Pasir">
-                        <i class="fas fa-cubes w-6 shrink-0 text-center mr-2 {{ $isCorPasirActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
-                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ $isCorPasirActive ? 'text-blue-400' : 'text-slate-555' }}">Cor Pasir</span>
-                        <i id="corPasirMenuIcon"
-                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ $isCorPasirActive ? 'rotate-90 text-blue-400' : '' }}"></i>
+                    <button onclick="toggleSandCastingMenu()"
+                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ $isSandCastingActive ? 'bg-slate-800/80 text-blue-400 border-l-4 border-blue-500 font-bold' : '' }}"
+                        title="Sand Casting">
+                        <i class="fas fa-cubes w-6 shrink-0 text-center mr-2 {{ $isSandCastingActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
+                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ $isSandCastingActive ? 'text-blue-400' : 'text-slate-555' }}">Sand Casting</span>
+                        <i id="sandCastingMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ $isSandCastingActive ? 'rotate-90 text-blue-400' : '' }}"></i>
                     </button>
-                    <ul id="corPasirMenu"
-                        class="{{ $isCorPasirActive ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                    <ul id="sandCastingMenu"
+                        class="{{ $isSandCastingActive ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
                         @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
                             <a href="{{ route('sand-casting.casting-orders.plans') }}"
@@ -332,11 +314,27 @@
                         </li>
                         @endif
                         <li>
+                            <a href="{{ route('sand-casting.scan.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.scan.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                title="Scanner Production">
+                                <i class="fas fa-qrcode w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Scanner Production</span>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ route('sand-casting.kanban.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.kanban.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
                                 title="Kanban Floor">
                                 <i class="fas fa-th-list w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
                                 <span class="text-sm sidebar-text">Kanban Floor</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('sand-casting.report.production.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.production.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
+                                title="Laporan Produksi">
+                                <i class="fas fa-file-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Laporan Produksi</span>
                             </a>
                         </li>
                         @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || in_array(strtolower(trim((string) Auth::user()->email)), ['adminppicfl@peroniks.com', 'ppicflange@peroniks.com', 'adminppicpf@peroniks.com'])))
@@ -359,69 +357,27 @@
                             </a>
                         </li>
                         @endif
-                        <li>
-                            <a href="{{ route('sand-casting.report.production.index') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.production.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
-                                title="Laporan Produksi">
-                                <i class="fas fa-file-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Laporan Produksi</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('sand-casting.scan.netto') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.scan.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
-                                title="Scanner Netto">
-                                <i class="fas fa-qrcode w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Scanner Netto</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ route('kanban.index', 'rencana_cor') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('kanban/rencana_cor') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
-                                title="Rencana Cor">
-                                <i class="fas fa-columns w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Rencana Cor</span>
-                            </a>
-                        </li>
-                        @php
-                            $corPasirDepts = [
-                                'cor' => 'fa-fire',
-                                'netto' => 'fa-cut',
-                                'bubut_od' => 'fa-sync-alt',
-                                'bubut_cnc' => 'fa-microchip',
-                                'bor' => 'fa-screwdriver',
-                                'finish' => 'fa-clipboard-check'
-                            ];
-                        @endphp
-                        @foreach($corPasirDepts as $dept => $icon)
-                            <li>
-                                <a href="{{ route('input.index', $dept) }}"
-                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ (request()->is('input/' . $dept) && request()->query('source') !== 'lost-wax') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
-                                    title="{{ $dept === 'cor' ? 'Cor Pasir' : ucfirst(str_replace('_', ' ', $dept)) }}">
-                                    <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                    <span class="text-sm sidebar-text">{{ $dept === 'cor' ? 'Cor Pasir' : ucfirst(str_replace('_', ' ', $dept)) }}</span>
-                                </a>
-                            </li>
-                        @endforeach
                     </ul>
                 </li>
 
-                <!-- 3B. LOST WAX -->
+                <!-- 4. LOST WAX -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">Lost Wax</span>
+                </li>
                 @php
-                    $isLostWaxActive = request()->is('lost-wax*') || (request()->is('input*') && request()->query('source') === 'lost-wax');
-                    $isLostWaxSidebarOpen = $isLostWaxActive && !request()->routeIs('lost-wax.production-status');
+                    $isLostWaxActive = request()->is('lost-wax*');
                 @endphp
                 <li>
                     <button onclick="toggleLostWaxMenu()"
-                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ $isLostWaxSidebarOpen ? 'bg-slate-800/80 text-amber-400 border-l-4 border-amber-400 font-bold' : '' }}"
+                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ $isLostWaxActive ? 'bg-slate-800/80 text-amber-400 border-l-4 border-amber-400 font-bold' : '' }}"
                         title="Lost Wax">
-                        <i class="fas fa-layer-group w-6 shrink-0 text-center mr-2 {{ $isLostWaxSidebarOpen ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
-                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ $isLostWaxSidebarOpen ? 'text-amber-400' : 'text-slate-555' }}">Lost Wax</span>
+                        <i class="fas fa-layer-group w-6 shrink-0 text-center mr-2 {{ $isLostWaxActive ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
+                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ $isLostWaxActive ? 'text-amber-400' : 'text-slate-555' }}">Lost Wax</span>
                         <i id="lostWaxMenuIcon"
-                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ $isLostWaxSidebarOpen ? 'rotate-90 text-amber-400' : '' }}"></i>
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ $isLostWaxActive ? 'rotate-90 text-amber-400' : '' }}"></i>
                     </button>
                     <ul id="lostWaxMenu"
-                        class="{{ $isLostWaxSidebarOpen ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        class="{{ $isLostWaxActive ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
                         @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
                             <a href="{{ route('lost-wax.print-orders.plans') }}"
@@ -482,133 +438,42 @@
                             </a>
                         </li>
                         @endif
-                        @php
-                            $lostWaxDepts = [
-                                'cor' => 'fa-fire',
-                                'netto' => 'fa-cut',
-                                'bubut_od' => 'fa-sync-alt',
-                                'bubut_cnc' => 'fa-microchip',
-                                'finish' => 'fa-clipboard-check'
-                            ];
-                        @endphp
-                        @foreach($lostWaxDepts as $dept => $icon)
-                            <li>
-                                <a href="{{ route('input.index', ['dept' => $dept, 'source' => 'lost-wax']) }}"
-                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ (request()->is('input/' . $dept) && request()->query('source') === 'lost-wax') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                    title="{{ $dept === 'cor' ? 'Cor Lost Wax' : ucfirst(str_replace('_', ' ', $dept)) }}">
-                                    <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                    <span class="text-sm sidebar-text">{{ $dept === 'cor' ? 'Cor Lost Wax' : ucfirst(str_replace('_', ' ', $dept)) }}</span>
-                                </a>
-                            </li>
-                        @endforeach
+                        <li>
+                            <a href="{{ route('lost-wax.production-status') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Production Status">
+                                <i class="fas fa-table w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Production Status</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.rack-monitor.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.rack-monitor.index') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Rack Monitoring">
+                                <i class="fas fa-desktop w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Rack Monitoring</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.quality.defects.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.quality.defects.*') ? 'text-white font-medium border-l-2 border-rose-400' : 'text-slate-300' }}"
+                                title="Rekap Kerusakan">
+                                <i class="fas fa-shield-alt w-4 shrink-0 text-center text-xs text-rose-400 mr-2"></i>
+                                <span class="text-sm sidebar-text">Rekap Kerusakan</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.report.production.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.report.production.*') ? 'text-white font-medium border-l-2 border-blue-400' : 'text-slate-300' }}"
+                                title="Report Produksi">
+                                <i class="fas fa-chart-line w-4 shrink-0 text-center text-xs text-blue-400 mr-2"></i>
+                                <span class="text-sm sidebar-text">Report Produksi</span>
+                            </a>
+                        </li>
                     </ul>
                 </li>
 
-                <!-- 5. WIP -->
-                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">WIP</span>
-                </li>
-                <li>
-                    <a href="{{ route('wip.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ (request()->is('wip') || request()->is('wip/*')) ? 'bg-blue-600 text-white border-l-4 border-emerald-400' : 'text-slate-300' }}"
-                        title="Input Harian (WIP)">
-                        <i class="fas fa-layer-group w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Input Harian (WIP)</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ route('wip.report') }}"
-                        class="sidebar-link flex items-center px-6 py-2 border-l-4 border-transparent hover:bg-slate-800 {{ request()->routeIs('wip.report') ? 'bg-blue-600 text-white border-l-emerald-400' : 'text-slate-300' }}"
-                        title="Report WIP">
-                        <i class="fas fa-file-invoice w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Report WIP</span>
-                    </a>
-                </li>
-                <!-- Input Kerusakan -->
-                <li>
-                    <button onclick="toggleDefectMenu()"
-                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('defects*') ? 'bg-slate-800/80 text-red-400 border-l-4 border-red-500 font-bold' : '' }}"
-                        title="Input Kerusakan">
-                        <i class="fas fa-exclamation-circle w-6 shrink-0 text-center mr-2 {{ request()->is('defects*') ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
-                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ request()->is('defects*') ? 'text-red-400' : 'text-slate-555' }}">Input Kerusakan</span>
-                        <i id="defectMenuIcon"
-                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ request()->is('defects*') ? 'rotate-90 text-red-400' : '' }}"></i>
-                    </button>
-                    <ul id="defectMenu"
-                        class="{{ request()->is('defects*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
-                        @php
-                            $defectPasirDepts = [
-                                'netto' => 'fa-cut',
-                                'bubut_od' => 'fa-sync-alt',
-                                'bubut_cnc' => 'fa-microchip',
-                                'bor' => 'fa-screwdriver',
-                                'finish' => 'fa-clipboard-check'
-                            ];
-                        @endphp
-                        @foreach($defectPasirDepts as $dept => $icon)
-                            <li>
-                                <a href="{{ route('defects.index', $dept) }}"
-                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->is('defects/' . $dept) ? 'text-white font-medium border-l-2 border-red-500' : 'text-slate-300' }}"
-                                    title="Kerusakan {{ ucfirst(str_replace('_', ' ', $dept)) }}">
-                                    <i class="fas {{ $icon }} w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                    <span class="text-sm sidebar-text">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
-                                </a>
-                            </li>
-                        @endforeach
-                    </ul>
-                </li>
-
-                <!-- QUALITY CONTROL -->
-                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">Quality Control</span>
-                </li>
-                <li>
-                    <a href="{{ route('lost-wax.quality.defects.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.quality.defects.*') ? 'bg-blue-600 text-white border-l-4 border-rose-400 font-medium' : 'text-slate-300' }}"
-                        title="Rekap Kerusakan">
-                        <i class="fas fa-shield-alt w-6 shrink-0 text-center text-rose-400"></i>
-                        <span class="text-sm sidebar-text ml-2">Rekap Kerusakan</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ route('lost-wax.report.production.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.report.production.*') ? 'bg-blue-600 text-white border-l-4 border-blue-400 font-medium' : 'text-slate-300' }}"
-                        title="Report Produksi">
-                        <i class="fas fa-chart-line w-6 shrink-0 text-center text-blue-400"></i>
-                        <span class="text-sm sidebar-text ml-2">Report Produksi</span>
-                    </a>
-                </li>
-
-                <!-- 6. REPORT -->
-                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
-                    <span class="sidebar-text">Report</span>
-                </li>
-                <li>
-                    <a href="{{ route('report.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report.*') ? 'bg-blue-600 text-white border-l-4 border-blue-300' : 'text-slate-300' }}"
-                        title="Report SPK">
-                        <i class="fas fa-print w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Report SPK</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ route('report-defects.index') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report-defects.index') ? 'bg-blue-600 text-white border-l-4 border-red-300' : 'text-slate-300' }}"
-                        title="Report Kerusakan">
-                        <i class="fas fa-file-invoice-dollar w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Report Kerusakan</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="{{ route('report-defects.summary') }}"
-                        class="sidebar-link flex items-center px-6 py-2 hover:bg-slate-800 {{ request()->routeIs('report-defects.summary') ? 'bg-blue-600 text-white border-l-4 border-orange-300' : 'text-slate-300' }}"
-                        title="Rekap Kerusakan">
-                        <i class="fas fa-file-alt w-6 shrink-0 text-center"></i>
-                        <span class="text-sm sidebar-text ml-2">Rekap Kerusakan</span>
-                    </a>
-                </li>
-
-                <!-- 7. SETTING -->
+                <!-- 5. SETTING -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Setting</span>
                 </li>
@@ -671,19 +536,15 @@
                         return false;
                     }
 
-                    function toggleCorPasirMenu() {
-                        if (handleCollapsedClick('corPasirMenu', 'corPasirMenuIcon')) return;
-                        const menu = document.getElementById('corPasirMenu');
-                        const icon = document.getElementById('corPasirMenuIcon');
+                    function toggleSandCastingMenu() {
+                        if (handleCollapsedClick('sandCastingMenu', 'sandCastingMenuIcon')) return;
+                        const menu = document.getElementById('sandCastingMenu');
+                        const icon = document.getElementById('sandCastingMenuIcon');
                         menu.classList.toggle('hidden');
                         icon.classList.toggle('rotate-90');
                     }
-                    function toggleDefectMenu() {
-                        if (handleCollapsedClick('defectMenu', 'defectMenuIcon')) return;
-                        const menu = document.getElementById('defectMenu');
-                        const icon = document.getElementById('defectMenuIcon');
-                        menu.classList.toggle('hidden');
-                        icon.classList.toggle('rotate-90');
+                    function toggleCorPasirMenu() {
+                        toggleSandCastingMenu();
                     }
                     function toggleLostWaxMenu() {
                         if (handleCollapsedClick('lostWaxMenu', 'lostWaxMenuIcon')) return;
