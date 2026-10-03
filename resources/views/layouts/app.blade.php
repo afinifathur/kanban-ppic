@@ -330,6 +330,14 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{{ route('sand-casting.production-status.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.production-status.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                title="Production Status">
+                                <i class="fas fa-table w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Production Status</span>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ route('sand-casting.report.production.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.production.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
                                 title="Laporan Produksi">
