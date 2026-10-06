@@ -644,4 +644,58 @@ class QcDefectVerificationTest extends TestCase
         $this->assertEquals(0, $summary['stage_counts']['qc']);
         $this->assertEquals(0, $summary['stage_counts']['gudang_jadi']);
     }
+
+    /**
+     * TEST 10: QC Re-verification when defect was increased
+     * - Card flags is_reverification = true
+     * - Previous defect and added defect are clearly reported
+     * - Re-verification confirms updated breakdown
+     */
+    public function test_10_qc_reverification_when_defect_increased(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        // PPIC initial: 5 defect
+        $this->executionService->recordDefectQty($exec, 5, $this->adminPpic->id);
+
+        // QC verifies 5 defect
+        $this->executionService->verifyQcBreakdown($exec, [
+            ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+        ], $this->adminQc->id);
+
+        $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $exec->fresh()->status);
+
+        // PPIC adds +2 defect: 5 -> 7
+        $this->executionService->addDefectQty($exec, 2, $this->adminPpic->id);
+        $freshExec = $exec->fresh();
+
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $freshExec->status);
+        $this->assertEquals(7, $freshExec->defect_qty);
+
+        // Card formatter checks
+        $card = $this->queryService->formatQcVerificationCard($freshExec);
+        $this->assertTrue($card['is_reverification']);
+        $this->assertEquals(5, $card['previous_defect_qty']);
+        $this->assertEquals(2, $card['added_defect_qty']);
+        $this->assertCount(2, $card['defect_logs']);
+
+        // QC re-verifies with breakdown matching 7 (e.g. 5 Porosity + 2 Retak)
+        $response = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 2],
+            ],
+            'notes' => 'Re-verifikasi penambahan defect 2 pcs terkonfirmasi',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+
+        $reconfirmed = $exec->fresh();
+        $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $reconfirmed->status);
+        $this->assertEquals(7, $reconfirmed->defect_qty);
+        $this->assertEquals(93, $reconfirmed->good_qty);
+        $this->assertCount(2, $reconfirmed->defects);
+    }
 }

@@ -23,9 +23,11 @@ class SandCastingProductionFloorQueryService
     public const STATUS_NO_STAGE = 'NO_STAGE';
 
     public function __construct(
-        protected ?SandCastingStageExecutionService $executionService = null
+        protected ?SandCastingStageExecutionService $executionService = null,
+        protected ?SandCastingQuantityResolverService $quantityResolver = null
     ) {
         $this->executionService = $executionService ?? new SandCastingStageExecutionService;
+        $this->quantityResolver = $quantityResolver ?? new SandCastingQuantityResolverService;
     }
 
     /**
@@ -152,7 +154,8 @@ class SandCastingProductionFloorQueryService
     }
 
     /**
-     * Resolve the current input quantity available for the traveler's active checkpoint.
+     * Resolve the current operational input quantity available for the traveler's active checkpoint.
+     * Uses centralized SandCastingQuantityResolverService as single source of truth.
      */
     protected function resolveCurrentInputQty(SandCastingCastingResultLine $line): ?int
     {
@@ -164,58 +167,7 @@ class SandCastingProductionFloorQueryService
             return 0;
         }
 
-        $stageCheckpoints = SandCastingStageExecutionService::STAGE_CHECKPOINTS[$line->current_stage] ?? [];
-        if (empty($stageCheckpoints)) {
-            return 0;
-        }
-
-        $firstCheckpoint = $stageCheckpoints[0];
-
-        // If the first checkpoint is NETTO_CUT
-        if ($firstCheckpoint === 'NETTO_CUT') {
-            $exec = $line->stageExecutions->firstWhere('checkpoint_code', 'NETTO_CUT');
-            if ($exec) {
-                return (int) $exec->good_qty;
-            }
-
-            return (int) $line->qty_good;
-        }
-
-        // Loop through checkpoints of current stage to find active unexecuted or latest input
-        foreach ($stageCheckpoints as $chkCode) {
-            $exec = $line->stageExecutions->firstWhere('checkpoint_code', $chkCode);
-
-            if (! $exec) {
-                // Input for this unexecuted checkpoint comes from its immediately preceding checkpoint
-                $prevChkCode = SandCastingStageExecutionService::PREVIOUS_CHECKPOINT[$chkCode] ?? null;
-                if ($prevChkCode) {
-                    $prevExec = $line->stageExecutions
-                        ->firstWhere('checkpoint_code', $prevChkCode);
-
-                    // Safe fallback for historical records if BOR_DRILLING looks for previous execution
-                    if (! $prevExec && $chkCode === 'BOR_DRILLING') {
-                        $prevExec = $line->stageExecutions
-                            ->whereIn('checkpoint_code', ['QC_PRE_BOR', 'QC_POST_CNC', 'CNC_MACHINING'])
-                            ->last();
-                    }
-
-                    return $prevExec ? (int) $prevExec->good_qty : 0;
-                }
-
-                return 0;
-            }
-
-            // If this checkpoint is CONFIRMED and good_qty === 0, halted with 0
-            if ($exec->status === SandCastingStageExecution::STATUS_CONFIRMED && $exec->good_qty === 0) {
-                return 0;
-            }
-        }
-
-        // If all checkpoints in this stage have an execution, return the good_qty of the last checkpoint
-        $lastChkCode = end($stageCheckpoints);
-        $lastExec = $line->stageExecutions->firstWhere('checkpoint_code', $lastChkCode);
-
-        return $lastExec ? (int) $lastExec->good_qty : 0;
+        return $this->quantityResolver->resolveEffectiveInputQty($line, $line->current_stage);
     }
 
     /**
@@ -560,8 +512,8 @@ class SandCastingProductionFloorQueryService
             $activeChkCode = $chkCode;
             $activeChkStatus = self::STATUS_READY;
             $inputQty = $currentInputQty ?? (int) $line->qty_good;
-            $defectQty = 0;
-            $goodQty = $inputQty;
+            $goodQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $line->current_stage);
+            $defectQty = (int) ($line->stageExecutions->where('stage', $line->current_stage)->sum('defect_qty'));
             $effectiveQty = $inputQty;
         }
 
@@ -624,13 +576,12 @@ class SandCastingProductionFloorQueryService
         }
 
         $activeCheckpoint = $this->executionService->resolveActiveCheckpoint($line);
-        $currentInputQty = $this->resolveCurrentInputQty($line);
         $activeExec = $line->stageExecutions->last();
 
         $size = $line->castingOrderLine?->size ?? $line->productionPlan?->size;
         $lineNumber = self::resolveLineNumber($line->productionPlan?->line_number, $size);
         $unitWeight = (float) ($line->unit_weight_kg ?? 0);
-        $effectiveQty = $currentInputQty ?? (int) $line->qty_good;
+        $effectiveQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $line->current_stage);
         $totalWeight = round($effectiveQty * $unitWeight, 2);
         $aging = $this->calculateAging($line, $activeExec);
 
@@ -978,6 +929,8 @@ class SandCastingProductionFloorQueryService
     // =========================================================================
     // DEFECT RECORDING READ MODEL (PPIC 6 TABS)
     // =========================================================================
+    // PPIC DEFECT RECORDING READ MODEL (ADMIN PPIC 2 TABS + PAGINATION)
+    // =========================================================================
 
     /**
      * Get global summary counters for PPIC Defect Recording dashboard.
@@ -985,31 +938,116 @@ class SandCastingProductionFloorQueryService
      * @return array{
      *     waiting_defect_count: int,
      *     waiting_defect_pcs: int,
+     *     unrecorded_count: int,
+     *     unrecorded_pcs: int,
+     *     recorded_count: int,
+     *     recorded_defect_pcs: int,
      *     today_incoming_count: int,
-     *     stage_counts: array<string, int>
+     *     stage_counts: array<string, int>,
+     *     stage_recorded_counts: array<string, int>
      * }
      */
     public function getDefectRecordingSummary(): array
     {
         $waitingExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_DEFECT)->get();
+        $recordedExecs = SandCastingStageExecution::whereIn('status', [
+            SandCastingStageExecution::STATUS_WAITING_QC,
+            SandCastingStageExecution::STATUS_CONFIRMED,
+        ])->get();
 
         $todayIncomingCount = SandCastingStageExecution::whereDate('physical_done_at', today())->count();
 
         $stageCounts = [];
+        $stageRecordedCounts = [];
         foreach (SandCastingStageExecutionService::STAGES as $stg) {
             $stageCounts[$stg] = $waitingExecs->where('stage', $stg)->count();
+            $stageRecordedCounts[$stg] = $recordedExecs->where('stage', $stg)->count();
         }
 
+        $unrecordedCount = $waitingExecs->count();
+        $unrecordedPcs = (int) $waitingExecs->sum('input_qty');
+        $recordedCount = $recordedExecs->count();
+        $recordedDefectPcs = (int) $recordedExecs->sum('defect_qty');
+
         return [
-            'waiting_defect_count' => $waitingExecs->count(),
-            'waiting_defect_pcs' => (int) $waitingExecs->sum('input_qty'),
+            'waiting_defect_count' => $unrecordedCount,
+            'waiting_defect_pcs' => $unrecordedPcs,
+            'unrecorded_count' => $unrecordedCount,
+            'unrecorded_pcs' => $unrecordedPcs,
+            'recorded_count' => $recordedCount,
+            'recorded_defect_pcs' => $recordedDefectPcs,
             'today_incoming_count' => $todayIncomingCount,
             'stage_counts' => $stageCounts,
+            'stage_recorded_counts' => $stageRecordedCounts,
         ];
     }
 
     /**
-     * Get FIFO queue of stage executions for a specific stage awaiting defect recording.
+     * Get paginated stage executions for PPIC Defect Recording (Tab 1: Belum Dicatat vs Tab 2: Sudah Dicatat).
+     *
+     * @param  string  $mode  'unrecorded' (WAITING_DEFECT) or 'recorded' (WAITING_QC, CONFIRMED)
+     * @param  string|null  $stage  Canonical stage name or null for all stages
+     * @param  array{search?: string}  $filters
+     */
+    public function getDefectRecordingPaginated(string $mode = 'unrecorded', ?string $stage = null, array $filters = [], int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        $query = SandCastingStageExecution::query()
+            ->with([
+                'castingResultLine.castingResult',
+                'castingResultLine.productionPlan',
+                'castingResultLine.castingOrderLine.castingOrder',
+                'operator',
+                'defectEnteredBy',
+                'defectLogs.user',
+                'defects.defectType',
+            ]);
+
+        if ($mode === 'recorded') {
+            $query->whereIn('status', [
+                SandCastingStageExecution::STATUS_WAITING_QC,
+                SandCastingStageExecution::STATUS_CONFIRMED,
+            ])
+                ->orderBy('defect_entered_at', 'desc')
+                ->orderBy('id', 'desc');
+        } else {
+            // Default unrecorded: FIFO queue
+            $query->where('status', SandCastingStageExecution::STATUS_WAITING_DEFECT)
+                ->orderBy('physical_done_at', 'asc')
+                ->orderBy('id', 'asc');
+        }
+
+        if ($stage !== null && $stage !== '' && $stage !== 'all') {
+            $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage) ?? $stage;
+            $query->where('stage', $canonicalStage);
+        }
+
+        if (! empty($filters['search'])) {
+            $term = '%'.trim((string) $filters['search']).'%';
+            $query->where(function ($q) use ($term) {
+                $q->where('checkpoint_code', 'LIKE', $term)
+                    ->orWhereHas('castingResultLine', function ($lq) use ($term) {
+                        $lq->where('traveler_number', 'LIKE', $term)
+                            ->orWhereHas('castingResult', fn ($cq) => $cq->where('heat_number', 'LIKE', $term))
+                            ->orWhereHas('productionPlan', function ($pq) use ($term) {
+                                $pq->where('code', 'LIKE', $term)
+                                    ->orWhere('item_name', 'LIKE', $term)
+                                    ->orWhere('item_code', 'LIKE', $term)
+                                    ->orWhere('customer', 'LIKE', $term);
+                            })
+                            ->orWhereHas('castingOrderLine', function ($oq) use ($term) {
+                                $oq->where('code', 'LIKE', $term)
+                                    ->orWhere('item_name', 'LIKE', $term)
+                                    ->orWhere('customer', 'LIKE', $term);
+                            });
+                    });
+            });
+        }
+
+        return $query->paginate($perPage)->through(fn ($exec) => $this->formatDefectRecordingCard($exec));
+    }
+
+    /**
+     * Get FIFO queue of stage executions for a specific stage awaiting defect recording (Backward Compatibility).
      *
      * @param  string  $stage  Canonical or slug stage name
      * @param  array{search?: string}  $filters
@@ -1030,6 +1068,8 @@ class SandCastingProductionFloorQueryService
                 'castingResultLine.castingOrderLine.castingOrder',
                 'operator',
                 'defectEnteredBy',
+                'defectLogs.user',
+                'defects.defectType',
             ])
             ->orderBy('physical_done_at', 'asc')
             ->orderBy('id', 'asc');
@@ -1066,7 +1106,7 @@ class SandCastingProductionFloorQueryService
     }
 
     /**
-     * Get all 6 stages queues for PPIC Defect Recording.
+     * Get all 6 stages queues for PPIC Defect Recording (Backward Compatibility).
      *
      * @param  array{search?: string}  $filters
      * @return array<string, list<array>>
@@ -1108,6 +1148,22 @@ class SandCastingProductionFloorQueryService
             $defectStatusLabel = "RUSAK {$exec->defect_qty} PCS";
         }
 
+        $defectLogs = $exec->defectLogs ? $exec->defectLogs->map(fn ($log) => [
+            'id' => $log->id,
+            'added_qty' => (int) $log->added_qty,
+            'previous_total' => (int) $log->previous_total,
+            'new_total' => (int) $log->new_total,
+            'user_name' => $log->user?->name ?? 'Admin',
+            'notes' => $log->notes,
+            'created_at' => $log->created_at?->format('d-m-Y H:i:s'),
+            'created_at_human' => $log->created_at?->diffForHumans(),
+        ])->values()->all() : [];
+
+        $latestLog = ! empty($defectLogs) ? end($defectLogs) : null;
+        $isReverification = count($defectLogs) > 1 && $exec->status === SandCastingStageExecution::STATUS_WAITING_QC;
+        $previousDefectQty = $latestLog ? (int) $latestLog['previous_total'] : 0;
+        $addedDefectQty = $latestLog ? (int) $latestLog['added_qty'] : 0;
+
         return [
             'id' => $exec->id,
             'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
@@ -1132,15 +1188,22 @@ class SandCastingProductionFloorQueryService
             'physical_done_at' => $exec->physical_done_at?->format('Y-m-d H:i:s'),
             'physical_done_date' => $exec->physical_done_at?->format('Y-m-d') ?? now()->format('Y-m-d'),
             'physical_done_human' => $exec->physical_done_at?->diffForHumans(),
+            'defect_entered_at' => $exec->defect_entered_at?->format('Y-m-d H:i:s'),
+            'defect_entered_human' => $exec->defect_entered_at?->diffForHumans(),
+            'defect_entered_by_name' => $exec->defectEnteredBy?->name ?? '-',
             'operator_name' => $exec->operator?->name ?? '-',
             'notes' => $exec->notes,
             'aging' => $aging,
             'is_urgent' => (bool) $line->is_urgent,
+            'defect_logs' => $defectLogs,
+            'is_reverification' => $isReverification,
+            'previous_defect_qty' => $previousDefectQty,
+            'added_defect_qty' => $addedDefectQty,
         ];
     }
 
     // =========================================================================
-    // QC DEFECT VERIFICATION READ MODEL (ADMIN QC 6 TABS)
+    // QC DEFECT VERIFICATION READ MODEL (ADMIN QC + PAGINATION)
     // =========================================================================
 
     /**
@@ -1175,7 +1238,59 @@ class SandCastingProductionFloorQueryService
     }
 
     /**
-     * Get FIFO queue of stage executions for a specific stage awaiting QC defect verification.
+     * Get paginated stage executions for QC Defect Verification dashboard.
+     *
+     * @param  string|null  $stage  Canonical stage name or null for all stages
+     * @param  array{search?: string}  $filters
+     */
+    public function getQcVerificationPaginated(?string $stage = null, array $filters = [], int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        $query = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+            ->with([
+                'castingResultLine.castingResult',
+                'castingResultLine.productionPlan',
+                'castingResultLine.castingOrderLine.castingOrder',
+                'operator',
+                'defectEnteredBy',
+                'qcVerifiedBy',
+                'defects.defectType',
+                'defectLogs.user',
+            ])
+            ->orderBy('defect_entered_at', 'asc')
+            ->orderBy('id', 'asc');
+
+        if ($stage !== null && $stage !== '' && $stage !== 'all') {
+            $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage) ?? $stage;
+            $query->where('stage', $canonicalStage);
+        }
+
+        if (! empty($filters['search'])) {
+            $term = '%'.trim((string) $filters['search']).'%';
+            $query->where(function ($q) use ($term) {
+                $q->where('checkpoint_code', 'LIKE', $term)
+                    ->orWhereHas('castingResultLine', function ($lq) use ($term) {
+                        $lq->where('traveler_number', 'LIKE', $term)
+                            ->orWhereHas('castingResult', fn ($cq) => $cq->where('heat_number', 'LIKE', $term))
+                            ->orWhereHas('productionPlan', function ($pq) use ($term) {
+                                $pq->where('code', 'LIKE', $term)
+                                    ->orWhere('item_name', 'LIKE', $term)
+                                    ->orWhere('item_code', 'LIKE', $term)
+                                    ->orWhere('customer', 'LIKE', $term);
+                            })
+                            ->orWhereHas('castingOrderLine', function ($oq) use ($term) {
+                                $oq->where('code', 'LIKE', $term)
+                                    ->orWhere('item_name', 'LIKE', $term)
+                                    ->orWhere('customer', 'LIKE', $term);
+                            });
+                    });
+            });
+        }
+
+        return $query->paginate($perPage)->through(fn ($exec) => $this->formatQcVerificationCard($exec));
+    }
+
+    /**
+     * Get FIFO queue of stage executions for a specific stage awaiting QC defect verification (Backward Compatibility).
      * FIFO sorted by defect_entered_at ASC, id ASC.
      *
      * @param  string  $stage  Canonical or slug stage name
@@ -1199,6 +1314,7 @@ class SandCastingProductionFloorQueryService
                 'defectEnteredBy',
                 'qcVerifiedBy',
                 'defects.defectType',
+                'defectLogs.user',
             ])
             ->orderBy('defect_entered_at', 'asc')
             ->orderBy('id', 'asc');
@@ -1235,7 +1351,7 @@ class SandCastingProductionFloorQueryService
     }
 
     /**
-     * Get all 6 stages queues for QC Defect Verification.
+     * Get all 6 stages queues for QC Defect Verification (Backward Compatibility).
      *
      * @param  array{search?: string}  $filters
      * @return array<string, list<array>>
@@ -1273,6 +1389,22 @@ class SandCastingProductionFloorQueryService
             'notes' => $d->notes,
         ])->values()->all() : [];
 
+        $defectLogs = $exec->defectLogs ? $exec->defectLogs->map(fn ($log) => [
+            'id' => $log->id,
+            'added_qty' => (int) $log->added_qty,
+            'previous_total' => (int) $log->previous_total,
+            'new_total' => (int) $log->new_total,
+            'user_name' => $log->user?->name ?? 'Admin',
+            'notes' => $log->notes,
+            'created_at' => $log->created_at?->format('d-m-Y H:i:s'),
+            'created_at_human' => $log->created_at?->diffForHumans(),
+        ])->values()->all() : [];
+
+        $latestLog = ! empty($defectLogs) ? end($defectLogs) : null;
+        $isReverification = count($defectLogs) > 1 && $exec->status === SandCastingStageExecution::STATUS_WAITING_QC;
+        $previousDefectQty = $latestLog ? (int) $latestLog['previous_total'] : 0;
+        $addedDefectQty = $latestLog ? (int) $latestLog['added_qty'] : 0;
+
         return [
             'id' => $exec->id,
             'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
@@ -1303,6 +1435,10 @@ class SandCastingProductionFloorQueryService
             'aging' => $aging,
             'is_urgent' => (bool) $line->is_urgent,
             'defects' => $defects,
+            'defect_logs' => $defectLogs,
+            'is_reverification' => $isReverification,
+            'previous_defect_qty' => $previousDefectQty,
+            'added_defect_qty' => $addedDefectQty,
         ];
     }
 

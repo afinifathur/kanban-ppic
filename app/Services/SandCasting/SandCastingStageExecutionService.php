@@ -12,6 +12,12 @@ use InvalidArgumentException;
 
 class SandCastingStageExecutionService
 {
+    public function __construct(
+        protected ?SandCastingQuantityResolverService $quantityResolver = null
+    ) {
+        $this->quantityResolver = $quantityResolver ?? new SandCastingQuantityResolverService;
+    }
+
     /**
      * Official Sand Casting main process stages.
      */
@@ -210,9 +216,9 @@ class SandCastingStageExecutionService
 
             $checkpointCode = $active['code'];
 
-            // 3. Resolve input quantity strictly server-side using provisional physical output of previous checkpoint
+            // 3. Resolve input quantity strictly server-side using centralized resolver
             if ($checkpointCode === 'NETTO_CUT') {
-                $inputQty = (int) $line->qty_good;
+                $inputQty = $this->quantityResolver->resolveEffectiveInputQty($line, 'netto');
             } else {
                 $prevCode = self::PREVIOUS_CHECKPOINT[$checkpointCode];
                 $prevExec = $line->stageExecutions()
@@ -231,7 +237,7 @@ class SandCastingStageExecutionService
                     throw new InvalidArgumentException("Riwayat eksekusi checkpoint sebelumnya ({$prevCode}) belum ditemukan untuk KTR {$travelerNumber}.");
                 }
 
-                $inputQty = (int) $prevExec->good_qty;
+                $inputQty = $this->quantityResolver->resolveEffectiveInputQty($line, $targetStage);
             }
 
             if ($inputQty <= 0) {
@@ -280,8 +286,8 @@ class SandCastingStageExecutionService
     }
 
     /**
-     * Step 2: Admin PPIC records total defect quantity.
-     * Transitions checkpoint from WAITING_DEFECT to WAITING_QC.
+     * Step 2: Admin PPIC records total defect quantity (Initial Recording).
+     * Transitions checkpoint from WAITING_DEFECT to WAITING_QC and writes the initial audit log.
      */
     public function recordDefectQty(
         int|SandCastingStageExecution $executionOrId,
@@ -316,11 +322,11 @@ class SandCastingStageExecutionService
             }
 
             if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
-                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED dan tidak dapat diubah.");
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED dan tidak dapat diubah. Gunakan fitur tambah defect untuk mencatat penambahan.");
             }
 
             if ($execution->status === SandCastingStageExecution::STATUS_WAITING_QC) {
-                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah dalam status WAITING_QC dan tidak dapat diubah lagi.");
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah dalam status WAITING_QC dan tidak dapat diubah lagi. Gunakan fitur tambah defect untuk mencatat penambahan.");
             }
 
             if ($execution->status !== SandCastingStageExecution::STATUS_WAITING_DEFECT) {
@@ -347,7 +353,103 @@ class SandCastingStageExecutionService
             }
             $execution->save();
 
-            return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy']);
+            // Create initial defect audit log (0 -> defectQty)
+            $execution->defectLogs()->create([
+                'added_qty' => $defectQty,
+                'previous_total' => 0,
+                'new_total' => $defectQty,
+                'user_id' => $resolvedAdminId,
+                'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            ]);
+
+            return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'defectLogs.user']);
+        });
+    }
+
+    /**
+     * Step 2B: Admin PPIC adds cumulative defect quantity (Tambah Defect Susulan).
+     * Transitions status from CONFIRMED -> WAITING_QC (requiring QC re-verification) or maintains WAITING_QC.
+     * Guaranteed strictly atomic and logs immutable audit trail. Physical flow remains untouched.
+     */
+    public function addDefectQty(
+        int|SandCastingStageExecution $executionOrId,
+        int $addedQty,
+        ?int $adminId = null,
+        ?string $notes = null
+    ): SandCastingStageExecution {
+        $resolvedAdminId = $adminId ?? auth()->id();
+        if (! $resolvedAdminId) {
+            throw new InvalidArgumentException('Admin ID wajib diisi atau user harus terautentikasi.');
+        }
+
+        if (! User::where('id', $resolvedAdminId)->exists()) {
+            throw new InvalidArgumentException("User Admin dengan ID {$resolvedAdminId} tidak ditemukan.");
+        }
+
+        if ($addedQty <= 0) {
+            throw new InvalidArgumentException('Jumlah penambahan defect harus lebih dari 0.');
+        }
+
+        return DB::transaction(function () use ($executionOrId, $addedQty, $resolvedAdminId, $notes) {
+            $executionId = $executionOrId instanceof SandCastingStageExecution ? $executionOrId->id : (int) $executionOrId;
+
+            $execution = SandCastingStageExecution::where('id', $executionId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $execution) {
+                throw new InvalidArgumentException("Eksekusi dengan ID {$executionId} tidak ditemukan.");
+            }
+
+            // Lock parent line
+            $line = $execution->castingResultLine()->lockForUpdate()->first();
+            if (! $line) {
+                throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
+            }
+
+            if ($execution->status === SandCastingStageExecution::STATUS_WAITING_DEFECT) {
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} belum pernah dicatat defect. Gunakan form pencatatan awal.");
+            }
+
+            if (! in_array($execution->status, [SandCastingStageExecution::STATUS_WAITING_QC, SandCastingStageExecution::STATUS_CONFIRMED], true)) {
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} berada dalam status tidak valid ({$execution->status}) untuk penambahan defect.");
+            }
+
+            $currentDefectQty = (int) $execution->defect_qty;
+            $newTotalDefect = $currentDefectQty + $addedQty;
+            $inputQty = (int) $execution->input_qty;
+
+            if ($newTotalDefect > $inputQty) {
+                throw new InvalidArgumentException("Total defect baru ({$newTotalDefect} PCS) melebihi input ({$inputQty} PCS). Penambahan {$addedQty} PCS ditolak.");
+            }
+
+            $newGoodQty = $inputQty - $newTotalDefect;
+
+            $execution->defect_qty = $newTotalDefect;
+            $execution->good_qty = $newGoodQty;
+            $execution->defect_entered_at = now();
+            $execution->defect_entered_by = $resolvedAdminId;
+
+            // If previously CONFIRMED, revert status to WAITING_QC so QC re-verifies the new total
+            if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
+                $execution->status = SandCastingStageExecution::STATUS_WAITING_QC;
+            }
+
+            if ($notes !== null && trim($notes) !== '') {
+                $execution->notes = trim($notes);
+            }
+            $execution->save();
+
+            // Create cumulative audit log record
+            $execution->defectLogs()->create([
+                'added_qty' => $addedQty,
+                'previous_total' => $currentDefectQty,
+                'new_total' => $newTotalDefect,
+                'user_id' => $resolvedAdminId,
+                'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            ]);
+
+            return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'defectLogs.user', 'defects.defectType']);
         });
     }
 

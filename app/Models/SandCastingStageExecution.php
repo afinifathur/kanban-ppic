@@ -68,4 +68,11 @@ class SandCastingStageExecution extends Model
     {
         return $this->hasMany(SandCastingStageExecutionDefect::class, 'sand_casting_stage_execution_id');
     }
+
+    public function defectLogs()
+    {
+        return $this->hasMany(SandCastingStageExecutionDefectLog::class, 'sand_casting_stage_execution_id')
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc');
+    }
 }

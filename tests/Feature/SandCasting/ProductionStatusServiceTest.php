@@ -332,8 +332,8 @@ class ProductionStatusServiceTest extends TestCase
 
         // Defect CNC is sum of 3 checkpoints: 2 + 1 + 0 = 3
         $this->assertSame(3, $row['r_cnc']);
-        // Quantity CNC is the latest output = 97 (NOT 98 + 97 + 97 = 292!)
-        $this->assertSame(97, $row['bubut_cnc']);
+        // CNC active WIP is the effective input quantity at CNC = 100
+        $this->assertSame(100, $row['bubut_cnc']);
     }
 
     /**
@@ -356,7 +356,8 @@ class ProductionStatusServiceTest extends TestCase
         $this->assertSame(5, $row['r_cor']);
         $this->assertSame(30, $row['r_netto']);
         $this->assertSame(10, $row['r_od']);
-        $this->assertSame(60, $row['bubut_od']);
+        // Bubut OD active WIP is effective input quantity at OD = 70 (100 - 30 netto defect)
+        $this->assertSame(70, $row['bubut_od']);
         $this->assertSame(45, $row['total_reject']); // 5 + 30 + 10
     }
 

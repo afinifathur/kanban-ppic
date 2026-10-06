@@ -24,6 +24,12 @@ class SandCastingProductionStatusService
         'gudang_jadi' => 'Gudang Jadi',
     ];
 
+    public function __construct(
+        protected ?SandCastingQuantityResolverService $quantityResolver = null
+    ) {
+        $this->quantityResolver = $quantityResolver ?? new SandCastingQuantityResolverService;
+    }
+
     /**
      * Get the aggregated production status rows for Sand Casting grouped by ProductionPlan (Production Code).
      *
@@ -254,6 +260,7 @@ class SandCastingProductionStatusService
 
     /**
      * Resolve the usable quantity for a single KTR traveler at its current physical stage.
+     * Uses centralized SandCastingQuantityResolverService as single source of truth.
      */
     public function resolveKtrUsableQty(SandCastingCastingResultLine $line): int
     {
@@ -274,109 +281,47 @@ class SandCastingProductionStatusService
             return 0;
         }
 
-        return match ($line->current_stage) {
-            'netto' => $this->resolveNettoUsable($line, $execs),
-            'bubut_od' => $this->resolveOdUsable($line, $execs),
-            'bubut_cnc' => $this->resolveCncUsable($line, $execs),
-            'bor' => $this->resolveBorUsable($line, $execs),
-            'qc' => $this->resolveQcUsable($line, $execs),
-            default => 0,
-        };
+        return $this->quantityResolver->resolveEffectiveInputQty($line, $line->current_stage);
     }
 
     /**
-     * Resolve usable pieces at Netto stage.
+     * Resolve usable pieces at Netto stage (kept for backward compatibility).
      */
     protected function resolveNettoUsable(SandCastingCastingResultLine $line, Collection $execs): int
     {
-        $nettoExec = $execs->firstWhere('checkpoint_code', 'NETTO_CUT');
-        if ($nettoExec) {
-            return (int) $nettoExec->good_qty;
-        }
-
-        return (int) $line->qty_good;
+        return $this->quantityResolver->resolveEffectiveInputQty($line, 'netto');
     }
 
     /**
-     * Resolve usable pieces at Bubut OD stage.
+     * Resolve usable pieces at Bubut OD stage (kept for backward compatibility).
      */
     protected function resolveOdUsable(SandCastingCastingResultLine $line, Collection $execs): int
     {
-        $odExec = $execs->firstWhere('checkpoint_code', 'OD_TURNING');
-        if ($odExec) {
-            return (int) $odExec->good_qty;
-        }
-
-        $nettoExec = $execs->firstWhere('checkpoint_code', 'NETTO_CUT');
-        if ($nettoExec) {
-            return (int) $nettoExec->good_qty;
-        }
-
-        return (int) $line->qty_good;
+        return $this->quantityResolver->resolveEffectiveInputQty($line, 'bubut_od');
     }
 
     /**
-     * Resolve usable pieces at Bubut CNC stage.
-     * Prevents double counting by taking the latest executed checkpoint in CNC,
-     * or fallback to previous OD output.
+     * Resolve usable pieces at Bubut CNC stage (kept for backward compatibility).
      */
     protected function resolveCncUsable(SandCastingCastingResultLine $line, Collection $execs): int
     {
-        // Check CNC sub-checkpoints in reverse chronological order
-        foreach (['QC_PRE_BOR', 'QC_POST_CNC', 'CNC_MACHINING'] as $chkCode) {
-            $chkExec = $execs->firstWhere('checkpoint_code', $chkCode);
-            if ($chkExec) {
-                return (int) $chkExec->good_qty;
-            }
-        }
-
-        $odExec = $execs->firstWhere('checkpoint_code', 'OD_TURNING');
-        if ($odExec) {
-            return (int) $odExec->good_qty;
-        }
-
-        $nettoExec = $execs->firstWhere('checkpoint_code', 'NETTO_CUT');
-        if ($nettoExec) {
-            return (int) $nettoExec->good_qty;
-        }
-
-        return (int) $line->qty_good;
+        return $this->quantityResolver->resolveEffectiveInputQty($line, 'bubut_cnc');
     }
 
     /**
-     * Resolve usable pieces at Bor stage.
+     * Resolve usable pieces at Bor stage (kept for backward compatibility).
      */
     protected function resolveBorUsable(SandCastingCastingResultLine $line, Collection $execs): int
     {
-        $borExec = $execs->firstWhere('checkpoint_code', 'BOR_DRILLING');
-        if ($borExec) {
-            return (int) $borExec->good_qty;
-        }
-
-        $preBorExec = $execs->firstWhere('checkpoint_code', 'QC_PRE_BOR');
-        if ($preBorExec) {
-            return (int) $preBorExec->good_qty;
-        }
-
-        return $this->resolveCncUsable($line, $execs);
+        return $this->quantityResolver->resolveEffectiveInputQty($line, 'bor');
     }
 
     /**
-     * Resolve usable pieces at QC stage.
+     * Resolve usable pieces at QC stage (kept for backward compatibility).
      */
     protected function resolveQcUsable(SandCastingCastingResultLine $line, Collection $execs): int
     {
-        $qcExec = $execs->firstWhere('checkpoint_code', 'QC_FINAL_INSPECTION');
-        if ($qcExec) {
-            return (int) $qcExec->good_qty;
-        }
-
-        $borExec = $execs->firstWhere('checkpoint_code', 'BOR_DRILLING');
-        if ($borExec) {
-            return (int) $borExec->good_qty;
-        }
-
-        return $this->resolveBorUsable($line, $execs);
+        return $this->quantityResolver->resolveEffectiveInputQty($line, 'qc');
     }
 
     /**

@@ -33,7 +33,7 @@ class DefectRecordingController extends Controller
     ) {}
 
     /**
-     * Render the PPIC Defect Recording main 6-tab dashboard.
+     * Render the PPIC Defect Recording dashboard (Tab 1: Belum Dicatat vs Tab 2: Sudah Dicatat).
      */
     public function index(Request $request): View|RedirectResponse
     {
@@ -45,18 +45,36 @@ class DefectRecordingController extends Controller
             abort(403, $e->getMessage());
         }
 
+        $mode = $request->query('mode', 'unrecorded');
+        if (! in_array($mode, ['unrecorded', 'recorded'], true)) {
+            $mode = 'unrecorded';
+        }
+
+        $selectedStage = $request->query('stage');
+        if ($selectedStage && $selectedStage !== 'all') {
+            $selectedStage = SandCastingStageAuthorizationService::normalizeStage($selectedStage);
+        } else {
+            $selectedStage = null;
+        }
+
         $filters = [
             'search' => $request->query('search'),
         ];
 
         $summary = $this->queryService->getDefectRecordingSummary();
-        $queues = $this->queryService->getAllDefectRecordingQueues($filters);
+        $paginatedExecutions = $this->queryService->getDefectRecordingPaginated($mode, $selectedStage, $filters, 25);
+        $paginatedExecutions->appends($request->query());
 
+        // Backward compatibility queue data for legacy widgets / tests
+        $queues = $this->queryService->getAllDefectRecordingQueues($filters);
         $activeTab = $request->query('tab', 'netto');
         $activeTab = SandCastingStageAuthorizationService::normalizeStage($activeTab) ?? 'netto';
 
         return view('sand-casting.defects.index', [
             'summary' => $summary,
+            'executions' => $paginatedExecutions,
+            'mode' => $mode,
+            'selectedStage' => $selectedStage,
             'queues' => $queues,
             'stages' => SandCastingStageExecutionService::STAGES,
             'stageLabels' => self::STAGE_LABELS,
@@ -66,7 +84,7 @@ class DefectRecordingController extends Controller
     }
 
     /**
-     * Record total defect quantity for a stage execution (PPIC Step 2).
+     * Record total defect quantity for a stage execution (PPIC Step 2: Initial Recording).
      */
     public function record(Request $request, SandCastingStageExecution $execution): JsonResponse|RedirectResponse
     {
@@ -120,7 +138,7 @@ class DefectRecordingController extends Controller
             }
 
             return redirect()
-                ->route('sand-casting.defects.index', ['tab' => $updatedExecution->stage])
+                ->route('sand-casting.defects.index', ['mode' => 'recorded', 'stage' => $updatedExecution->stage])
                 ->with('success', $successMessage);
 
         } catch (AuthorizationException $e) {
@@ -147,6 +165,93 @@ class DefectRecordingController extends Controller
         } catch (Throwable $e) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem saat menyimpan defect.'], 500);
+            }
+
+            return back()->withInput()->with('error', 'Terjadi kesalahan sistem: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Add cumulative defect quantity for an execution (PPIC Step 2B: Tambah Defect Susulan).
+     */
+    public function add(Request $request, SandCastingStageExecution $execution): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+
+        try {
+            // 1. Authorization check
+            $this->authorizationService->authorizeRecordDefect($user);
+
+            // 2. Validate request
+            $validated = $request->validate([
+                'added_qty' => 'required|integer|min:1',
+                'notes' => 'nullable|string|max:500',
+            ], [
+                'added_qty.required' => 'Jumlah penambahan defect wajib diisi.',
+                'added_qty.integer' => 'Jumlah penambahan defect harus berupa angka bulat.',
+                'added_qty.min' => 'Jumlah penambahan defect minimal 1 PCS.',
+            ]);
+
+            $addedQty = (int) $validated['added_qty'];
+
+            // 3. State Machine cumulative defect update
+            $updatedExecution = $this->executionService->addDefectQty(
+                executionOrId: $execution,
+                addedQty: $addedQty,
+                adminId: (int) $user->id,
+                notes: $validated['notes'] ?? null
+            );
+
+            $travelerNumber = $updatedExecution->castingResultLine?->traveler_number ?? 'KTR';
+            $successMessage = "Penambahan defect +{$addedQty} pcs berhasil disimpan untuk KTR {$travelerNumber}. Total Defect: {$updatedExecution->defect_qty} pcs. Status: Menunggu QC.";
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $successMessage,
+                    'data' => [
+                        'execution_id' => $updatedExecution->id,
+                        'traveler_number' => $travelerNumber,
+                        'stage' => $updatedExecution->stage,
+                        'checkpoint_code' => $updatedExecution->checkpoint_code,
+                        'input_qty' => (int) $updatedExecution->input_qty,
+                        'defect_qty' => (int) $updatedExecution->defect_qty,
+                        'good_qty' => (int) $updatedExecution->good_qty,
+                        'status' => $updatedExecution->status,
+                        'defect_entered_at' => $updatedExecution->defect_entered_at,
+                        'defect_entered_by' => $updatedExecution->defect_entered_by,
+                    ],
+                ]);
+            }
+
+            return redirect()
+                ->route('sand-casting.defects.index', ['mode' => 'recorded', 'stage' => $updatedExecution->stage])
+                ->with('success', $successMessage);
+
+        } catch (AuthorizationException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+            }
+            abort(403, $e->getMessage());
+        } catch (InvalidArgumentException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            return back()->withInput()->with('error', $e->getMessage());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi data gagal.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+
+            return back()->withInput()->withErrors($e->validator);
+        } catch (Throwable $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem saat menambahkan defect.'], 500);
             }
 
             return back()->withInput()->with('error', 'Terjadi kesalahan sistem: '.$e->getMessage());

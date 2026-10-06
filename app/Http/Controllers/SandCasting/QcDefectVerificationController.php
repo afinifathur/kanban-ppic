@@ -49,9 +49,19 @@ class QcDefectVerificationController extends Controller
             'search' => $request->query('search'),
         ];
 
-        $summary = $this->queryService->getQcVerificationSummary();
-        $queues = $this->queryService->getAllQcVerificationQueues($filters);
+        $selectedStage = $request->query('stage');
+        if ($selectedStage && $selectedStage !== 'all') {
+            $selectedStage = SandCastingStageAuthorizationService::normalizeStage($selectedStage);
+        } else {
+            $selectedStage = null;
+        }
 
+        $summary = $this->queryService->getQcVerificationSummary();
+        $paginatedExecutions = $this->queryService->getQcVerificationPaginated($selectedStage, $filters, 25);
+        $paginatedExecutions->appends($request->query());
+
+        // Backward compatibility queue data
+        $queues = $this->queryService->getAllQcVerificationQueues($filters);
         $activeTab = $request->query('tab', 'netto');
         $activeTab = SandCastingStageAuthorizationService::normalizeStage($activeTab) ?? 'netto';
 
@@ -67,6 +77,8 @@ class QcDefectVerificationController extends Controller
 
         return view('sand-casting.qc-defects.index', [
             'summary' => $summary,
+            'executions' => $paginatedExecutions,
+            'selectedStage' => $selectedStage,
             'queues' => $queues,
             'stages' => SandCastingStageExecutionService::STAGES,
             'stageLabels' => self::STAGE_LABELS,
