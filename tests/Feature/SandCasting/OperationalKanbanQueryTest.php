@@ -214,64 +214,17 @@ class OperationalKanbanQueryTest extends TestCase
 
     /**
      * TEST MANDATORI C:
-     * CNC_MACHINING physical DONE, Admin defect pending -> QC_POST_CNC READY
+     * CNC_MACHINING physical DONE, Admin defect pending -> BOR READY immediately
      */
-    public function test_mandatory_c_cnc_machining_physical_done_admin_defect_pending_qc_post_cnc_ready(): void
+    public function test_mandatory_c_cnc_machining_physical_done_admin_defect_pending_bor_ready(): void
     {
         $ktr = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
 
         $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
         $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
 
-        // CNC Machining physical done
+        // CNC Machining physical done -> advances directly to bor
         $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->spvBubutCnc->id);
-
-        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
-
-        $this->assertEquals(1, $cncData['summary']['ready_count']);
-        $this->assertEquals('QC_POST_CNC', $cncData['ready'][0]['active_checkpoint']);
-        $this->assertEquals('ready', $cncData['ready'][0]['display_bucket']);
-        $this->assertEquals('READY', $cncData['ready'][0]['display_status']);
-    }
-
-    /**
-     * TEST MANDATORI D:
-     * QC_POST_CNC physical DONE, Admin defect pending -> QC_PRE_BOR READY
-     */
-    public function test_mandatory_d_qc_post_cnc_physical_done_admin_defect_pending_qc_pre_bor_ready(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
-
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->spvBubutCnc->id);
-
-        // QC Post CNC physical done
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
-
-        $cncData = $this->queryService->getStageKanbanData('bubut_cnc');
-
-        $this->assertEquals(1, $cncData['summary']['ready_count']);
-        $this->assertEquals('QC_PRE_BOR', $cncData['ready'][0]['active_checkpoint']);
-        $this->assertEquals('ready', $cncData['ready'][0]['display_bucket']);
-        $this->assertEquals('READY', $cncData['ready'][0]['display_status']);
-    }
-
-    /**
-     * TEST MANDATORI E:
-     * QC_PRE_BOR physical DONE, Admin defect pending -> BOR READY
-     */
-    public function test_mandatory_e_qc_pre_bor_physical_done_admin_defect_pending_bor_ready(): void
-    {
-        $ktr = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
-
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'netto', $this->spvNetto->id);
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_od', $this->spvBubutOd->id);
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->spvBubutCnc->id);
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
-
-        // QC Pre Bor physical done -> stage advances to bor
-        $this->executionService->markPhysicalDone($ktr->traveler_number, 'bubut_cnc', $this->qcInspector->id);
 
         $borData = $this->queryService->getStageKanbanData('bor');
 

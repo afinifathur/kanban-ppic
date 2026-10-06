@@ -380,6 +380,152 @@ class SandCastingProductionStatusService
     }
 
     /**
+     * Get detailed physical KTR barcode items and status for a specific Production Plan.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getProductionCodeDetails(int|string $planIdOrCode, ?User $user = null): ?array
+    {
+        $currentUser = $user ?? auth()->user();
+        $scope = $currentUser?->product_scope;
+
+        $planQuery = ProductionPlan::query()
+            ->where(function (Builder $q) {
+                $q->where('production_domain', ProductionPlan::DOMAIN_SAND_CASTING)
+                    ->orWhereHas('sandCastingResultLines')
+                    ->orWhereHas('castingOrderLines');
+            })
+            ->where(function (Builder $q) use ($planIdOrCode) {
+                if (is_numeric($planIdOrCode)) {
+                    $q->where('id', (int) $planIdOrCode)->orWhere('code', (string) $planIdOrCode);
+                } else {
+                    $q->where('code', (string) $planIdOrCode);
+                }
+            })
+            ->with([
+                'sandCastingResultLines' => function ($q) {
+                    $q->with([
+                        'castingResult',
+                        'stageExecutions' => function ($sq) {
+                            $sq->orderBy('executed_at', 'asc')->orderBy('id', 'asc');
+                        },
+                    ]);
+                },
+            ]);
+
+        // Apply RBAC Product Scope
+        if ($currentUser && $currentUser->hasRole('ppic') && $scope) {
+            $planQuery->where('product_scope', $scope);
+        }
+
+        /** @var ProductionPlan|null $plan */
+        $plan = $planQuery->first();
+
+        if (! $plan) {
+            return null;
+        }
+
+        $lines = $plan->sandCastingResultLines ?? collect();
+
+        $stageLabels = [
+            'netto' => 'NETTO',
+            'bubut_od' => 'OD',
+            'bubut_cnc' => 'CNC',
+            'bor' => 'BOR',
+            'qc' => 'QC',
+            'completed' => 'GD',
+            'gudang_jadi' => 'GD',
+        ];
+
+        $items = [];
+        $totalPhysicalQty = 0;
+
+        foreach ($lines as $line) {
+            $stage = $line->current_stage;
+            $stageLabel = $stage ? ($stageLabels[$stage] ?? strtoupper(str_replace('_', ' ', $stage))) : 'COR';
+
+            // Resolve physical quantity currently at this position
+            if ($stage === 'completed' || $stage === 'gudang_jadi') {
+                $gdExec = $line->stageExecutions->firstWhere('checkpoint_code', 'GUDANG_RECEIVE');
+                $qty = $gdExec ? (int) $gdExec->good_qty : $this->resolveQcUsable($line, $line->stageExecutions);
+            } elseif ($stage === null) {
+                $qty = (int) $line->qty_good;
+            } else {
+                $qty = $this->resolveKtrUsableQty($line);
+            }
+
+            $totalPhysicalQty += $qty;
+
+            // Total defect recorded on this line
+            $defectQty = (int) $line->qty_reject + (int) $line->stageExecutions->sum('defect_qty');
+
+            // Latest activity timestamp
+            $lastExec = $line->stageExecutions->last();
+            $lastActivity = $lastExec?->executed_at ?? $lastExec?->physical_done_at ?? $line->updated_at ?? $line->created_at;
+
+            $items[] = [
+                'id' => $line->id,
+                'traveler_number' => $line->traveler_number,
+                'heat_number' => $line->castingResult?->heat_number ?? '-',
+                'cast_date' => $line->castingResult?->cast_date?->format('d/m/Y') ?? '-',
+                'furnace' => $line->castingResult?->furnace ?? '-',
+                'shift' => $line->castingResult?->shift ?? '-',
+                'operator_name' => $line->castingResult?->operator_name ?? '-',
+                'current_stage' => $stage ?? 'cor',
+                'current_stage_label' => $stageLabel,
+                'quantity' => $qty,
+                'qty_cor_good' => (int) $line->qty_good,
+                'defect_qty' => $defectQty,
+                'last_activity_at' => $lastActivity ? $lastActivity->format('d/m/Y H:i') : '-',
+            ];
+        }
+
+        // Sort items by Stage Priority, then Heat Number, then Traveler Number
+        $stageOrder = [
+            'NETTO' => 1,
+            'OD' => 2,
+            'CNC' => 3,
+            'BOR' => 4,
+            'QC' => 5,
+            'GD' => 6,
+            'COR' => 0,
+        ];
+
+        usort($items, function ($a, $b) use ($stageOrder) {
+            $rankA = $stageOrder[$a['current_stage_label']] ?? 99;
+            $rankB = $stageOrder[$b['current_stage_label']] ?? 99;
+
+            if ($rankA !== $rankB) {
+                return $rankA <=> $rankB;
+            }
+
+            $heatComp = strcmp((string) $a['heat_number'], (string) $b['heat_number']);
+            if ($heatComp !== 0) {
+                return $heatComp;
+            }
+
+            return strcmp((string) $a['traveler_number'], (string) $b['traveler_number']);
+        });
+
+        $rowSummary = $this->calculatePlanStatusRow($plan);
+
+        return [
+            'production_plan_id' => $plan->id,
+            'production_code' => $plan->code,
+            'customer' => $plan->customer ?? '-',
+            'item_code' => $plan->item_code ?? '-',
+            'item_name' => $plan->item_name ?? '-',
+            'po_target' => $rowSummary['po_target'],
+            'planned_qty' => $rowSummary['planned_qty'],
+            'status' => $rowSummary['status'],
+            'cor_indicator' => $rowSummary['cor_indicator'],
+            'total_physical_qty' => $totalPhysicalQty,
+            'ktr_count' => count($items),
+            'items' => $items,
+        ];
+    }
+
+    /**
      * Parse raw filter input into a clean string array.
      *
      * @return array<int, string>

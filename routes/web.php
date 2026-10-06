@@ -281,6 +281,7 @@ Route::middleware(['auth'])->group(function () {
 
         // Production Status (Sand Casting Read Model)
         Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
+        Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');
     });
 
     // Generic Scanner Endpoints (Direct alias)

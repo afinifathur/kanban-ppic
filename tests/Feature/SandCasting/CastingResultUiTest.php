@@ -549,4 +549,216 @@ class CastingResultUiTest extends TestCase
         $response->assertSee('Rencana Khusus Flange');
         $response->assertSee('qty_remaining_to_cast');
     }
+
+    public function test_search_by_heat_number_exact_and_partial(): void
+    {
+        $plan = $this->createPlan(['code' => '269ET777']);
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260916-0001',
+            'scheduled_date' => '2026-09-16',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+
+        $result1 = SandCastingCastingResult::create([
+            'heat_number' => 'A217092602',
+            'cast_date' => '2026-09-16',
+            'furnace' => 'F-01',
+            'shift' => '1',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $result1->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-16'),
+            'qty_good' => 50,
+            'qty_reject' => 0,
+            'unit_weight_kg' => 2.50,
+            'total_weight_kg' => 125.00,
+        ]);
+
+        $result2 = SandCastingCastingResult::create([
+            'heat_number' => 'B999092601',
+            'cast_date' => '2026-09-16',
+            'furnace' => 'F-02',
+            'shift' => '1',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+
+        // 1. Search Heat Number exact
+        $responseExact = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => 'A217092602']));
+        $responseExact->assertOk();
+        $responseExact->assertSee('A217092602');
+        $responseExact->assertDontSee('B999092601');
+
+        // 2. Search Heat Number partial
+        $responsePartial = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => 'A21709']));
+        $responsePartial->assertOk();
+        $responsePartial->assertSee('A217092602');
+        $responsePartial->assertDontSee('B999092601');
+    }
+
+    public function test_search_by_production_code_exact_and_partial(): void
+    {
+        $planA = $this->createPlan(['code' => '269ET777', 'title' => 'Item Plan A']);
+        $planB = $this->createPlan(['code' => '270AB888', 'title' => 'Item Plan B']);
+
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260916-0002',
+            'scheduled_date' => '2026-09-16',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLineA = $order->lines()->create([
+            'production_plan_id' => $planA->id,
+            'qty_ordered' => 100,
+            'code' => $planA->code,
+            'item_name' => $planA->item_name,
+        ]);
+        $orderLineB = $order->lines()->create([
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 100,
+            'code' => $planB->code,
+            'item_name' => $planB->item_name,
+        ]);
+
+        $heatForA = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-FOR-269ET',
+            'cast_date' => '2026-09-16',
+            'furnace' => 'F-01',
+            'shift' => '1',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $heatForA->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLineA->id,
+            'production_plan_id' => $planA->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-16'),
+            'qty_good' => 60,
+            'qty_reject' => 0,
+            'unit_weight_kg' => 2.50,
+            'total_weight_kg' => 150.00,
+        ]);
+
+        $heatForB = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-FOR-270AB',
+            'cast_date' => '2026-09-16',
+            'furnace' => 'F-02',
+            'shift' => '2',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $heatForB->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLineB->id,
+            'production_plan_id' => $planB->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-16'),
+            'qty_good' => 40,
+            'qty_reject' => 0,
+            'unit_weight_kg' => 3.00,
+            'total_weight_kg' => 120.00,
+        ]);
+
+        // 1. Exact Production Code search
+        $responseExact = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => '269ET777']));
+        $responseExact->assertOk();
+        $responseExact->assertSee('HEAT-FOR-269ET');
+        $responseExact->assertDontSee('HEAT-FOR-270AB');
+
+        // 2. Partial Production Code search
+        $responsePartial = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => '269ET']));
+        $responsePartial->assertOk();
+        $responsePartial->assertSee('HEAT-FOR-269ET');
+        $responsePartial->assertDontSee('HEAT-FOR-270AB');
+
+        // 3. Search for other Production Code
+        $responseB = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => '270AB888']));
+        $responseB->assertOk();
+        $responseB->assertSee('HEAT-FOR-270AB');
+        $responseB->assertDontSee('HEAT-FOR-269ET');
+
+        // 4. Non-matching search
+        $responseNone = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => 'NONEXISTENT999']));
+        $responseNone->assertOk();
+        $responseNone->assertDontSee('HEAT-FOR-269ET');
+        $responseNone->assertDontSee('HEAT-FOR-270AB');
+    }
+
+    public function test_heat_with_multiple_production_codes_is_found_by_any_of_them(): void
+    {
+        $planA = $this->createPlan(['code' => '269ET777', 'title' => 'Item Plan A']);
+        $planB = $this->createPlan(['code' => '268AB002', 'title' => 'Item Plan B']);
+
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20260916-0003',
+            'scheduled_date' => '2026-09-16',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLineA = $order->lines()->create([
+            'production_plan_id' => $planA->id,
+            'qty_ordered' => 100,
+            'code' => $planA->code,
+            'item_name' => $planA->item_name,
+        ]);
+        $orderLineB = $order->lines()->create([
+            'production_plan_id' => $planB->id,
+            'qty_ordered' => 100,
+            'code' => $planB->code,
+            'item_name' => $planB->item_name,
+        ]);
+
+        $sharedHeat = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-MULTI-PC-01',
+            'cast_date' => '2026-09-16',
+            'furnace' => 'F-01',
+            'shift' => '1',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $sharedHeat->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLineA->id,
+            'production_plan_id' => $planA->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-16'),
+            'qty_good' => 30,
+            'qty_reject' => 0,
+            'unit_weight_kg' => 2.50,
+            'total_weight_kg' => 75.00,
+        ]);
+        $sharedHeat->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLineB->id,
+            'production_plan_id' => $planB->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-16'),
+            'qty_good' => 45,
+            'qty_reject' => 0,
+            'unit_weight_kg' => 2.50,
+            'total_weight_kg' => 112.50,
+        ]);
+
+        // Search by Production Code A
+        $resA = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => '269ET777']));
+        $resA->assertOk();
+        $resA->assertSee('HEAT-MULTI-PC-01');
+
+        // Search by Production Code B
+        $resB = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => '268AB002']));
+        $resB->assertOk();
+        $resB->assertSee('HEAT-MULTI-PC-01');
+
+        // Search by Heat Number directly
+        $resHeat = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.index', ['heat_number' => 'HEAT-MULTI-PC-01']));
+        $resHeat->assertOk();
+        $resHeat->assertSee('HEAT-MULTI-PC-01');
+    }
 }

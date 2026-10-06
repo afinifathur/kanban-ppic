@@ -498,7 +498,7 @@ class SpvOperationalScannerTest extends TestCase
     }
 
     /**
-     * TEST H: CNC checkpoints remain valid in sequence.
+     * TEST H: Single CNC physical execution immediately advances to BOR.
      */
     public function test_h_cnc_checkpoints_remain_valid_in_sequence(): void
     {
@@ -512,24 +512,10 @@ class SpvOperationalScannerTest extends TestCase
         $this->assertSame('CNC_MACHINING', $lookup1['active_checkpoint']);
         $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', (int) $this->spvBubutCnc->id);
 
-        // 2. QC_POST_CNC
-        $line->refresh();
-        $this->assertSame('bubut_cnc', $line->current_stage);
-        $lookup2 = $this->queryService->findByTraveler($line->traveler_number);
-        $this->assertSame('QC_POST_CNC', $lookup2['active_checkpoint']);
-        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', (int) $this->spvBubutCnc->id);
-
-        // 3. QC_PRE_BOR
-        $line->refresh();
-        $this->assertSame('bubut_cnc', $line->current_stage);
-        $lookup3 = $this->queryService->findByTraveler($line->traveler_number);
-        $this->assertSame('QC_PRE_BOR', $lookup3['active_checkpoint']);
-        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', (int) $this->spvBubutCnc->id);
-
-        // After QC_PRE_BOR -> advances to 'bor'
+        // Single execution immediately advances to 'bor'
         $line->refresh();
         $this->assertSame('bor', $line->current_stage);
-        $lookup4 = $this->queryService->findByTraveler($line->traveler_number);
-        $this->assertSame('BOR_DRILLING', $lookup4['active_checkpoint']);
+        $lookupBor = $this->queryService->findByTraveler($line->traveler_number);
+        $this->assertSame('BOR_DRILLING', $lookupBor['active_checkpoint']);
     }
 }

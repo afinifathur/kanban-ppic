@@ -455,4 +455,162 @@ class ProductionStatusServiceTest extends TestCase
         $this->assertSame(0, $row['net_available_good']);
         $this->assertSame('COR', $row['cor_indicator']);
     }
+
+    /**
+     * SCENARIO 16: Detail - 1 KTR returns 1 detail item
+     */
+    public function test_16_detail_single_ktr_returns_single_detail_item(): void
+    {
+        $plan = $this->createPlan(['code' => 'S160', 'customer' => 'PT ABC', 'item_name' => 'FLANGE 2 INCH']);
+        $this->createKtr($plan, 100, 2, 'netto', 'HN-160');
+
+        $details = $this->service->getProductionCodeDetails($plan->id);
+
+        $this->assertNotNull($details);
+        $this->assertSame('S160', $details['production_code']);
+        $this->assertSame('PT ABC', $details['customer']);
+        $this->assertSame('FLANGE 2 INCH', $details['item_name']);
+        $this->assertSame(1, $details['ktr_count']);
+        $this->assertSame(100, $details['total_physical_qty']);
+        $this->assertCount(1, $details['items']);
+        $this->assertSame('HN-160', $details['items'][0]['heat_number']);
+        $this->assertSame('NETTO', $details['items'][0]['current_stage_label']);
+        $this->assertSame(100, $details['items'][0]['quantity']);
+    }
+
+    /**
+     * SCENARIO 17: Detail - Multi Heat returns all related Heats under the same Production Code
+     */
+    public function test_17_detail_multi_heat_returns_all_heats(): void
+    {
+        $plan = $this->createPlan(['code' => 'S170']);
+        $this->createKtr($plan, 50, 0, 'netto', 'HEAT-170-A');
+        $this->createKtr($plan, 60, 0, 'bubut_od', 'HEAT-170-B');
+        $this->createKtr($plan, 70, 0, 'bubut_cnc', 'HEAT-170-C');
+
+        $details = $this->service->getProductionCodeDetails('S170');
+
+        $this->assertNotNull($details);
+        $this->assertSame(3, $details['ktr_count']);
+        $this->assertSame(180, $details['total_physical_qty']);
+
+        $heats = collect($details['items'])->pluck('heat_number')->all();
+        $this->assertContains('HEAT-170-A', $heats);
+        $this->assertContains('HEAT-170-B', $heats);
+        $this->assertContains('HEAT-170-C', $heats);
+    }
+
+    /**
+     * SCENARIO 18: Detail - One Heat with Multi Production Code isolates KTRs per Production Code
+     */
+    public function test_18_detail_one_heat_multi_production_code_strict_boundary(): void
+    {
+        $planA = $this->createPlan(['code' => 'S180-A', 'item_name' => 'FLANGE 2"']);
+        $planB = $this->createPlan(['code' => 'S180-B', 'item_name' => 'FLANGE 3"']);
+
+        $sharedHeat = 'HEAT-SHARED-180';
+        $ktrA = $this->createKtr($planA, 80, 0, 'netto', $sharedHeat);
+        $ktrB = $this->createKtr($planB, 120, 0, 'bubut_od', $sharedHeat);
+
+        $detailsA = $this->service->getProductionCodeDetails('S180-A');
+        $detailsB = $this->service->getProductionCodeDetails('S180-B');
+
+        $this->assertNotNull($detailsA);
+        $this->assertNotNull($detailsB);
+
+        $this->assertSame(1, $detailsA['ktr_count']);
+        $this->assertSame(80, $detailsA['total_physical_qty']);
+        $this->assertSame($ktrA->traveler_number, $detailsA['items'][0]['traveler_number']);
+
+        $this->assertSame(1, $detailsB['ktr_count']);
+        $this->assertSame(120, $detailsB['total_physical_qty']);
+        $this->assertSame($ktrB->traveler_number, $detailsB['items'][0]['traveler_number']);
+    }
+
+    /**
+     * SCENARIO 19: Detail - Position labels and quantities for each stage (NETTO, OD, CNC, BOR, QC, GD)
+     */
+    public function test_19_detail_stage_positions_and_quantities(): void
+    {
+        $plan = $this->createPlan(['code' => 'S190']);
+
+        // NETTO
+        $ktrNetto = $this->createKtr($plan, 100, 0, 'netto');
+
+        // OD
+        $ktrOd = $this->createKtr($plan, 90, 0, 'bubut_od');
+        $this->createExecution($ktrOd, 'netto', 'NETTO_CUT', 90, 0, 90);
+
+        // CNC
+        $ktrCnc = $this->createKtr($plan, 80, 0, 'bubut_cnc');
+        $this->createExecution($ktrCnc, 'netto', 'NETTO_CUT', 80, 0, 80);
+        $this->createExecution($ktrCnc, 'bubut_od', 'OD_TURNING', 80, 0, 80);
+
+        // BOR
+        $ktrBor = $this->createKtr($plan, 70, 0, 'bor');
+        $this->createExecution($ktrBor, 'netto', 'NETTO_CUT', 70, 0, 70);
+        $this->createExecution($ktrBor, 'bubut_od', 'OD_TURNING', 70, 0, 70);
+        $this->createExecution($ktrBor, 'bubut_cnc', 'CNC_MACHINING', 70, 0, 70);
+
+        // QC
+        $ktrQc = $this->createKtr($plan, 60, 0, 'qc');
+        $this->createExecution($ktrQc, 'netto', 'NETTO_CUT', 60, 0, 60);
+        $this->createExecution($ktrQc, 'bubut_od', 'OD_TURNING', 60, 0, 60);
+        $this->createExecution($ktrQc, 'bubut_cnc', 'CNC_MACHINING', 60, 0, 60);
+        $this->createExecution($ktrQc, 'bor', 'BOR_DRILLING', 60, 0, 60);
+
+        // GD (completed)
+        $ktrGd = $this->createKtr($plan, 50, 0, 'completed');
+        $this->createExecution($ktrGd, 'gudang_jadi', 'GUDANG_RECEIVE', 50, 0, 50);
+
+        $details = $this->service->getProductionCodeDetails('S190');
+        $this->assertNotNull($details);
+        $this->assertSame(6, $details['ktr_count']);
+        $this->assertSame(450, $details['total_physical_qty']); // 100+90+80+70+60+50
+
+        $itemByStage = collect($details['items'])->keyBy('current_stage_label');
+
+        $this->assertSame(100, $itemByStage['NETTO']['quantity']);
+        $this->assertSame(90, $itemByStage['OD']['quantity']);
+        $this->assertSame(80, $itemByStage['CNC']['quantity']);
+        $this->assertSame(70, $itemByStage['BOR']['quantity']);
+        $this->assertSame(60, $itemByStage['QC']['quantity']);
+        $this->assertSame(50, $itemByStage['GD']['quantity']);
+    }
+
+    /**
+     * SCENARIO 20: Detail - Completed Production Code remains viewable with GD items
+     */
+    public function test_20_detail_completed_production_code_shows_gd_items(): void
+    {
+        $plan = $this->createPlan(['code' => 'S200', 'po_quantity' => 500]);
+        $ktr = $this->createKtr($plan, 500, 0, 'completed');
+        $this->createExecution($ktr, 'gudang_jadi', 'GUDANG_RECEIVE', 500, 0, 500);
+
+        $details = $this->service->getProductionCodeDetails('S200');
+
+        $this->assertNotNull($details);
+        $this->assertSame('COMPLETED', $details['status']);
+        $this->assertSame(500, $details['total_physical_qty']);
+        $this->assertSame('GD', $details['items'][0]['current_stage_label']);
+    }
+
+    /**
+     * SCENARIO 21: Detail - Late defect updates quantity without rewinding physical stage
+     */
+    public function test_21_detail_late_defect_updates_quantity_at_physical_stage(): void
+    {
+        $plan = $this->createPlan(['code' => 'S210', 'po_quantity' => 1000]);
+        $ktr = $this->createKtr($plan, 1000, 0, 'bor');
+
+        // Recorded 50 defects at netto
+        $this->createExecution($ktr, 'netto', 'NETTO_CUT', 1000, 50, 950);
+
+        $details = $this->service->getProductionCodeDetails('S210');
+
+        $this->assertNotNull($details);
+        $this->assertSame('BOR', $details['items'][0]['current_stage_label']);
+        $this->assertSame(950, $details['items'][0]['quantity']);
+        $this->assertSame(50, $details['items'][0]['defect_qty']);
+    }
 }

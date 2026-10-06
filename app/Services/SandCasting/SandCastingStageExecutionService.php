@@ -56,7 +56,7 @@ class SandCastingStageExecutionService
     public const STAGE_CHECKPOINTS = [
         'netto' => ['NETTO_CUT'],
         'bubut_od' => ['OD_TURNING'],
-        'bubut_cnc' => ['CNC_MACHINING', 'QC_POST_CNC', 'QC_PRE_BOR'],
+        'bubut_cnc' => ['CNC_MACHINING'],
         'bor' => ['BOR_DRILLING'],
         'qc' => ['QC_FINAL_INSPECTION'],
         'gudang_jadi' => ['GUDANG_RECEIVE'],
@@ -69,8 +69,8 @@ class SandCastingStageExecutionService
         'NETTO_CUT' => 'netto',
         'OD_TURNING' => 'bubut_od',
         'CNC_MACHINING' => 'bubut_cnc',
-        'QC_POST_CNC' => 'bubut_cnc',
-        'QC_PRE_BOR' => 'bubut_cnc',
+        'QC_POST_CNC' => 'bubut_cnc', // preserved for historical compatibility
+        'QC_PRE_BOR' => 'bubut_cnc',  // preserved for historical compatibility
         'BOR_DRILLING' => 'bor',
         'QC_FINAL_INSPECTION' => 'qc',
         'GUDANG_RECEIVE' => 'gudang_jadi',
@@ -82,9 +82,9 @@ class SandCastingStageExecutionService
     public const PREVIOUS_CHECKPOINT = [
         'OD_TURNING' => 'NETTO_CUT',
         'CNC_MACHINING' => 'OD_TURNING',
-        'QC_POST_CNC' => 'CNC_MACHINING',
-        'QC_PRE_BOR' => 'QC_POST_CNC',
-        'BOR_DRILLING' => 'QC_PRE_BOR',
+        'QC_POST_CNC' => 'CNC_MACHINING', // historical compatibility
+        'QC_PRE_BOR' => 'QC_POST_CNC',     // historical compatibility
+        'BOR_DRILLING' => 'CNC_MACHINING',
         'QC_FINAL_INSPECTION' => 'BOR_DRILLING',
         'GUDANG_RECEIVE' => 'QC_FINAL_INSPECTION',
     ];
@@ -95,9 +95,9 @@ class SandCastingStageExecutionService
     public const NEXT_CHECKPOINT = [
         'NETTO_CUT' => 'OD_TURNING',
         'OD_TURNING' => 'CNC_MACHINING',
-        'CNC_MACHINING' => 'QC_POST_CNC',
-        'QC_POST_CNC' => 'QC_PRE_BOR',
-        'QC_PRE_BOR' => 'BOR_DRILLING',
+        'CNC_MACHINING' => 'BOR_DRILLING',
+        'QC_POST_CNC' => 'QC_PRE_BOR',     // historical compatibility
+        'QC_PRE_BOR' => 'BOR_DRILLING',    // historical compatibility
         'BOR_DRILLING' => 'QC_FINAL_INSPECTION',
         'QC_FINAL_INSPECTION' => 'GUDANG_RECEIVE',
         'GUDANG_RECEIVE' => null,
@@ -218,6 +218,14 @@ class SandCastingStageExecutionService
                 $prevExec = $line->stageExecutions()
                     ->where('checkpoint_code', $prevCode)
                     ->first();
+
+                // Safe fallback for historical records if BOR_DRILLING looks for previous execution
+                if (! $prevExec && $checkpointCode === 'BOR_DRILLING') {
+                    $prevExec = $line->stageExecutions()
+                        ->whereIn('checkpoint_code', ['QC_PRE_BOR', 'QC_POST_CNC', 'CNC_MACHINING'])
+                        ->latest('id')
+                        ->first();
+                }
 
                 if (! $prevExec) {
                     throw new InvalidArgumentException("Riwayat eksekusi checkpoint sebelumnya ({$prevCode}) belum ditemukan untuk KTR {$travelerNumber}.");

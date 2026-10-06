@@ -42,7 +42,16 @@ class CastingResultController extends Controller
         }
 
         if ($request->filled('heat_number')) {
-            $query->where('heat_number', 'like', '%'.$request->heat_number.'%');
+            $term = trim($request->heat_number);
+            $query->where(function ($q) use ($term) {
+                $q->where('heat_number', 'like', '%'.$term.'%')
+                    ->orWhereHas('lines.productionPlan', function ($sq) use ($term) {
+                        $sq->where('code', 'like', '%'.$term.'%');
+                    })
+                    ->orWhereHas('lines.castingOrderLine', function ($sq) use ($term) {
+                        $sq->where('code', 'like', '%'.$term.'%');
+                    });
+            });
         }
 
         if ($request->filled('date')) {

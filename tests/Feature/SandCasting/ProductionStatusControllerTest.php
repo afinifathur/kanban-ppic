@@ -386,4 +386,107 @@ class ProductionStatusControllerTest extends TestCase
         $this->assertCount(1, $data['rows']);
         $this->assertSame('S999', $data['rows'][0]['code']);
     }
+
+    /**
+     * TEST 11: Detail endpoint returns 401/redirect for unauthenticated guest
+     */
+    public function test_11_detail_endpoint_requires_auth(): void
+    {
+        $response = $this->get('/sand-casting/production-status/details?code=S101');
+        $response->assertRedirect('/login');
+    }
+
+    /**
+     * TEST 12: Detail endpoint returns 422 if code / production_plan_id is missing
+     */
+    public function test_12_detail_endpoint_validates_required_parameters(): void
+    {
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status/details');
+
+        $response->assertStatus(422);
+        $response->assertJsonStructure(['message', 'items']);
+    }
+
+    /**
+     * TEST 13: Detail endpoint returns 404 if plan is not found
+     */
+    public function test_13_detail_endpoint_returns_404_when_not_found(): void
+    {
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status/details?code=NON_EXISTENT');
+
+        $response->assertStatus(404);
+    }
+
+    /**
+     * TEST 14: Detail endpoint returns structured physical KTR data
+     */
+    public function test_14_detail_endpoint_returns_physical_ktr_data(): void
+    {
+        $plan = $this->createPlan(['code' => 'S801', 'customer' => 'PT PERONIS']);
+        $this->createKtr($plan, 150, 2, 'netto', 'HN-TEST-801');
+
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status/details?production_plan_id='.$plan->id);
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'production_plan_id',
+            'production_code',
+            'customer',
+            'item_code',
+            'item_name',
+            'po_target',
+            'planned_qty',
+            'status',
+            'cor_indicator',
+            'total_physical_qty',
+            'ktr_count',
+            'items' => [
+                '*' => [
+                    'id',
+                    'traveler_number',
+                    'heat_number',
+                    'cast_date',
+                    'furnace',
+                    'shift',
+                    'operator_name',
+                    'current_stage',
+                    'current_stage_label',
+                    'quantity',
+                    'qty_cor_good',
+                    'defect_qty',
+                    'last_activity_at',
+                ],
+            ],
+        ]);
+
+        $data = $response->json();
+        $this->assertSame('S801', $data['production_code']);
+        $this->assertSame('PT PERONIS', $data['customer']);
+        $this->assertSame(1, $data['ktr_count']);
+        $this->assertSame(150, $data['total_physical_qty']);
+        $this->assertSame('NETTO', $data['items'][0]['current_stage_label']);
+        $this->assertSame('HN-TEST-801', $data['items'][0]['heat_number']);
+    }
+
+    /**
+     * TEST 15: Detail endpoint respects user product_scope authorization
+     */
+    public function test_15_detail_endpoint_respects_product_scope_authorization(): void
+    {
+        // FLANGE_STAINLESS plan (outside ppicUser scope FLANGE_BESI)
+        $planSS = $this->createPlan([
+            'code' => 'SS-SCOPE-01',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+        ]);
+        $this->createKtr($planSS, 100, 0, 'netto');
+
+        $response = $this->actingAs($this->ppicUser)
+            ->getJson('/sand-casting/production-status/details?code=SS-SCOPE-01');
+
+        $response->assertStatus(404);
+    }
 }

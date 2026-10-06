@@ -472,7 +472,7 @@ class StageExecutionStateMachineTest extends TestCase
         $this->service->verifyQcBreakdown($odExec, [], $this->qcInspector->id);
         $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
 
-        // 3. BUBUT CNC Checkpoint 1 (CNC_MACHINING): Input 60 -> defect 5 -> good 55
+        // 3. BUBUT CNC Checkpoint (CNC_MACHINING): Input 60 -> defect 5 -> good 55
         $activeChk1 = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertEquals('CNC_MACHINING', $activeChk1['code']);
 
@@ -485,48 +485,16 @@ class StageExecutionStateMachineTest extends TestCase
             ['defect_type_id' => $this->defectTypeKeropos->id, 'qty' => 5],
         ], $this->qcInspector->id);
 
-        // Current stage MUST STILL be bubut_cnc!
-        $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
-
-        // 4. BUBUT CNC Checkpoint 2 (QC_POST_CNC): Input 55 -> defect 2 -> good 53
-        $activeChk2 = $this->service->resolveActiveCheckpoint($line->fresh());
-        $this->assertEquals('QC_POST_CNC', $activeChk2['code']);
-
-        $cncExec2 = $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id);
-        $this->assertEquals('QC_POST_CNC', $cncExec2->checkpoint_code);
-        $this->assertEquals(55, $cncExec2->input_qty); // Input strictly derived from CNC_MACHINING good_qty!
-
-        $cncExec2 = $this->service->recordDefectQty($cncExec2, 2, $this->adminPpic->id);
-        $this->service->verifyQcBreakdown($cncExec2, [
-            ['defect_type_id' => $this->defectTypeRetak->id, 'qty' => 2],
-        ], $this->qcInspector->id);
-
-        // Current stage MUST STILL be bubut_cnc!
-        $this->assertEquals('bubut_cnc', $line->fresh()->current_stage);
-
-        // 5. BUBUT CNC Checkpoint 3 (QC_PRE_BOR): Input 53 -> defect 3 -> good 50
-        $activeChk3 = $this->service->resolveActiveCheckpoint($line->fresh());
-        $this->assertEquals('QC_PRE_BOR', $activeChk3['code']);
-
-        $cncExec3 = $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id);
-        $this->assertEquals('QC_PRE_BOR', $cncExec3->checkpoint_code);
-        $this->assertEquals(53, $cncExec3->input_qty); // Input strictly derived from QC_POST_CNC good_qty!
-
-        $cncExec3 = $this->service->recordDefectQty($cncExec3, 3, $this->adminPpic->id);
-        $this->service->verifyQcBreakdown($cncExec3, [
-            ['defect_type_id' => $this->defectTypeKeropos->id, 'qty' => 3],
-        ], $this->qcInspector->id);
-
-        // Stage advances to bor!
+        // Stage advances directly to bor!
         $this->assertEquals('bor', $line->fresh()->current_stage);
 
-        // 6. BOR (BOR_DRILLING): Input must be exactly 50!
+        // 4. BOR (BOR_DRILLING): Input must be exactly 55!
         $activeBor = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertEquals('BOR_DRILLING', $activeBor['code']);
 
         $borExec = $this->service->markPhysicalDone($line->traveler_number, 'bor', $this->operator->id);
         $this->assertEquals('BOR_DRILLING', $borExec->checkpoint_code);
-        $this->assertEquals(50, $borExec->input_qty); // Hard guarantee: 50 PCS only!
+        $this->assertEquals(55, $borExec->input_qty); // Hard guarantee: 55 PCS derived from CNC_MACHINING!
     }
 
     public function test_13_reject_stage_skipping(): void
@@ -547,11 +515,9 @@ class StageExecutionStateMachineTest extends TestCase
             ['stage' => 'netto', 'chk' => 'NETTO_CUT', 'defect' => 5], // good 95
             ['stage' => 'bubut_od', 'chk' => 'OD_TURNING', 'defect' => 3], // good 92
             ['stage' => 'bubut_cnc', 'chk' => 'CNC_MACHINING', 'defect' => 5], // good 87
-            ['stage' => 'bubut_cnc', 'chk' => 'QC_POST_CNC', 'defect' => 2], // good 85
-            ['stage' => 'bubut_cnc', 'chk' => 'QC_PRE_BOR', 'defect' => 3], // good 82
-            ['stage' => 'bor', 'chk' => 'BOR_DRILLING', 'defect' => 2], // good 80
-            ['stage' => 'qc', 'chk' => 'QC_FINAL_INSPECTION', 'defect' => 0], // good 80
-            ['stage' => 'gudang_jadi', 'chk' => 'GUDANG_RECEIVE', 'defect' => 0], // good 80
+            ['stage' => 'bor', 'chk' => 'BOR_DRILLING', 'defect' => 2], // good 85
+            ['stage' => 'qc', 'chk' => 'QC_FINAL_INSPECTION', 'defect' => 0], // good 85
+            ['stage' => 'gudang_jadi', 'chk' => 'GUDANG_RECEIVE', 'defect' => 0], // good 85
         ];
 
         foreach ($pipeline as $step) {
@@ -569,7 +535,7 @@ class StageExecutionStateMachineTest extends TestCase
         }
 
         $this->assertEquals('completed', $line->fresh()->current_stage);
-        $this->assertCount(8, $line->stageExecutions);
+        $this->assertCount(6, $line->stageExecutions);
     }
 
     // =========================================================================
@@ -643,7 +609,7 @@ class StageExecutionStateMachineTest extends TestCase
     }
 
     /**
-     * TEST E: CNC checkpoint physical DONE, admin defect pending -> next physical checkpoint remains available
+     * TEST E: CNC physical DONE, admin defect pending -> advances to BOR and opens BOR checkpoint
      */
     public function test_decoupled_test_e_cnc_checkpoint_done_defect_pending_opens_next_checkpoint(): void
     {
@@ -657,25 +623,18 @@ class StageExecutionStateMachineTest extends TestCase
         $this->assertEquals('CNC_MACHINING', $cnc1->checkpoint_code);
         $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $cnc1->status);
 
-        // Next checkpoint QC_POST_CNC must be ready immediately
+        // Stage must be bor immediately
+        $this->assertEquals('bor', $line->fresh()->current_stage);
+
+        // Next checkpoint BOR_DRILLING must be ready immediately
         $active2 = $this->service->resolveActiveCheckpoint($line->fresh());
         $this->assertNotNull($active2);
-        $this->assertEquals('QC_POST_CNC', $active2['code']);
+        $this->assertEquals('BOR_DRILLING', $active2['code']);
         $this->assertEquals(SandCastingStageExecution::STATUS_READY, $active2['status']);
-
-        // Execute QC_POST_CNC physically
-        $cnc2 = $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id);
-        $this->assertEquals('QC_POST_CNC', $cnc2->checkpoint_code);
-
-        // Next checkpoint QC_PRE_BOR must be ready immediately
-        $active3 = $this->service->resolveActiveCheckpoint($line->fresh());
-        $this->assertNotNull($active3);
-        $this->assertEquals('QC_PRE_BOR', $active3['code']);
-        $this->assertEquals(SandCastingStageExecution::STATUS_READY, $active3['status']);
     }
 
     /**
-     * TEST F: CNC all physical checkpoints done, QC/admin pending -> BOR physical execution allowed
+     * TEST F: CNC physical checkpoint done, QC/admin pending -> BOR physical execution allowed
      */
     public function test_decoupled_test_f_all_cnc_checkpoints_done_allows_bor_execution(): void
     {
@@ -684,12 +643,10 @@ class StageExecutionStateMachineTest extends TestCase
         $this->service->markPhysicalDone($line->traveler_number, 'netto', $this->operator->id);
         $this->service->markPhysicalDone($line->traveler_number, 'bubut_od', $this->operator->id);
         $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id); // CNC_MACHINING
-        $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id); // QC_POST_CNC
-        $this->service->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->operator->id); // QC_PRE_BOR
 
         $this->assertEquals('bor', $line->fresh()->current_stage);
 
-        // Bor execution is permitted physically even with all previous defects pending!
+        // Bor execution is permitted physically even with CNC defect pending!
         $borExec = $this->service->markPhysicalDone($line->traveler_number, 'bor', $this->operator->id);
         $this->assertEquals('BOR_DRILLING', $borExec->checkpoint_code);
         $this->assertEquals(100, $borExec->input_qty);

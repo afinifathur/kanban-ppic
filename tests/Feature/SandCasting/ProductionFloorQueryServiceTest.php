@@ -263,11 +263,9 @@ class ProductionFloorQueryServiceTest extends TestCase
     {
         $line = $this->createKtrLine(['qty_good' => 10, 'current_stage' => 'netto']);
 
-        // Execute full chain to completion (note: bubut_cnc has 3 checkpoints: CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR)
+        // Execute full chain to completion (note: bubut_cnc has single checkpoint: CNC_MACHINING)
         $this->executionService->execute($line->traveler_number, 'netto', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bubut_od', 0, $this->user->id);
-        $this->executionService->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
-        $this->executionService->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'bor', 0, $this->user->id);
         $this->executionService->execute($line->traveler_number, 'qc', 0, $this->user->id);

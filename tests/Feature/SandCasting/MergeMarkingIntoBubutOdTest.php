@@ -342,17 +342,15 @@ class MergeMarkingIntoBubutOdTest extends TestCase
     }
 
     /**
-     * TEST 8: CNC tetap memiliki 3 checkpoints: CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR
+     * TEST 8: CNC memiliki 1 checkpoint (CNC_MACHINING) yang langsung mengalir ke BOR_DRILLING
      */
-    public function test_8_cnc_retains_all_three_checkpoints(): void
+    public function test_8_cnc_has_single_checkpoint_flowing_to_bor(): void
     {
         $cncCheckpoints = SandCastingStageExecutionService::STAGE_CHECKPOINTS['bubut_cnc'];
-        $this->assertEquals(['CNC_MACHINING', 'QC_POST_CNC', 'QC_PRE_BOR'], $cncCheckpoints);
+        $this->assertEquals(['CNC_MACHINING'], $cncCheckpoints);
 
         $this->assertEquals('CNC_MACHINING', SandCastingStageExecutionService::NEXT_CHECKPOINT['OD_TURNING']);
-        $this->assertEquals('QC_POST_CNC', SandCastingStageExecutionService::NEXT_CHECKPOINT['CNC_MACHINING']);
-        $this->assertEquals('QC_PRE_BOR', SandCastingStageExecutionService::NEXT_CHECKPOINT['QC_POST_CNC']);
-        $this->assertEquals('BOR_DRILLING', SandCastingStageExecutionService::NEXT_CHECKPOINT['QC_PRE_BOR']);
+        $this->assertEquals('BOR_DRILLING', SandCastingStageExecutionService::NEXT_CHECKPOINT['CNC_MACHINING']);
     }
 
     /**

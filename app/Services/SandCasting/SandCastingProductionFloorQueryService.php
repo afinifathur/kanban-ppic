@@ -192,6 +192,13 @@ class SandCastingProductionFloorQueryService
                     $prevExec = $line->stageExecutions
                         ->firstWhere('checkpoint_code', $prevChkCode);
 
+                    // Safe fallback for historical records if BOR_DRILLING looks for previous execution
+                    if (! $prevExec && $chkCode === 'BOR_DRILLING') {
+                        $prevExec = $line->stageExecutions
+                            ->whereIn('checkpoint_code', ['QC_PRE_BOR', 'QC_POST_CNC', 'CNC_MACHINING'])
+                            ->last();
+                    }
+
                     return $prevExec ? (int) $prevExec->good_qty : 0;
                 }
 

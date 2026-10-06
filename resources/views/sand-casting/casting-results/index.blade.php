@@ -38,28 +38,35 @@
 
     <!-- Filter Card -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-        <form method="GET" action="{{ route('sand-casting.casting-results.index') }}" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-            <div>
-                <label for="heat_number" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Heat Number</label>
-                <input type="text" name="heat_number" id="heat_number" value="{{ request('heat_number') }}" placeholder="Cari nomor heat..."
-                       class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        <form method="GET" action="{{ route('sand-casting.casting-results.index') }}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+            <div class="sm:col-span-2 lg:col-span-4">
+                <label for="heat_number" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1 truncate" title="Heat Number / Kode Produksi">
+                    Heat Number / Kode Produksi
+                </label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
+                        <i class="fas fa-search text-[10px]"></i>
+                    </span>
+                    <input type="text" name="heat_number" id="heat_number" value="{{ request('heat_number') }}" placeholder="Cari nomor heat / kode..."
+                           class="w-full text-xs pl-7 pr-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium">
+                </div>
             </div>
 
-            <div>
+            <div class="lg:col-span-2">
                 <label for="date" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Tanggal Cor</label>
                 <input type="date" name="date" id="date" value="{{ request('date') }}"
-                       class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                       class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium">
             </div>
 
-            <div>
+            <div class="lg:col-span-2">
                 <label for="furnace" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Furnace</label>
                 <input type="text" name="furnace" id="furnace" value="{{ request('furnace') }}" placeholder="F-01, Tungku..."
-                       class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                       class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium">
             </div>
 
-            <div>
+            <div class="lg:col-span-2">
                 <label for="shift" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Shift</label>
-                <select name="shift" id="shift" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+                <select name="shift" id="shift" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white font-medium">
                     <option value="">Semua Shift</option>
                     <option value="1" {{ request('shift') == '1' ? 'selected' : '' }}>Shift 1</option>
                     <option value="2" {{ request('shift') == '2' ? 'selected' : '' }}>Shift 2</option>
@@ -67,13 +74,14 @@
                 </select>
             </div>
 
-            <div class="flex items-end gap-2">
-                <button type="submit" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-3 py-2 rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm">
-                    <i class="fas fa-search"></i> Filter
+            <div class="flex items-center gap-1.5 lg:col-span-2">
+                <button type="submit" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap">
+                    <i class="fas fa-filter text-[10px]"></i>
+                    <span>Filter</span>
                 </button>
                 @if(request()->anyFilled(['heat_number', 'date', 'furnace', 'shift']))
-                    <a href="{{ route('sand-casting.casting-results.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3 py-2 rounded-lg transition flex items-center justify-center" title="Reset">
-                        <i class="fas fa-undo"></i>
+                    <a href="{{ route('sand-casting.casting-results.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-2.5 rounded-lg border border-slate-200 transition flex items-center justify-center shrink-0" title="Reset Filter">
+                        <i class="fas fa-undo text-[10px]"></i>
                     </a>
                 @endif
             </div>

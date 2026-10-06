@@ -181,9 +181,7 @@ class StageExecutionServiceTest extends TestCase
         $line->refresh();
         $this->assertEquals('bubut_cnc', $line->current_stage);
 
-        // 3. BUBUT CNC (92 in, 0 defect -> 92 good across CNC_MACHINING, QC_POST_CNC, QC_PRE_BOR)
-        $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
-        $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
+        // 3. BUBUT CNC (92 in, 0 defect -> 92 good -> advances directly to bor)
         $this->service->execute($line->traveler_number, 'bubut_cnc', 0, $this->user->id);
         $line->refresh();
         $this->assertEquals('bor', $line->current_stage);
@@ -207,7 +205,7 @@ class StageExecutionServiceTest extends TestCase
 
         $line->refresh();
         $this->assertEquals('completed', $line->current_stage);
-        $this->assertCount(8, $line->stageExecutions);
+        $this->assertCount(6, $line->stageExecutions);
     }
 
     /**

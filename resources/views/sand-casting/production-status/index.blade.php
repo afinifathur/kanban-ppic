@@ -395,15 +395,19 @@
                         @php
                             $rNettoDisplay = (int) $row['r_cor'] + (int) $row['r_netto'];
                         @endphp
-                        <tr class="hover:bg-blue-50/30 transition-colors {{ $loop->even ? 'bg-slate-50/50' : 'bg-white' }}">
+                        <tr class="sc-status-row hover:bg-blue-50/50 cursor-pointer transition-colors {{ $loop->even ? 'bg-slate-50/50' : 'bg-white' }}"
+                            data-plan-id="{{ $row['production_plan_id'] }}"
+                            data-code="{{ $row['code'] }}">
                             <!-- No -->
                             <td class="compact-td text-center font-bold text-slate-400 tabular-nums">
                                 {{ $row['no'] }}
                             </td>
 
-                            <!-- Kode Produksi -->
+                            <!-- Kode Produksi (Clickable) -->
                             <td class="compact-td font-black text-slate-900 truncate px-1.5" title="{{ $row['code'] }}">
-                                {{ $row['code'] }}
+                                <a href="#" class="hover:text-amber-600 hover:underline sc-detail-link"
+                                   data-plan-id="{{ $row['production_plan_id'] }}"
+                                   data-code="{{ $row['code'] }}">{{ $row['code'] }}</a>
                             </td>
 
                             <!-- Product Name (Natural Multi-line Wrapping, Readable, Aligned with Lost Wax) -->
@@ -662,4 +666,268 @@
         </tbody>
     </table>
 </div>
+
+{{-- ========================================================================= --}}
+{{-- 3. PRODUCTION CODE DETAIL DRAWER (Aligned with Lost Wax Architecture) --}}
+{{-- ========================================================================= --}}
+<div id="scDetailModal" class="fixed inset-0 z-50 hidden no-print" style="background:rgba(0,0,0,0.5)">
+    <div class="absolute right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl overflow-y-auto flex flex-col">
+        <!-- Sticky Drawer Header -->
+        <div class="sticky top-0 bg-slate-800 text-white px-5 py-4 flex items-center justify-between z-10 shadow-md">
+            <div>
+                <h3 class="font-bold text-sm tracking-tight" id="scModalTitle">Detail Kode Produksi</h3>
+                <p class="text-xs text-slate-400 mt-0.5" id="scModalSubtitle"></p>
+            </div>
+            <button onclick="closeSCDetail()" class="text-white hover:text-slate-300 text-2xl leading-none font-bold p-1 rounded transition-colors" title="Tutup (Esc)">&times;</button>
+        </div>
+
+        <!-- Dynamic Drawer Content Container -->
+        <div id="scDetailContent" class="p-5 flex-1 space-y-4">
+            <div class="text-center py-12 text-slate-500">
+                <i class="fas fa-spinner fa-spin text-3xl text-amber-500 mb-3"></i>
+                <p class="text-xs font-semibold">Memuat detail physical KTR...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Bind click on Code link
+        document.querySelectorAll('.sc-detail-link').forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openSCDetail(this.dataset.planId, this.dataset.code);
+            });
+        });
+
+        // Bind click on Table Row
+        document.querySelectorAll('.sc-status-row').forEach(function(row) {
+            row.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'A' && !e.target.closest('a') && !e.target.closest('input') && !e.target.closest('button')) {
+                    openSCDetail(this.dataset.planId, this.dataset.code);
+                }
+            });
+        });
+
+        // Backdrop & Escape key close bindings
+        const modal = document.getElementById('scDetailModal');
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeSCDetail();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeSCDetail();
+            }
+        });
+    });
+
+    function openSCDetail(planId, code) {
+        const modal = document.getElementById('scDetailModal');
+        const content = document.getElementById('scDetailContent');
+        const title = document.getElementById('scModalTitle');
+        const subtitle = document.getElementById('scModalSubtitle');
+
+        if (!modal || !content) return;
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+
+        content.innerHTML = `
+            <div class="text-center py-12 text-slate-500">
+                <i class="fas fa-spinner fa-spin text-3xl text-amber-500 mb-3"></i>
+                <p class="text-xs font-semibold">Memuat detail physical KTR...</p>
+            </div>
+        `;
+        title.textContent = 'Detail Kode Produksi: ' + (code || '-');
+        subtitle.textContent = 'Memuat informasi...';
+
+        const endpoint = '{{ route('sand-casting.production-status.details') }}?production_plan_id=' + encodeURIComponent(planId || code);
+
+        fetch(endpoint, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(res) {
+            if (!res.ok) {
+                throw new Error('HTTP error ' + res.status);
+            }
+            return res.json();
+        })
+        .then(function(data) {
+            renderSCDetailData(data);
+        })
+        .catch(function(err) {
+            console.error('Failed to load detail:', err);
+            content.innerHTML = `
+                <div class="text-center py-12 text-rose-500">
+                    <i class="fas fa-exclamation-triangle text-3xl mb-3 block opacity-80"></i>
+                    <p class="text-sm font-bold">Gagal memuat detail data fisik.</p>
+                    <p class="text-xs text-slate-400 mt-1">Silakan coba beberapa saat lagi.</p>
+                </div>
+            `;
+        });
+    }
+
+    function closeSCDetail() {
+        const modal = document.getElementById('scDetailModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+    }
+
+    function renderSCDetailData(data) {
+        const title = document.getElementById('scModalTitle');
+        const subtitle = document.getElementById('scModalSubtitle');
+        const content = document.getElementById('scDetailContent');
+
+        title.textContent = 'Kode: ' + (data.production_code || '-');
+        subtitle.textContent = (data.item_name || '-') + ' · ' + (data.customer || '-');
+
+        if (!data.items || data.items.length === 0) {
+            content.innerHTML = `
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+                    <div class="flex items-center justify-between text-xs pb-2 border-b border-slate-200">
+                        <span class="text-slate-500 font-semibold">Customer:</span>
+                        <span class="font-bold text-slate-800">${escapeHtml(data.customer || '-')}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs pb-2 border-b border-slate-200">
+                        <span class="text-slate-500 font-semibold">Item:</span>
+                        <span class="font-bold text-slate-800">${escapeHtml(data.item_name || '-')}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+                        <div><span class="text-slate-400">PO Target:</span> <span class="font-bold font-mono">${(data.po_target || 0).toLocaleString('id-ID')}</span></div>
+                        <div><span class="text-slate-400">Plan:</span> <span class="font-bold font-mono">${(data.planned_qty || 0).toLocaleString('id-ID')}</span></div>
+                    </div>
+                </div>
+                <div class="text-center py-10 text-slate-500">
+                    <i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>
+                    <p class="text-sm font-semibold">Belum ada barcode / KTR terkait Kode Produksi ini.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Summary Card
+        let html = `
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Customer</div>
+                        <div class="text-xs font-bold text-slate-800">${escapeHtml(data.customer || '-')}</div>
+                    </div>
+                    <div class="text-right">
+                        ${data.status === 'COMPLETED' 
+                            ? '<span class="inline-block px-2 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">COMPLETED</span>'
+                            : '<span class="inline-block px-2 py-0.5 rounded text-[9px] font-black bg-blue-100 text-blue-800 border border-blue-300">ACTIVE</span>'}
+                        ${data.cor_indicator === 'COR' 
+                            ? '<span class="inline-block ml-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">COR</span>' 
+                            : ''}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Item Product</div>
+                    <div class="text-xs font-bold text-slate-800">${escapeHtml(data.item_name || '-')}</div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-xs pt-2 border-t border-slate-200">
+                    <div>
+                        <span class="text-[10px] text-slate-400 block font-semibold">PO Target</span>
+                        <span class="font-extrabold font-mono text-slate-900">${(data.po_target || 0).toLocaleString('id-ID')}</span>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-400 block font-semibold">Plan Qty</span>
+                        <span class="font-extrabold font-mono text-slate-700">${(data.planned_qty || 0).toLocaleString('id-ID')}</span>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-400 block font-semibold">Total Fisik</span>
+                        <span class="font-extrabold font-mono text-emerald-700">${(data.total_physical_qty || 0).toLocaleString('id-ID')} PCS</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List Section Header -->
+            <div class="flex items-center justify-between pt-1">
+                <span class="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Produksi Fisik / KTR</span>
+                <span class="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200">${data.items.length} Traveler</span>
+            </div>
+
+            <!-- List of KTR Cards -->
+            <div class="space-y-2.5">
+        `;
+
+        const badgeColors = {
+            'NETTO': 'bg-amber-100 text-amber-900 border-amber-300',
+            'OD': 'bg-blue-100 text-blue-900 border-blue-300',
+            'CNC': 'bg-indigo-100 text-indigo-900 border-indigo-300',
+            'BOR': 'bg-purple-100 text-purple-900 border-purple-300',
+            'QC': 'bg-teal-100 text-teal-900 border-teal-300',
+            'GD': 'bg-emerald-100 text-emerald-900 border-emerald-300',
+            'COR': 'bg-slate-100 text-slate-800 border-slate-300'
+        };
+
+        data.items.forEach(function(item) {
+            const badgeClass = badgeColors[item.current_stage_label] || 'bg-slate-100 text-slate-800 border-slate-300';
+            html += `
+                <div class="border border-slate-200 rounded-lg p-3 bg-white shadow-2xs hover:border-amber-400 transition-colors">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                <i class="fas fa-fire text-amber-600 text-[9px] mr-0.5"></i>${escapeHtml(item.heat_number)}
+                            </span>
+                            <span class="font-mono font-bold text-xs text-slate-700">
+                                ${escapeHtml(item.traveler_number)}
+                            </span>
+                        </div>
+                        <span class="inline-block px-2 py-0.5 rounded text-[10px] font-black border tracking-wider ${badgeClass}">
+                            ${escapeHtml(item.current_stage_label)}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 text-xs py-1.5 border-y border-slate-100 bg-slate-50/50 px-2 rounded">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block font-semibold">Posisi Qty</span>
+                            <span class="font-extrabold text-sm text-slate-900 font-mono">${(item.quantity || 0).toLocaleString('id-ID')} <span class="text-[10px] font-normal text-slate-500">PCS</span></span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block font-semibold">Hasil Cor</span>
+                            <span class="font-bold text-xs text-slate-700 font-mono">${(item.qty_cor_good || 0).toLocaleString('id-ID')} pcs</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block font-semibold">Total Rusak</span>
+                            <span class="font-bold text-xs font-mono ${item.defect_qty > 0 ? 'text-rose-600' : 'text-slate-400'}">${(item.defect_qty || 0).toLocaleString('id-ID')} pcs</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1.5">
+                        <span>Tgl Cor: <strong class="text-slate-600">${escapeHtml(item.cast_date)}</strong></span>
+                        <span>Update: <strong class="text-slate-600">${escapeHtml(item.last_activity_at)}</strong></span>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        content.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+</script>
 @endsection
+
