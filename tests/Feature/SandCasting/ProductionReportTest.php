@@ -75,7 +75,7 @@ class ProductionReportTest extends TestCase
         ]);
         $this->spvUser->assignRole('spv');
 
-        $this->reportService = new SandCastingProductionReportService;
+        $this->reportService = app(SandCastingProductionReportService::class);
     }
 
     protected function createPlan(array $attributes = []): ProductionPlan
@@ -530,5 +530,571 @@ class ProductionReportTest extends TestCase
 
         $exec->refresh();
         $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $exec->status);
+    }
+
+    /**
+     * REPORT TEST 1: NETTO: Input 40, Defect 5, Good 35
+     */
+    public function test_report_scenario_1_netto_effective_quantities(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40]);
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'netto']);
+        $item = $dataset['items']->first();
+        $summary = $dataset['stage_summaries']->where('stage', 'netto')->first();
+
+        $this->assertEquals(40, $item['input_qty']);
+        $this->assertEquals(5, $item['defect_qty']);
+        $this->assertEquals(35, $item['good_qty']);
+
+        $this->assertEquals(40, $summary['input_pcs']);
+        $this->assertEquals(5, $summary['defect_pcs']);
+        $this->assertEquals(35, $summary['good_pcs']);
+    }
+
+    /**
+     * REPORT TEST 2: NETTO defect 5, CNC defect 2 -> CNC: Input 35, Defect 2, Good 33
+     */
+    public function test_report_scenario_2_cnc_effective_quantities_with_upstream_defect(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40]);
+
+        // Netto with defect 5
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Bubut OD with defect 0
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'BUBUT_OD_ROUGH',
+            'input_qty' => 40, // Snapshot
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Bubut CNC with defect 2
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 40, // Snapshot
+            'defect_qty' => 2,
+            'good_qty' => 38,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'bubut_cnc']);
+        $item = $dataset['items']->first();
+        $summary = $dataset['stage_summaries']->where('stage', 'bubut_cnc')->first();
+
+        // CNC Input must be 35 (40 - 5), Defect 2, Good 33 (35 - 2)
+        $this->assertEquals(35, $item['input_qty']);
+        $this->assertEquals(2, $item['defect_qty']);
+        $this->assertEquals(33, $item['good_qty']);
+
+        $this->assertEquals(35, $summary['input_pcs']);
+        $this->assertEquals(2, $summary['defect_pcs']);
+        $this->assertEquals(33, $summary['good_pcs']);
+    }
+
+    /**
+     * REPORT TEST 3: BOR: Input 33, Defect 0, Good 33
+     */
+    public function test_report_scenario_3_bor_effective_quantities_with_upstream_defects(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40]);
+
+        // Netto defect 5
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // OD defect 0
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'BUBUT_OD_ROUGH',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // CNC defect 2
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 40,
+            'defect_qty' => 2,
+            'good_qty' => 38,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Bor defect 0
+        $line->stageExecutions()->create([
+            'stage' => 'bor',
+            'checkpoint_code' => 'BOR_DRILLING',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'bor']);
+        $item = $dataset['items']->first();
+        $summary = $dataset['stage_summaries']->where('stage', 'bor')->first();
+
+        // Bor Input must be 33 (40 - 5 - 2), Defect 0, Good 33
+        $this->assertEquals(33, $item['input_qty']);
+        $this->assertEquals(0, $item['defect_qty']);
+        $this->assertEquals(33, $item['good_qty']);
+
+        $this->assertEquals(33, $summary['input_pcs']);
+        $this->assertEquals(0, $summary['defect_pcs']);
+        $this->assertEquals(33, $summary['good_pcs']);
+    }
+
+    /**
+     * REPORT TEST 4: Late defect - Physical activity Day 1, Defect entered Day 3.
+     * Report date stays Day 1, quantity is reconciled.
+     */
+    public function test_report_scenario_4_late_defect_reconciliation_preserves_physical_activity_date(): void
+    {
+        $day1 = '2026-09-01';
+        $day3 = '2026-09-03';
+
+        $line = $this->createKtrLine(['qty_good' => 40], null, $day1);
+
+        // Physical executions done on Day 1 (Snapshot input 40)
+        $nettoExec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'physical_done_at' => $day1.' 09:00:00',
+            'executed_at' => $day1.' 09:00:00',
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $odExec = $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'BUBUT_OD_ROUGH',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'physical_done_at' => $day1.' 11:00:00',
+            'executed_at' => $day1.' 11:00:00',
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $cncExec = $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'physical_done_at' => $day1.' 14:00:00',
+            'executed_at' => $day1.' 14:00:00',
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $borExec = $line->stageExecutions()->create([
+            'stage' => 'bor',
+            'checkpoint_code' => 'BOR_DRILLING',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'physical_done_at' => $day1.' 16:00:00',
+            'executed_at' => $day1.' 16:00:00',
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Day 3: Defects entered by Admin PPIC
+        $nettoExec->update([
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'defect_entered_at' => $day3.' 10:00:00',
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+        ]);
+
+        $cncExec->update([
+            'defect_qty' => 2,
+            'good_qty' => 38,
+            'defect_entered_at' => $day3.' 11:00:00',
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+        ]);
+
+        // Report for Day 1 physical activities
+        // NETTO: 40 / 5 / 35
+        $datasetNetto = $this->reportService->getProductionDataset(['date_from' => $day1, 'date_to' => $day1, 'stage' => 'netto']);
+        $itemNetto = $datasetNetto['items']->first();
+        $this->assertEquals(40, $itemNetto['input_qty']);
+        $this->assertEquals(5, $itemNetto['defect_qty']);
+        $this->assertEquals(35, $itemNetto['good_qty']);
+
+        // OD: 35 / 0 / 35
+        $datasetOd = $this->reportService->getProductionDataset(['date_from' => $day1, 'date_to' => $day1, 'stage' => 'bubut_od']);
+        $itemOd = $datasetOd['items']->first();
+        $this->assertEquals(35, $itemOd['input_qty']);
+        $this->assertEquals(0, $itemOd['defect_qty']);
+        $this->assertEquals(35, $itemOd['good_qty']);
+
+        // CNC: 35 / 2 / 33
+        $datasetCnc = $this->reportService->getProductionDataset(['date_from' => $day1, 'date_to' => $day1, 'stage' => 'bubut_cnc']);
+        $itemCnc = $datasetCnc['items']->first();
+        $this->assertEquals(35, $itemCnc['input_qty']);
+        $this->assertEquals(2, $itemCnc['defect_qty']);
+        $this->assertEquals(33, $itemCnc['good_qty']);
+
+        // BOR: 33 / 0 / 33
+        $datasetBor = $this->reportService->getProductionDataset(['date_from' => $day1, 'date_to' => $day1, 'stage' => 'bor']);
+        $itemBor = $datasetBor['items']->first();
+        $this->assertEquals(33, $itemBor['input_qty']);
+        $this->assertEquals(0, $itemBor['defect_qty']);
+        $this->assertEquals(33, $itemBor['good_qty']);
+    }
+
+    /**
+     * REPORT TEST 5: HTML / Excel / PDF numeric consistency
+     */
+    public function test_report_scenario_5_html_excel_pdf_dataset_numeric_consistency(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40, 'unit_weight_kg' => 2.00]);
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 40,
+            'defect_qty' => 2,
+            'good_qty' => 38,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // 1. HTML View
+        $resHtml = $this->actingAs($this->adminUser)->get('/sand-casting/report/production?stage=bubut_cnc');
+        $resHtml->assertStatus(200);
+        $resHtml->assertSee('35 pcs'); // Input pcs in summary
+        $resHtml->assertSee('2 pcs');  // Defect pcs
+        $resHtml->assertSee('33 pcs'); // Good pcs
+        $resHtml->assertSee('66.00 kg'); // Weight (33 * 2.00)
+
+        // 2. PDF View
+        $resPdf = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=bubut_cnc');
+        $resPdf->assertStatus(200);
+        $resPdf->assertSee('35');
+        $resPdf->assertSee('33 pcs');
+        $resPdf->assertSee('66.00 kg');
+
+        // 3. Excel Export
+        $resExcel = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/excel?stage=bubut_cnc');
+        $resExcel->assertStatus(200);
+        $this->assertStringContainsString('spreadsheetml.sheet', $resExcel->headers->get('Content-Type'));
+    }
+
+    /**
+     * REPORT TEST 6: CNC 3 checkpoints do not double count Stage Summary
+     */
+    public function test_report_scenario_6_cnc_checkpoints_do_not_double_count_summary(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40]);
+
+        // Netto defect = 5
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // CNC 3 checkpoints (machining defect 2, post cnc defect 1, pre bor defect 0)
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 35,
+            'defect_qty' => 2,
+            'good_qty' => 33,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now()->subMinutes(30),
+            'executed_at' => now()->subMinutes(30),
+            'operator_id' => $this->spvUser->id,
+        ]);
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'QC_POST_CNC',
+            'input_qty' => 33,
+            'defect_qty' => 1,
+            'good_qty' => 32,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now()->subMinutes(20),
+            'executed_at' => now()->subMinutes(20),
+            'operator_id' => $this->spvUser->id,
+        ]);
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'QC_PRE_BOR',
+            'input_qty' => 32,
+            'defect_qty' => 0,
+            'good_qty' => 32,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now()->subMinutes(10),
+            'executed_at' => now()->subMinutes(10),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'bubut_cnc']);
+        $summary = $dataset['stage_summaries']->where('stage', 'bubut_cnc')->first();
+
+        // Single KTR
+        $this->assertEquals(1, $summary['ktr_count']);
+        // Effective input = 35
+        $this->assertEquals(35, $summary['input_pcs']);
+        // Cumulative defect across CNC checkpoints = 3 (2 + 1)
+        $this->assertEquals(3, $summary['defect_pcs']);
+        // Effective good = 32 (35 - 3)
+        $this->assertEquals(32, $summary['good_pcs']);
+
+        // 3 Detail items exist
+        $this->assertCount(3, $dataset['items']);
+    }
+
+    /**
+     * REPORT TEST 7: Multiple KTR isolation
+     */
+    public function test_report_scenario_7_multiple_ktr_isolation(): void
+    {
+        $line1 = $this->createKtrLine(['qty_good' => 40]);
+        $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $line2 = $this->createKtrLine(['qty_good' => 60]);
+        $line2->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 60,
+            'defect_qty' => 10,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'netto']);
+        $summary = $dataset['stage_summaries']->where('stage', 'netto')->first();
+
+        $this->assertEquals(2, $summary['ktr_count']);
+        $this->assertEquals(100, $summary['input_pcs']); // 40 + 60
+        $this->assertEquals(15, $summary['defect_pcs']);  // 5 + 10
+        $this->assertEquals(85, $summary['good_pcs']);   // 35 + 50
+    }
+
+    /**
+     * REPORT TEST 8: Physical database snapshot remains immutable
+     */
+    public function test_report_scenario_8_physical_database_snapshot_remains_immutable(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40]);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'netto']);
+
+        $exec->refresh();
+        $this->assertEquals(40, $exec->input_qty);
+        $this->assertEquals(5, $exec->defect_qty);
+        $this->assertEquals(35, $exec->good_qty);
+    }
+
+    /**
+     * REPORT TEST 9: Multiple execution on stage does not double count Stage Summary
+     */
+    public function test_report_scenario_9_multiple_execution_on_stage_does_not_double_count_summary(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40]);
+
+        // Netto execution 1: defect 2
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 2,
+            'good_qty' => 38,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now()->subMinutes(10),
+            'executed_at' => now()->subMinutes(10),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Netto execution 2 (e.g. second cut/re-work): defect 1
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_FINISH',
+            'input_qty' => 38,
+            'defect_qty' => 1,
+            'good_qty' => 37,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'netto']);
+        $summary = $dataset['stage_summaries']->where('stage', 'netto')->first();
+
+        // 1 KTR
+        $this->assertEquals(1, $summary['ktr_count']);
+        // Effective input = 40 (COR good)
+        $this->assertEquals(40, $summary['input_pcs']);
+        // Cumulative defect = 3 (2 + 1)
+        $this->assertEquals(3, $summary['defect_pcs']);
+        // Effective good = 37 (40 - 3)
+        $this->assertEquals(37, $summary['good_pcs']);
+    }
+
+    /**
+     * REPORT TEST 10: Weight calculated from effective good
+     */
+    public function test_report_scenario_10_weight_calculated_from_effective_good(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40, 'unit_weight_kg' => 2.50]);
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $dataset = $this->reportService->getProductionDataset(['stage' => 'netto']);
+        $summary = $dataset['stage_summaries']->where('stage', 'netto')->first();
+
+        // Effective good 35 * 2.50 = 87.50 kg
+        $this->assertEquals(87.50, $summary['weight_kg']);
+    }
+
+    /**
+     * REPORT TEST 11: PDF "Total Berat Input" calculated from effective input
+     */
+    public function test_report_scenario_11_pdf_total_berat_input_calculated_from_effective_input(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 40, 'unit_weight_kg' => 2.50]);
+
+        // Netto defect 5
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 5,
+            'good_qty' => 35,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Bor execution: effective input = 35 -> Total Berat Input = 35 * 2.50 = 87.50 kg
+        $line->stageExecutions()->create([
+            'stage' => 'bor',
+            'checkpoint_code' => 'BOR_DRILLING',
+            'input_qty' => 40, // Snapshot
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/report/production/export/pdf?stage=bor');
+        $response->assertStatus(200);
+        // Total Berat Input for 35 * 2.50 = 87.50 kg
+        $response->assertSee('87.50 kg');
     }
 }

@@ -5,12 +5,9 @@
 		},
 		{
 			"path": "../../../kpi-bubut"
-		},
-		{
-			"path": "../../../masterdataKPI"
 		}
 	],
 	"settings": {
-		"powershell.cwd": "kanban-ppic"
+		"powershell.cwd": "kpi-bubut"
 	}
 }

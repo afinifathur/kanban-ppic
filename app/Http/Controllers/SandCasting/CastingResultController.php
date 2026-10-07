@@ -16,8 +16,10 @@ class CastingResultController extends Controller
 {
     protected SandCastingCastingResultService $resultService;
 
-    public function __construct(SandCastingCastingResultService $resultService)
-    {
+    public function __construct(
+        SandCastingCastingResultService $resultService,
+        protected \App\Services\SandCasting\SandCastingQuantityResolverService $quantityResolver
+    ) {
         $this->resultService = $resultService;
     }
 
@@ -356,6 +358,7 @@ class CastingResultController extends Controller
             'castingResult.recorder',
             'castingOrderLine.castingOrder.creator',
             'productionPlan',
+            'stageExecutions',
         ]);
 
         $generator = new BarcodeGeneratorPNG;
@@ -373,7 +376,120 @@ class CastingResultController extends Controller
         );
         $qrCodeSvg = preg_replace('/^<\?xml[^>]*\?>\s*/i', '', $rawQrSvg);
 
-        return view('sand-casting.casting-results.kitir', compact('castingResult', 'line', 'barcodeBase64', 'qrCodeSvg'));
+        $kitirRows = $this->buildKitirProcessRows($line);
+
+        return view('sand-casting.casting-results.kitir', compact('castingResult', 'line', 'barcodeBase64', 'qrCodeSvg', 'kitirRows'));
+    }
+
+    /**
+     * Build the 7-row dynamic process state for Kitir Produksi.
+     * Uses SandCastingQuantityResolverService as the single source of truth for effective quantities.
+     *
+     * @return array<int, array{no: int, label: string, hasil: int|null, rusak: int|null, tanggal: string|null, operator: string|null}>
+     */
+    protected function buildKitirProcessRows(SandCastingCastingResultLine $line): array
+    {
+        $stageConfigs = [
+            [
+                'no' => 1,
+                'stage' => 'netto',
+                'label' => 'NETTO (POTONG)',
+                'spv_label' => 'SPV NETTO',
+                'is_digital' => true,
+            ],
+            [
+                'no' => 2,
+                'stage' => 'bubut_od',
+                'label' => 'BUBUT OD',
+                'spv_label' => 'SPV OD',
+                'is_digital' => true,
+            ],
+            [
+                'no' => 3,
+                'stage' => 'marking',
+                'label' => 'MARKING',
+                'spv_label' => null,
+                'is_digital' => false,
+            ],
+            [
+                'no' => 4,
+                'stage' => 'bubut_cnc',
+                'label' => 'BUBUT CNC',
+                'spv_label' => 'SPV CNC',
+                'is_digital' => true,
+            ],
+            [
+                'no' => 5,
+                'stage' => 'bor',
+                'label' => 'BOR',
+                'spv_label' => 'SPV BOR',
+                'is_digital' => true,
+            ],
+            [
+                'no' => 6,
+                'stage' => 'qc',
+                'label' => 'QC (FINAL INSPECTION)',
+                'spv_label' => 'SPV QC',
+                'is_digital' => true,
+            ],
+            [
+                'no' => 7,
+                'stage' => 'gudang_jadi',
+                'label' => 'GUDANG JADI',
+                'spv_label' => 'SPV GUDANG',
+                'is_digital' => true,
+            ],
+        ];
+
+        $executions = $line->stageExecutions;
+        $rows = [];
+
+        foreach ($stageConfigs as $cfg) {
+            if (! $cfg['is_digital']) {
+                // Physical checklist only (e.g. MARKING)
+                $rows[] = [
+                    'no' => $cfg['no'],
+                    'label' => $cfg['label'],
+                    'hasil' => null,
+                    'rusak' => null,
+                    'tanggal' => null,
+                    'operator' => null,
+                ];
+
+                continue;
+            }
+
+            $stageExecs = $executions->where('stage', $cfg['stage'])->whereNotNull('physical_done_at');
+
+            if ($stageExecs->isEmpty()) {
+                // Not yet physically executed
+                $rows[] = [
+                    'no' => $cfg['no'],
+                    'label' => $cfg['label'],
+                    'hasil' => null,
+                    'rusak' => null,
+                    'tanggal' => null,
+                    'operator' => null,
+                ];
+
+                continue;
+            }
+
+            $effectiveGood = $this->quantityResolver->resolveEffectiveGoodQty($line, $cfg['stage']);
+            $stageDefect = (int) $stageExecs->sum('defect_qty');
+            $latestDoneAt = $stageExecs->sortByDesc('physical_done_at')->first()?->physical_done_at;
+
+            $rows[] = [
+                'no' => $cfg['no'],
+                'label' => $cfg['label'],
+                'hasil' => $effectiveGood,
+                'rusak' => $stageDefect,
+                'tanggal' => $latestDoneAt ? $latestDoneAt->format('d/m/Y') : null,
+                'operator' => $cfg['spv_label'],
+            ];
+        }
+
+        return $rows;
     }
 
     /**

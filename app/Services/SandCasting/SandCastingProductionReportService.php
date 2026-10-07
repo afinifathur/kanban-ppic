@@ -40,6 +40,10 @@ class SandCastingProductionReportService
         return $order[$stage] ?? 99;
     }
 
+    public function __construct(
+        protected SandCastingQuantityResolverService $quantityResolver
+    ) {}
+
     /**
      * Get the canonical normalized production report dataset.
      *
@@ -75,8 +79,8 @@ class SandCastingProductionReportService
         $corLines = collect();
         if ($selectedStage === 'all' || $selectedStage === 'cor') {
             $eagerCor = $includeDetails
-                ? ['castingResult.recorder', 'productionPlan', 'castingOrderLine']
-                : ['castingResult', 'productionPlan'];
+                ? ['castingResult.recorder', 'productionPlan', 'castingOrderLine', 'stageExecutions']
+                : ['castingResult', 'productionPlan', 'stageExecutions'];
 
             $corQuery = SandCastingCastingResultLine::with($eagerCor)
                 ->whereHas('castingResult', function ($q) use ($dateFrom, $dateTo) {
@@ -143,8 +147,8 @@ class SandCastingProductionReportService
         $executions = collect();
         if (! empty($execStages)) {
             $eagerExec = $includeDetails
-                ? ['castingResultLine.castingResult', 'castingResultLine.productionPlan', 'castingResultLine.castingOrderLine', 'operator', 'defects.defectType']
-                : ['castingResultLine.productionPlan'];
+                ? ['castingResultLine.castingResult', 'castingResultLine.productionPlan', 'castingResultLine.castingOrderLine', 'castingResultLine.stageExecutions', 'operator', 'defects.defectType']
+                : ['castingResultLine.productionPlan', 'castingResultLine.stageExecutions'];
 
             $execQuery = SandCastingStageExecution::with($eagerExec)
                 ->whereIn('stage', $execStages)
@@ -170,9 +174,16 @@ class SandCastingProductionReportService
                     $itemName = $plan?->item_name ?? '-';
                     $heatNumber = $result?->heat_number ?? '-';
                     $weight = (float) ($line?->unit_weight_kg ?? $plan?->weight ?? 0.0);
-                    $goodQty = (int) $exec->good_qty;
+
+                    // Operational Effective Quantities via Single Source of Truth
+                    $inputQty = $line
+                        ? $this->quantityResolver->resolveEffectiveInputQty($line, (string) $exec->stage)
+                        : (int) $exec->input_qty;
                     $defectQty = (int) $exec->defect_qty;
-                    $inputQty = (int) $exec->input_qty;
+                    $goodQty = $line
+                        ? $this->quantityResolver->resolveEffectiveGoodQty($line, (string) $exec->stage)
+                        : (int) $exec->good_qty;
+
                     $totalWeight = round($goodQty * $weight, 2);
                     $doneDate = $exec->physical_done_at ? $exec->physical_done_at->format('Y-m-d H:i') : '-';
                     $operator = $exec->operator?->name ?: '-';
@@ -230,40 +241,32 @@ class SandCastingProductionReportService
 
                     return (int) $l->qty_good * $w;
                 });
-            } elseif ($stgKey === 'bubut_cnc') {
-                // 4. BUBUT CNC (Special Anti-Double-Count Handling for 3 Checkpoints)
-                $cncExecs = $executions->where('stage', 'bubut_cnc');
-                $groupedByLine = $cncExecs->groupBy('sand_casting_casting_result_line_id');
+            } else {
+                // 2 - 7 (Netto, Bubut OD, Bubut CNC, Bor, QC, Gudang Jadi)
+                // Group by unique KTR line to prevent double counting across checkpoints / multiple executions
+                $stgExecs = $executions->where('stage', $stgKey);
+                $groupedByLine = $stgExecs->groupBy('sand_casting_casting_result_line_id');
                 $ktrCount = $groupedByLine->count();
 
                 foreach ($groupedByLine as $lineId => $lineExecs) {
-                    // Checkpoint order: CNC_MACHINING -> QC_POST_CNC -> QC_PRE_BOR
-                    $sorted = $lineExecs->sortBy('physical_done_at');
-                    $firstExec = $sorted->first();
-                    $initialInput = (int) ($firstExec?->input_qty ?? 0);
-                    $totalDefectForLine = (int) $lineExecs->sum('defect_qty');
-                    $finalGoodForLine = max(0, $initialInput - $totalDefectForLine);
-
-                    $lineModel = $firstExec?->castingResultLine;
+                    $lineModel = $lineExecs->first()?->castingResultLine;
                     $w = (float) ($lineModel?->unit_weight_kg ?? $lineModel?->productionPlan?->weight ?? 0.0);
 
-                    $inputPcs += $initialInput;
-                    $defectPcs += $totalDefectForLine;
-                    $goodPcs += $finalGoodForLine;
-                    $weightKg += ($finalGoodForLine * $w);
-                }
-            } else {
-                // 2, 3, 5, 6, 7 (Netto, Bubut OD, Bor, QC, Gudang Jadi)
-                $stgExecs = $executions->where('stage', $stgKey);
-                $ktrCount = $stgExecs->pluck('sand_casting_casting_result_line_id')->unique()->count();
-                $inputPcs = (int) $stgExecs->sum('input_qty');
-                $defectPcs = (int) $stgExecs->sum('defect_qty');
-                $goodPcs = (int) $stgExecs->sum('good_qty');
-                $weightKg = (float) $stgExecs->sum(function ($e) {
-                    $w = (float) ($e->castingResultLine?->unit_weight_kg ?? $e->castingResultLine?->productionPlan?->weight ?? 0.0);
+                    $effectiveInput = $lineModel
+                        ? $this->quantityResolver->resolveEffectiveInputQty($lineModel, $stgKey)
+                        : (int) ($lineExecs->first()?->input_qty ?? 0);
 
-                    return (int) $e->good_qty * $w;
-                });
+                    $effectiveGood = $lineModel
+                        ? $this->quantityResolver->resolveEffectiveGoodQty($lineModel, $stgKey)
+                        : (int) ($lineExecs->last()?->good_qty ?? 0);
+
+                    $totalDefectForLine = (int) $lineExecs->sum('defect_qty');
+
+                    $inputPcs += $effectiveInput;
+                    $defectPcs += $totalDefectForLine;
+                    $goodPcs += $effectiveGood;
+                    $weightKg += ($effectiveGood * $w);
+                }
             }
 
             $defectRate = $inputPcs > 0 ? round(($defectPcs / $inputPcs) * 100, 2) : 0.0;

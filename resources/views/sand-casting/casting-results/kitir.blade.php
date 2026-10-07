@@ -213,75 +213,88 @@
                             </tr>
                         </thead>
                         <tbody class="text-black font-mono">
-                            <!-- 1. NETTO (POTONG) -->
-                            <tr class="process-row border-b-black-solid">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">1</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">NETTO (POTONG)</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                            @if(isset($kitirRows) && count($kitirRows) > 0)
+                                @foreach($kitirRows as $row)
+                                    <tr class="process-row {{ !$loop->last ? 'border-b-black-solid' : '' }}">
+                                        <td class="text-center font-bold border-r-black-solid font-mono text-sm">{{ $row['no'] }}</td>
+                                        <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">{{ $row['label'] }}</td>
+                                        <td class="border-r-black-solid text-center font-bold font-mono text-sm">{{ $row['hasil'] !== null ? $row['hasil'] : '' }}</td>
+                                        <td class="border-r-black-solid text-center font-bold font-mono text-sm">{{ $row['rusak'] !== null ? $row['rusak'] : '' }}</td>
+                                        <td class="border-r-black-solid text-center font-bold font-mono text-xs">{{ $row['tanggal'] ?? '' }}</td>
+                                        <td class="text-center font-bold font-sans text-xs">{{ $row['operator'] ?? '' }}</td>
+                                    </tr>
+                                @endforeach
+                            @else
+                                <!-- 1. NETTO (POTONG) -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">1</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">NETTO (POTONG)</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
 
-                            <!-- 2. BUBUT OD -->
-                            <tr class="process-row border-b-black-solid">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">2</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT OD</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                                <!-- 2. BUBUT OD -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">2</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT OD</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
 
-                            <!-- 3. MARKING -->
-                            <tr class="process-row border-b-black-solid">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">3</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">MARKING</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                                <!-- 3. MARKING -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">3</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">MARKING</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
 
-                            <!-- 4. BUBUT CNC -->
-                            <tr class="process-row border-b-black-solid">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">4</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT CNC</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                                <!-- 4. BUBUT CNC -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">4</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT CNC</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
 
-                            <!-- 5. BOR -->
-                            <tr class="process-row border-b-black-solid">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">5</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BOR</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                                <!-- 5. BOR -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">5</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BOR</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
 
-                            <!-- 6. QC (FINAL INSPECTION) -->
-                            <tr class="process-row border-b-black-solid">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">6</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">QC (FINAL INSPECTION)</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                                <!-- 6. QC (FINAL INSPECTION) -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">6</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">QC (FINAL INSPECTION)</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
 
-                            <!-- 7. GUDANG JADI -->
-                            <tr class="process-row">
-                                <td class="text-center font-bold border-r-black-solid font-mono text-sm">7</td>
-                                <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">GUDANG JADI</td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td class="border-r-black-solid"></td>
-                                <td></td>
-                            </tr>
+                                <!-- 7. GUDANG JADI -->
+                                <tr class="process-row">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">7</td>
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">GUDANG JADI</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td></td>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>
