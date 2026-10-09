@@ -238,6 +238,11 @@
                                                 <i class="fas fa-exclamation-circle text-amber-500"></i>
                                                 BELUM DICATAT
                                             </span>
+                                        @elseif(!empty($card['is_auto_nihil']) && $card['defect_qty'] === 0)
+                                            <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1" title="Nihil otomatis sistem setelah 5 hari timeout">
+                                                <i class="fas fa-clock text-indigo-500"></i>
+                                                0 PCS (AUTO NIHIL)
+                                            </span>
                                         @elseif($card['defect_qty'] === 0)
                                             <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1">
                                                 <i class="fas fa-check-circle text-emerald-500"></i>
@@ -268,10 +273,17 @@
                                                 Menunggu Input
                                             </span>
                                         @elseif($card['status'] === \App\Models\SandCastingStageExecution::STATUS_WAITING_QC)
-                                            <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1">
-                                                <i class="fas fa-hourglass-half text-indigo-500"></i>
-                                                Menunggu QC
-                                            </span>
+                                            @if(!empty($card['is_reverification']))
+                                                <span class="bg-amber-50 text-amber-700 border border-amber-200 font-bold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1" title="Menunggu verifikasi ulang QC setelah penambahan defect">
+                                                    <i class="fas fa-redo text-amber-500"></i>
+                                                    Re-Verifikasi QC
+                                                </span>
+                                            @else
+                                                <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1">
+                                                    <i class="fas fa-hourglass-half text-indigo-500"></i>
+                                                    Menunggu QC
+                                                </span>
+                                            @endif
                                         @elseif($card['status'] === \App\Models\SandCastingStageExecution::STATUS_CONFIRMED)
                                             <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1">
                                                 <i class="fas fa-check-double text-emerald-500"></i>
@@ -397,13 +409,16 @@
                             </div>
                         </div>
 
-                        <!-- Tanggal Proses -->
+                        <!-- Tanggal Pemeriksaan Fisik (Inspection Date) -->
                         <div>
-                            <label for="process_date" class="block text-xs font-bold text-slate-700 mb-1">
-                                Tanggal Proses
+                            <label for="inspection_date" class="block text-xs font-bold text-slate-700 mb-1">
+                                Tanggal Pemeriksaan Fisik
                             </label>
-                            <input type="date" name="process_date" id="process_date"
+                            <input type="date" name="inspection_date" id="inspection_date" max="{{ date('Y-m-d') }}"
                                 class="w-full text-xs py-1.5 bg-white border border-slate-300 text-slate-800 rounded-lg focus:ring-amber-500 focus:border-amber-500">
+                            <p class="text-[10px] text-slate-400 mt-0.5">
+                                Sesuai tanggal pada lembar formulir pemeriksaan fisik QC/lapangan.
+                            </p>
                         </div>
 
                         <!-- Notes (Optional) -->
@@ -478,6 +493,10 @@
                                 <span class="text-slate-500">Checkpoint:</span>
                                 <span id="addModalCheckpoint" class="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100"></span>
                             </div>
+                            <div id="addModalInspectionDateRow" class="flex justify-between items-center hidden">
+                                <span class="text-slate-500">Tgl Pemeriksaan:</span>
+                                <span id="addModalInspectionDate" class="font-bold text-slate-800 font-mono"></span>
+                            </div>
                             <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 text-center">
                                 <div class="bg-white p-1.5 rounded border border-slate-200">
                                     <div class="text-[10px] text-slate-400">Input Produksi</div>
@@ -504,7 +523,7 @@
                             </label>
                             <input type="number" name="added_qty" id="added_qty" min="1" step="1" required
                                 class="w-full text-center text-lg font-black tracking-wider py-1.5 bg-white border border-slate-300 text-slate-800 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                                placeholder="1" oninput="calculateCumulativeDefect()">
+                                placeholder="Contoh: 1" oninput="calculateCumulativeDefect()">
                             <p class="text-[10px] text-slate-400 mt-0.5">
                                 Masukkan jumlah defect tambahan yang baru ditemukan (bukan total akhir).
                             </p>
@@ -545,7 +564,7 @@
                                     <thead class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                                         <tr>
                                             <th class="py-1 px-2">Waktu</th>
-                                            <th class="py-1 px-2">User</th>
+                                            <th class="py-1 px-2">Aksi / User</th>
                                             <th class="py-1 px-2 text-right">Tambah</th>
                                             <th class="py-1 px-2 text-right">Sebelum</th>
                                             <th class="py-1 px-2 text-right">Sesudah</th>
@@ -591,8 +610,8 @@
             document.getElementById('modalInputQtyDisplay').textContent = (card.input_qty || 0) + ' pcs';
             document.getElementById('modalInputQty').value = card.input_qty || 0;
 
-            // Date default to physical_done_date
-            document.getElementById('process_date').value = card.physical_done_date || new Date().toISOString().split('T')[0];
+            // Date default to inspection_date or physical_done_date (Asia/Jakarta local)
+            document.getElementById('inspection_date').value = card.inspection_date || card.physical_done_date || new Date().toISOString().split('T')[0];
             
             // Clear inputs
             document.getElementById('defect_qty').value = '';
@@ -669,9 +688,20 @@
             document.getElementById('addModalCurrentDefectQty').textContent = currentDefect + ' pcs';
             document.getElementById('addModalCurrentGoodQty').textContent = currentGood + ' pcs';
 
+            // Inspection date display
+            const inspRow = document.getElementById('addModalInspectionDateRow');
+            if (card.inspection_date_formatted) {
+                inspRow.classList.remove('hidden');
+                document.getElementById('addModalInspectionDate').textContent = card.inspection_date_formatted;
+            } else {
+                inspRow.classList.add('hidden');
+            }
+
             document.getElementById('addHiddenInputQty').value = inputQty;
             document.getElementById('addHiddenCurrentDefect').value = currentDefect;
-            document.getElementById('added_qty').value = '';
+            
+            // Explicitly default added_qty to 1 upon opening
+            document.getElementById('added_qty').value = '1';
             document.getElementById('add_notes').value = '';
 
             // Update action route URL
@@ -687,9 +717,25 @@
                 card.defect_logs.forEach(log => {
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-100';
+
+                    let badgeClass = 'text-slate-600 bg-slate-100';
+                    let labelText = log.log_type_label || 'Pencatatan Defect';
+                    if (log.log_type === 'AUTO_NIHIL') {
+                        badgeClass = 'text-indigo-700 bg-indigo-50 border border-indigo-200';
+                    } else if (log.log_type === 'INITIAL_NIHIL') {
+                        badgeClass = 'text-slate-700 bg-slate-100 border border-slate-200';
+                    } else if (log.log_type === 'ADDITIONAL_DEFECT') {
+                        badgeClass = 'text-emerald-700 bg-emerald-50 border border-emerald-200';
+                    } else if (log.log_type === 'INITIAL_DEFECT') {
+                        badgeClass = 'text-amber-700 bg-amber-50 border border-amber-200';
+                    }
+
                     tr.innerHTML = `
                         <td class="py-1 px-2 whitespace-nowrap text-slate-500">${log.created_at || '-'}</td>
-                        <td class="py-1 px-2 font-sans font-semibold text-slate-700 truncate max-w-[80px]">${log.user_name || 'Admin'}</td>
+                        <td class="py-1 px-2 font-sans">
+                            <span class="text-[9px] font-bold px-1 py-0.2 rounded ${badgeClass}">${labelText}</span>
+                            <span class="text-[10px] text-slate-600 ml-1 truncate">${log.user_name || 'Admin'}</span>
+                        </td>
                         <td class="py-1 px-2 text-right font-bold text-amber-600">+${log.added_qty}</td>
                         <td class="py-1 px-2 text-right text-slate-500">${log.previous_total}</td>
                         <td class="py-1 px-2 text-right font-black text-slate-800">${log.new_total}</td>
@@ -706,7 +752,9 @@
             modal.classList.add('flex');
 
             setTimeout(() => {
-                document.getElementById('added_qty').focus();
+                const addInput = document.getElementById('added_qty');
+                addInput.focus();
+                addInput.select();
             }, 100);
         }
 
@@ -728,10 +776,22 @@
             const hintDisplay = document.getElementById('addModalCalculationHint');
             const submitBtn = document.getElementById('submitAddDefectBtn');
 
-            if (addedVal !== '' && (isNaN(addedQty) || addedQty <= 0)) {
+            if (addedVal === '') {
+                newDefectDisplay.textContent = currentDefect + ' PCS';
+                newDefectDisplay.className = 'font-black text-slate-700 text-sm';
+                newGoodDisplay.textContent = Math.max(0, inputQty - currentDefect) + ' PCS';
+                newGoodDisplay.className = 'font-black text-slate-700 text-sm';
+                hintDisplay.textContent = 'Masukkan jumlah penambahan defect (minimal 1 PCS).';
+                hintDisplay.className = 'text-[10px] text-slate-500';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            if (isNaN(addedQty) || addedQty <= 0) {
                 newDefectDisplay.textContent = 'Invalid';
                 newDefectDisplay.className = 'font-black text-red-600 text-sm';
-                hintDisplay.textContent = 'Jumlah penambahan harus minimal 1 PCS.';
+                newGoodDisplay.textContent = '-';
+                hintDisplay.textContent = 'Jumlah penambahan harus berupa angka bulat minimal 1 PCS.';
                 hintDisplay.className = 'text-[10px] text-red-500 font-bold';
                 submitBtn.disabled = true;
                 return;

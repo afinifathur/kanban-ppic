@@ -12,6 +12,7 @@ class SandCastingStageExecutionDefectLog extends Model
         'previous_total',
         'new_total',
         'user_id',
+        'is_system_action',
         'notes',
     ];
 
@@ -19,6 +20,7 @@ class SandCastingStageExecutionDefectLog extends Model
         'added_qty' => 'integer',
         'previous_total' => 'integer',
         'new_total' => 'integer',
+        'is_system_action' => 'boolean',
     ];
 
     public function stageExecution()

@@ -98,21 +98,27 @@ class DefectRecordingController extends Controller
             $validated = $request->validate([
                 'defect_qty' => 'required|integer|min:0',
                 'notes' => 'nullable|string|max:500',
-                'process_date' => 'nullable|date',
+                'inspection_date' => 'nullable|date|before_or_equal:today',
+                'process_date' => 'nullable|date|before_or_equal:today',
             ], [
                 'defect_qty.required' => 'Jumlah rusak (defect) wajib diisi.',
                 'defect_qty.integer' => 'Jumlah rusak harus berupa angka bulat.',
                 'defect_qty.min' => 'Jumlah rusak tidak boleh bernilai negatif.',
+                'inspection_date.date' => 'Format tanggal pemeriksaan fisik tidak valid.',
+                'inspection_date.before_or_equal' => 'Tanggal pemeriksaan fisik tidak boleh di masa depan.',
+                'process_date.before_or_equal' => 'Tanggal pemeriksaan tidak boleh di masa depan.',
             ]);
 
             $defectQty = (int) $validated['defect_qty'];
+            $inspectionDate = $validated['inspection_date'] ?? $validated['process_date'] ?? null;
 
             // 3. State Machine transition: Step 2 Admin PPIC records total defect
             $updatedExecution = $this->executionService->recordDefectQty(
                 executionOrId: $execution,
                 defectQty: $defectQty,
                 adminId: (int) $user->id,
-                notes: $validated['notes'] ?? null
+                notes: $validated['notes'] ?? null,
+                inspectionDate: $inspectionDate
             );
 
             $travelerNumber = $updatedExecution->castingResultLine?->traveler_number ?? 'KTR';
@@ -131,14 +137,26 @@ class DefectRecordingController extends Controller
                         'defect_qty' => (int) $updatedExecution->defect_qty,
                         'good_qty' => (int) $updatedExecution->good_qty,
                         'status' => $updatedExecution->status,
+                        'inspection_date' => $updatedExecution->inspection_date?->format('Y-m-d'),
                         'defect_entered_at' => $updatedExecution->defect_entered_at,
                         'defect_entered_by' => $updatedExecution->defect_entered_by,
                     ],
                 ]);
             }
 
+            $redirectParams = [
+                'mode' => 'unrecorded',
+                'page' => 1,
+            ];
+            if ($updatedExecution->stage) {
+                $redirectParams['stage'] = $updatedExecution->stage;
+            }
+            if ($request->filled('search')) {
+                $redirectParams['search'] = $request->input('search');
+            }
+
             return redirect()
-                ->route('sand-casting.defects.index', ['mode' => 'recorded', 'stage' => $updatedExecution->stage])
+                ->route('sand-casting.defects.index', $redirectParams)
                 ->with('success', $successMessage);
 
         } catch (AuthorizationException $e) {

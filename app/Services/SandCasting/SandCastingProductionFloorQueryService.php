@@ -1237,6 +1237,9 @@ class SandCastingProductionFloorQueryService
         if ($exec->status === SandCastingStageExecution::STATUS_WAITING_DEFECT) {
             $defectState = 'unrecorded';
             $defectStatusLabel = 'BELUM DICATAT';
+        } elseif ($exec->is_auto_nihil && $exec->defect_qty === 0) {
+            $defectState = 'auto_nihil';
+            $defectStatusLabel = 'NIHIL OTOMATIS (5 HARI)';
         } elseif ($exec->defect_qty === 0) {
             $defectState = 'zero';
             $defectStatusLabel = 'RUSAK 0 PCS';
@@ -1245,16 +1248,37 @@ class SandCastingProductionFloorQueryService
             $defectStatusLabel = "RUSAK {$exec->defect_qty} PCS";
         }
 
-        $defectLogs = $exec->defectLogs ? $exec->defectLogs->map(fn ($log) => [
-            'id' => $log->id,
-            'added_qty' => (int) $log->added_qty,
-            'previous_total' => (int) $log->previous_total,
-            'new_total' => (int) $log->new_total,
-            'user_name' => $log->user?->name ?? 'Admin',
-            'notes' => $log->notes,
-            'created_at' => $log->created_at?->format('d-m-Y H:i:s'),
-            'created_at_human' => $log->created_at?->diffForHumans(),
-        ])->values()->all() : [];
+        $defectLogs = $exec->defectLogs ? $exec->defectLogs->map(function ($log) {
+            $isSystem = (bool) ($log->is_system_action ?? false);
+            $logType = $isSystem
+                ? 'AUTO_NIHIL'
+                : ($log->previous_total === 0 && $log->added_qty === 0
+                    ? 'INITIAL_NIHIL'
+                    : ($log->previous_total === 0
+                        ? 'INITIAL_DEFECT'
+                        : 'ADDITIONAL_DEFECT'));
+
+            $logTypeLabel = match ($logType) {
+                'AUTO_NIHIL' => 'Nihil Otomatis (Timeout)',
+                'INITIAL_NIHIL' => 'Pencatatan Awal (Nihil)',
+                'INITIAL_DEFECT' => 'Pencatatan Awal',
+                'ADDITIONAL_DEFECT' => 'Tambah Defect',
+            };
+
+            return [
+                'id' => $log->id,
+                'added_qty' => (int) $log->added_qty,
+                'previous_total' => (int) $log->previous_total,
+                'new_total' => (int) $log->new_total,
+                'user_name' => $isSystem ? 'Sistem (Auto Nihil)' : ($log->user?->name ?? 'Admin'),
+                'is_system_action' => $isSystem,
+                'log_type' => $logType,
+                'log_type_label' => $logTypeLabel,
+                'notes' => $log->notes,
+                'created_at' => $log->created_at?->format('d-m-Y H:i:s'),
+                'created_at_human' => $log->created_at?->diffForHumans(),
+            ];
+        })->values()->all() : [];
 
         $latestLog = ! empty($defectLogs) ? end($defectLogs) : null;
         $isReverification = count($defectLogs) > 1 && $exec->status === SandCastingStageExecution::STATUS_WAITING_QC;
@@ -1282,12 +1306,16 @@ class SandCastingProductionFloorQueryService
             'status' => $exec->status,
             'defect_state' => $defectState,
             'defect_status_label' => $defectStatusLabel,
+            'is_auto_nihil' => (bool) $exec->is_auto_nihil,
+            'auto_nihil_at' => $exec->auto_nihil_at?->format('Y-m-d H:i:s'),
+            'inspection_date' => $exec->inspection_date?->format('Y-m-d'),
+            'inspection_date_formatted' => $exec->inspection_date?->format('d/m/Y'),
             'physical_done_at' => $exec->physical_done_at?->format('Y-m-d H:i:s'),
             'physical_done_date' => $exec->physical_done_at?->format('Y-m-d') ?? now()->format('Y-m-d'),
             'physical_done_human' => $exec->physical_done_at?->diffForHumans(),
             'defect_entered_at' => $exec->defect_entered_at?->format('Y-m-d H:i:s'),
             'defect_entered_human' => $exec->defect_entered_at?->diffForHumans(),
-            'defect_entered_by_name' => $exec->defectEnteredBy?->name ?? '-',
+            'defect_entered_by_name' => $exec->is_auto_nihil ? 'Sistem (Auto Nihil)' : ($exec->defectEnteredBy?->name ?? '-'),
             'operator_name' => $exec->operator?->name ?? '-',
             'notes' => $exec->notes,
             'aging' => $aging,
@@ -1486,16 +1514,37 @@ class SandCastingProductionFloorQueryService
             'notes' => $d->notes,
         ])->values()->all() : [];
 
-        $defectLogs = $exec->defectLogs ? $exec->defectLogs->map(fn ($log) => [
-            'id' => $log->id,
-            'added_qty' => (int) $log->added_qty,
-            'previous_total' => (int) $log->previous_total,
-            'new_total' => (int) $log->new_total,
-            'user_name' => $log->user?->name ?? 'Admin',
-            'notes' => $log->notes,
-            'created_at' => $log->created_at?->format('d-m-Y H:i:s'),
-            'created_at_human' => $log->created_at?->diffForHumans(),
-        ])->values()->all() : [];
+        $defectLogs = $exec->defectLogs ? $exec->defectLogs->map(function ($log) {
+            $isSystem = (bool) ($log->is_system_action ?? false);
+            $logType = $isSystem
+                ? 'AUTO_NIHIL'
+                : ($log->previous_total === 0 && $log->added_qty === 0
+                    ? 'INITIAL_NIHIL'
+                    : ($log->previous_total === 0
+                        ? 'INITIAL_DEFECT'
+                        : 'ADDITIONAL_DEFECT'));
+
+            $logTypeLabel = match ($logType) {
+                'AUTO_NIHIL' => 'Nihil Otomatis (Timeout)',
+                'INITIAL_NIHIL' => 'Pencatatan Awal (Nihil)',
+                'INITIAL_DEFECT' => 'Pencatatan Awal',
+                'ADDITIONAL_DEFECT' => 'Tambah Defect',
+            };
+
+            return [
+                'id' => $log->id,
+                'added_qty' => (int) $log->added_qty,
+                'previous_total' => (int) $log->previous_total,
+                'new_total' => (int) $log->new_total,
+                'user_name' => $isSystem ? 'Sistem (Auto Nihil)' : ($log->user?->name ?? 'Admin'),
+                'is_system_action' => $isSystem,
+                'log_type' => $logType,
+                'log_type_label' => $logTypeLabel,
+                'notes' => $log->notes,
+                'created_at' => $log->created_at?->format('d-m-Y H:i:s'),
+                'created_at_human' => $log->created_at?->diffForHumans(),
+            ];
+        })->values()->all() : [];
 
         $latestLog = ! empty($defectLogs) ? end($defectLogs) : null;
         $isReverification = count($defectLogs) > 1 && $exec->status === SandCastingStageExecution::STATUS_WAITING_QC;
@@ -1521,10 +1570,14 @@ class SandCastingProductionFloorQueryService
             'defect_qty' => (int) $exec->defect_qty,
             'good_qty' => (int) $exec->good_qty,
             'status' => $exec->status,
+            'is_auto_nihil' => (bool) $exec->is_auto_nihil,
+            'auto_nihil_at' => $exec->auto_nihil_at?->format('Y-m-d H:i:s'),
+            'inspection_date' => $exec->inspection_date?->format('Y-m-d'),
+            'inspection_date_formatted' => $exec->inspection_date?->format('d/m/Y'),
             'physical_done_at' => $exec->physical_done_at?->format('Y-m-d H:i:s'),
             'defect_entered_at' => $exec->defect_entered_at?->format('Y-m-d H:i:s'),
             'defect_entered_human' => $exec->defect_entered_at?->diffForHumans(),
-            'defect_entered_by_name' => $exec->defectEnteredBy?->name ?? '-',
+            'defect_entered_by_name' => $exec->is_auto_nihil ? 'Sistem (Auto Nihil)' : ($exec->defectEnteredBy?->name ?? '-'),
             'qc_verified_at' => $exec->qc_verified_at?->format('Y-m-d H:i:s'),
             'qc_verified_by_name' => $exec->qcVerifiedBy?->name ?? '-',
             'operator_name' => $exec->operator?->name ?? '-',

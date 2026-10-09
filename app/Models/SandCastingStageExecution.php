@@ -31,6 +31,9 @@ class SandCastingStageExecution extends Model
         'defect_entered_by',
         'qc_verified_at',
         'qc_verified_by',
+        'inspection_date',
+        'is_auto_nihil',
+        'auto_nihil_at',
         'notes',
     ];
 
@@ -38,8 +41,11 @@ class SandCastingStageExecution extends Model
         'input_qty' => 'integer',
         'defect_qty' => 'integer',
         'good_qty' => 'integer',
+        'inspection_date' => 'date',
+        'is_auto_nihil' => 'boolean',
         'executed_at' => 'datetime',
         'physical_done_at' => 'datetime',
+        'auto_nihil_at' => 'datetime',
         'defect_entered_at' => 'datetime',
         'qc_verified_at' => 'datetime',
     ];

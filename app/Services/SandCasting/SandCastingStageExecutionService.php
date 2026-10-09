@@ -293,7 +293,8 @@ class SandCastingStageExecutionService
         int|SandCastingStageExecution $executionOrId,
         int $defectQty,
         ?int $adminId = null,
-        ?string $notes = null
+        ?string $notes = null,
+        ?string $inspectionDate = null
     ): SandCastingStageExecution {
         $resolvedAdminId = $adminId ?? auth()->id();
         if (! $resolvedAdminId) {
@@ -304,7 +305,7 @@ class SandCastingStageExecutionService
             throw new InvalidArgumentException("User Admin dengan ID {$resolvedAdminId} tidak ditemukan.");
         }
 
-        return DB::transaction(function () use ($executionOrId, $defectQty, $resolvedAdminId, $notes) {
+        return DB::transaction(function () use ($executionOrId, $defectQty, $resolvedAdminId, $notes, $inspectionDate) {
             $executionId = $executionOrId instanceof SandCastingStageExecution ? $executionOrId->id : (int) $executionOrId;
 
             $execution = SandCastingStageExecution::where('id', $executionId)
@@ -348,6 +349,13 @@ class SandCastingStageExecutionService
             $execution->defect_entered_at = now();
             $execution->defect_entered_by = $resolvedAdminId;
             $execution->status = SandCastingStageExecution::STATUS_WAITING_QC;
+            $execution->is_auto_nihil = false;
+            $execution->auto_nihil_at = null;
+
+            if ($inspectionDate !== null && trim($inspectionDate) !== '') {
+                $execution->inspection_date = trim($inspectionDate);
+            }
+
             if ($notes !== null && trim($notes) !== '') {
                 $execution->notes = trim($notes);
             }
@@ -359,6 +367,7 @@ class SandCastingStageExecutionService
                 'previous_total' => 0,
                 'new_total' => $defectQty,
                 'user_id' => $resolvedAdminId,
+                'is_system_action' => false,
                 'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             ]);
 
@@ -446,10 +455,68 @@ class SandCastingStageExecutionService
                 'previous_total' => $currentDefectQty,
                 'new_total' => $newTotalDefect,
                 'user_id' => $resolvedAdminId,
+                'is_system_action' => false,
                 'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             ]);
 
             return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'defectLogs.user', 'defects.defectType']);
+        });
+    }
+
+    /**
+     * Step 2-Timeout: Auto-Nihil after 5 calendar days timeout.
+     * Transitions WAITING_DEFECT -> WAITING_QC with defect_qty = 0, good_qty = input_qty, is_auto_nihil = true.
+     * Strictly atomic with lockForUpdate().
+     */
+    public function timeoutToAutoNihil(
+        int|SandCastingStageExecution $executionOrId,
+        ?int $systemActorId = null,
+        ?string $notes = null
+    ): SandCastingStageExecution {
+        return DB::transaction(function () use ($executionOrId, $systemActorId, $notes) {
+            $executionId = $executionOrId instanceof SandCastingStageExecution ? $executionOrId->id : (int) $executionOrId;
+
+            $execution = SandCastingStageExecution::where('id', $executionId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $execution) {
+                throw new InvalidArgumentException("Eksekusi dengan ID {$executionId} tidak ditemukan.");
+            }
+
+            if ($execution->status !== SandCastingStageExecution::STATUS_WAITING_DEFECT) {
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah tidak dalam status WAITING_DEFECT (Status: {$execution->status}).");
+            }
+
+            if ($execution->physical_done_at === null) {
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} tidak memiliki physical_done_at yang valid.");
+            }
+
+            $now = now();
+            $inputQty = (int) $execution->input_qty;
+
+            $execution->defect_qty = 0;
+            $execution->good_qty = $inputQty;
+            $execution->defect_entered_at = $now;
+            $execution->defect_entered_by = $systemActorId;
+            $execution->status = SandCastingStageExecution::STATUS_WAITING_QC;
+            $execution->is_auto_nihil = true;
+            $execution->auto_nihil_at = $now;
+            if ($notes !== null && trim($notes) !== '') {
+                $execution->notes = trim($notes);
+            }
+            $execution->save();
+
+            $execution->defectLogs()->create([
+                'added_qty' => 0,
+                'previous_total' => 0,
+                'new_total' => 0,
+                'user_id' => $systemActorId,
+                'is_system_action' => true,
+                'notes' => $notes ?? 'Penetapan Nihil Otomatis (Timeout 5 Hari)',
+            ]);
+
+            return $execution->load(['castingResultLine', 'operator', 'defectLogs.user']);
         });
     }
 

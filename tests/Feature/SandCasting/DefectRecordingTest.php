@@ -95,12 +95,14 @@ class DefectRecordingTest extends TestCase
 
     protected function createKtrLine(array $attributes = [], ?SandCastingCastingResult $existingResult = null): SandCastingCastingResultLine
     {
+        $uniqueSuffix = bin2hex(random_bytes(4)).rand(100, 999);
+
         $plan = ProductionPlan::create([
-            'code' => '268ET'.rand(100, 999),
-            'title' => 'Rencana SC '.rand(100, 999),
-            'item_code' => '4.'.rand(100, 999),
+            'code' => '268ET'.$uniqueSuffix,
+            'title' => 'Rencana SC '.$uniqueSuffix,
+            'item_code' => '4.'.$uniqueSuffix,
             'item_name' => 'FLANGE BESI JIS 10K 2"',
-            'po_number' => 'PO-'.rand(100, 999),
+            'po_number' => 'PO-'.$uniqueSuffix,
             'line_number' => 1,
             'qty_planned' => 100,
             'qty_remaining' => 100,
@@ -111,7 +113,7 @@ class DefectRecordingTest extends TestCase
         ]);
 
         $order = SandCastingCastingOrder::create([
-            'casting_order_number' => 'PCOR-'.rand(1000, 9999),
+            'casting_order_number' => 'PCOR-'.$uniqueSuffix,
             'scheduled_date' => now()->toDateString(),
             'status' => 'ISSUED',
             'notes' => 'Test order',
@@ -133,7 +135,7 @@ class DefectRecordingTest extends TestCase
 
         if (! $existingResult) {
             $existingResult = SandCastingCastingResult::create([
-                'heat_number' => 'A214092'.rand(100, 999),
+                'heat_number' => 'A214092'.$uniqueSuffix,
                 'cast_date' => now()->toDateString(),
                 'furnace' => 'F1',
                 'shift' => '1',
@@ -144,7 +146,7 @@ class DefectRecordingTest extends TestCase
             ]);
         }
 
-        $travelerNumber = 'KTR-'.now()->format('Ymd').'-'.sprintf('%04d', rand(1, 9999));
+        $travelerNumber = 'KTR-'.now()->format('Ymd').'-'.$uniqueSuffix;
 
         return $existingResult->lines()->create(array_merge([
             'sand_casting_casting_order_line_id' => $orderLine->id,
@@ -215,6 +217,53 @@ class DefectRecordingTest extends TestCase
         $responseRecorded->assertStatus(200);
         $responseRecorded->assertSee($line->traveler_number);
         $responseRecorded->assertSee('TAMBAH DEFECT');
+    }
+
+    /**
+     * TEST 2B: Standard web redirect returns to mode=unrecorded with stage filter and flash success
+     */
+    public function test_2b_initial_recording_web_redirects_to_unrecorded_tab_preserving_stage(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        $response = $this->actingAs($this->adminPpic)->post("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 3,
+            'inspection_date' => now()->toDateString(),
+            'notes' => 'Recorded from web form',
+            'search' => 'KTR',
+        ]);
+
+        $response->assertRedirect(route('sand-casting.defects.index', [
+            'mode' => 'unrecorded',
+            'page' => 1,
+            'stage' => 'netto',
+            'search' => 'KTR',
+        ]));
+        $response->assertSessionHas('success');
+
+        $fresh = $exec->fresh();
+        $this->assertEquals(3, $fresh->defect_qty);
+        $this->assertEquals(now()->toDateString(), $fresh->inspection_date->toDateString());
+    }
+
+    /**
+     * TEST 2C: Validation error on inspection_date in future
+     */
+    public function test_2c_future_inspection_date_is_rejected(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        $futureDate = now()->addDays(2)->toDateString();
+
+        $response = $this->actingAs($this->adminPpic)->post("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 3,
+            'inspection_date' => $futureDate,
+        ]);
+
+        $response->assertSessionHasErrors('inspection_date');
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $exec->fresh()->status);
     }
 
     /**
@@ -454,5 +503,158 @@ class DefectRecordingTest extends TestCase
         // Recorded: defect_entered_at DESC (exec1 first)
         $recorded = $this->queryService->getDefectRecordingPaginated('recorded', 'netto', [], 25);
         $this->assertEquals($exec1->id, $recorded->items()[0]['id']);
+    }
+
+    /**
+     * TEST 23: Auto-Nihil Command 5 Calendar Days Timeout & Backlog Protection
+     */
+    public function test_23_auto_nihil_command_processes_older_than_5_days_and_respects_activation_date(): void
+    {
+        config(['sand_casting.auto_nihil.activation_date' => '2026-10-01']);
+        config(['sand_casting.auto_nihil.timeout_days' => 5]);
+
+        // KTR 1: 6 days old, after activation date (Candidate for auto-nihil)
+        $line1 = $this->createKtrLine(['qty_good' => 60, 'current_stage' => 'netto']);
+        $exec1 = $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 60,
+            'defect_qty' => 0,
+            'good_qty' => 60,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(6),
+            'executed_at' => now()->subDays(6),
+        ]);
+
+        // KTR 2: 2 days old (Too young, should be skipped)
+        $line2 = $this->createKtrLine(['qty_good' => 40, 'current_stage' => 'netto']);
+        $exec2 = $line2->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(2),
+            'executed_at' => now()->subDays(2),
+        ]);
+
+        // KTR 3: 15 days old but BEFORE activation date (Backlog, should be skipped)
+        $line3 = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
+        $exec3 = $line3->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => \Carbon\Carbon::parse('2026-09-15 10:00:00'),
+            'executed_at' => \Carbon\Carbon::parse('2026-09-15 10:00:00'),
+        ]);
+
+        // Run artisan command
+        $this->artisan('sand-casting:timeout-unrecorded-defects', [
+            '--since' => '2026-10-01',
+            '--days' => 5,
+        ])->assertSuccessful();
+
+        // Verify exec1 became auto-nihil
+        $fresh1 = $exec1->fresh();
+        $this->assertTrue((bool) $fresh1->is_auto_nihil);
+        $this->assertNotNull($fresh1->auto_nihil_at);
+        $this->assertEquals(0, $fresh1->defect_qty);
+        $this->assertEquals(60, $fresh1->good_qty);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $fresh1->status);
+        $this->assertCount(1, $fresh1->defectLogs);
+        $this->assertTrue((bool) $fresh1->defectLogs[0]->is_system_action);
+
+        // Verify exec2 is untouched
+        $fresh2 = $exec2->fresh();
+        $this->assertFalse((bool) $fresh2->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $fresh2->status);
+
+        // Verify exec3 is untouched (protected backlog)
+        $fresh3 = $exec3->fresh();
+        $this->assertFalse((bool) $fresh3->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $fresh3->status);
+    }
+
+    /**
+     * TEST 24: Dry Run Mode does not mutate database
+     */
+    public function test_24_auto_nihil_dry_run_mode(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 60, 'current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 60,
+            'defect_qty' => 0,
+            'good_qty' => 60,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(7),
+            'executed_at' => now()->subDays(7),
+        ]);
+
+        $this->artisan('sand-casting:timeout-unrecorded-defects', [
+            '--dry-run' => true,
+            '--days' => 5,
+        ])->assertSuccessful();
+
+        $fresh = $exec->fresh();
+        $this->assertFalse((bool) $fresh->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $fresh->status);
+        $this->assertCount(0, $fresh->defectLogs);
+    }
+
+    /**
+     * TEST 25: Revising defect (+N) after auto-nihil
+     */
+    public function test_25_tambah_defect_after_auto_nihil_creates_cumulative_log(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 80, 'current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 80,
+            'defect_qty' => 0,
+            'good_qty' => 80,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(6),
+            'executed_at' => now()->subDays(6),
+        ]);
+
+        // 1. Auto-Nihil occurs
+        $this->executionService->timeoutToAutoNihil($exec);
+
+        $freshAuto = $exec->fresh();
+        $this->assertTrue((bool) $freshAuto->is_auto_nihil);
+        $this->assertEquals(0, $freshAuto->defect_qty);
+        $this->assertEquals(80, $freshAuto->good_qty);
+
+        // 2. Later, Admin discovers 3 defects and adds them
+        $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/add", [
+            'added_qty' => 3,
+            'notes' => 'Defect susulan ditemukan di gudang',
+        ])->assertStatus(200);
+
+        $freshRevised = $exec->fresh();
+        $this->assertEquals(3, $freshRevised->defect_qty);
+        $this->assertEquals(77, $freshRevised->good_qty);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $freshRevised->status);
+
+        // Defect logs must have 2 entries: 1 auto-nihil, 1 addition
+        $this->assertCount(2, $freshRevised->defectLogs);
+        $this->assertTrue((bool) $freshRevised->defectLogs[0]->is_system_action);
+        $this->assertEquals(0, $freshRevised->defectLogs[0]->added_qty);
+
+        $this->assertFalse((bool) $freshRevised->defectLogs[1]->is_system_action);
+        $this->assertEquals(3, $freshRevised->defectLogs[1]->added_qty);
+        $this->assertEquals(0, $freshRevised->defectLogs[1]->previous_total);
     }
 }
