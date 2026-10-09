@@ -280,6 +280,7 @@ class ProductionFloorKanbanUiTest extends TestCase
         $l1 = $this->createKtrLine([
             'item_name' => 'ITEM-GREEN-AGING',
             'line_number' => 1,
+            'cast_date' => now()->subDays(2)->format('Y-m-d'),
             'current_stage' => 'netto',
         ]);
         $l1->created_at = now()->subDays(2)->subHours(8);
@@ -289,6 +290,7 @@ class ProductionFloorKanbanUiTest extends TestCase
         $l2 = $this->createKtrLine([
             'item_name' => 'ITEM-YELLOW-AGING',
             'line_number' => 2,
+            'cast_date' => now()->subDays(6)->format('Y-m-d'),
             'current_stage' => 'netto',
         ]);
         $l2->created_at = now()->subDays(6)->subHours(2);
@@ -298,6 +300,7 @@ class ProductionFloorKanbanUiTest extends TestCase
         $l3 = $this->createKtrLine([
             'item_name' => 'ITEM-RED-AGING',
             'line_number' => 3,
+            'cast_date' => now()->subDays(9)->format('Y-m-d'),
             'current_stage' => 'netto',
         ]);
         $l3->created_at = now()->subDays(9)->subHours(4);
@@ -549,5 +552,41 @@ class ProductionFloorKanbanUiTest extends TestCase
         $response->assertSee('id="autoRefreshTimer"', false);
         $response->assertSee('02:00');
         $response->assertSee('AUTO:');
+    }
+
+    /**
+     * Requirement: Card search UI components, data-search-text attributes, and empty states.
+     */
+    public function test_kanban_search_ui_components_and_card_data_attributes(): void
+    {
+        $this->createKtrLine([
+            'traveler_number' => 'KTR-SEARCH-001',
+            'heat_number' => 'HEATSEARCH99',
+            'item_name' => 'SPECIAL FLANGE 4 INCH',
+            'production_code' => '268ET999',
+            'customer' => 'PT KARYA UTAMA',
+            'line_number' => 2,
+            'current_stage' => 'netto',
+        ]);
+
+        $response = $this->actingAs($this->spvNetto)->get('/sand-casting/kanban/netto');
+
+        $response->assertOk();
+
+        // Search bar components
+        $response->assertSee('id="kanbanSearchInput"', false);
+        $response->assertSee('placeholder="Cari Heat Number atau Nama Item..."', false);
+        $response->assertSee('id="kanbanSearchClearBtn"', false);
+        $response->assertSee('id="kanbanSearchResetBtn"', false);
+        $response->assertSee('id="kanbanSearchMatchBadge"', false);
+        $response->assertSee('id="kanbanSearchMatchCount"', false);
+        $response->assertSee('id="searchNoResults"', false);
+        $response->assertSee('Tidak ada kartu yang cocok');
+
+        // Card attributes for client-side search
+        $response->assertSee('kanban-card', false);
+        $response->assertSee('heatsearch99', false);
+        $response->assertSee('special flange 4 inch', false);
+        $response->assertSee('data-card-line="2"', false);
     }
 }

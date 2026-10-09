@@ -379,50 +379,8 @@ class SandCastingProductionFloorQueryService
             }
         }
 
-        // Sort buckets according to deterministic rules:
-        // Ready bucket:
-        // 1. Manual Queue Position Override (if set)
-        // 2. is_urgent DESC
-        // 3. cast_date ASC (oldest first)
-        // 4. created_at ASC
-        // 5. id ASC
-        $fifoComparator = function (array $a, array $b): int {
-            // 1. Manual Queue Position Override (if set)
-            $hasPosA = isset($a['queue_position']) && $a['queue_position'] !== null;
-            $hasPosB = isset($b['queue_position']) && $b['queue_position'] !== null;
-
-            if ($hasPosA && $hasPosB) {
-                if ($a['queue_position'] !== $b['queue_position']) {
-                    return (int) $a['queue_position'] <=> (int) $b['queue_position'];
-                }
-            } elseif ($hasPosA && ! $hasPosB) {
-                return -1; // Explicit manual queue position comes first
-            } elseif (! $hasPosA && $hasPosB) {
-                return 1;
-            }
-
-            // 2. Urgent priority
-            if ($a['is_urgent'] !== $b['is_urgent']) {
-                return $a['is_urgent'] ? -1 : 1;
-            }
-
-            // 3. Cast date (oldest first, nulls last)
-            $castA = $a['cast_date'] ?? '9999-12-31';
-            $castB = $b['cast_date'] ?? '9999-12-31';
-            if ($castA !== $castB) {
-                return strcmp($castA, $castB);
-            }
-
-            // 4. Created at
-            $createdA = $a['created_at_raw'] ?? '9999-12-31 23:59:59';
-            $createdB = $b['created_at_raw'] ?? '9999-12-31 23:59:59';
-            if ($createdA !== $createdB) {
-                return strcmp($createdA, $createdB);
-            }
-
-            // 5. ID tie breaker
-            return ($a['id'] ?? 0) <=> ($b['id'] ?? 0);
-        };
+        // Sort buckets according to deterministic rules via unified comparator
+        $fifoComparator = fn (array $a, array $b): int => self::compareKanbanCards($a, $b, $canonicalStage);
 
         usort($ready, $fifoComparator);
         usort($incoming, $fifoComparator);
@@ -441,7 +399,7 @@ class SandCastingProductionFloorQueryService
 
         // Strip internal raw sorting fields for clean output contract
         $cleaner = function (array $card): array {
-            unset($card['created_at_raw']);
+            unset($card['created_at_raw'], $card['stage_entry_raw']);
 
             return $card;
         };
@@ -522,11 +480,14 @@ class SandCastingProductionFloorQueryService
         $unitWeight = (float) ($line->unit_weight_kg ?? 0);
         $totalWeight = round($effectiveQty * $unitWeight, 2);
         $aging = $this->calculateAging($line, $activeExec);
+        $stageEntryAt = $this->resolveStageEntryTimestamp($line, $line->current_stage);
+        $pouringSequence = self::extractPouringSequence($line->castingResult?->heat_number);
 
         return [
             'id' => $line->id,
             'traveler_number' => $line->traveler_number,
             'heat_number' => $line->castingResult?->heat_number,
+            'pouring_sequence' => $pouringSequence,
             'production_code' => $line->productionPlan?->code ?? $line->castingOrderLine?->code,
             'item_code' => $line->productionPlan?->item_code,
             'item_name' => $line->productionPlan?->item_name ?? $line->castingOrderLine?->item_name,
@@ -550,6 +511,8 @@ class SandCastingProductionFloorQueryService
             'is_urgent' => (bool) $line->is_urgent,
             'cast_date' => $line->castingResult?->cast_date?->format('Y-m-d'),
             'aging' => $aging,
+            'stage_entry_at' => $stageEntryAt?->format('Y-m-d H:i:s'),
+            'stage_entry_raw' => $stageEntryAt?->format('Y-m-d H:i:s'),
             'physical_done_at' => $activeExec?->physical_done_at?->format('Y-m-d H:i:s'),
             'qc_verified_at' => $activeExec?->qc_verified_at?->format('Y-m-d H:i:s'),
             'operator_name' => $activeExec?->operator?->name,
@@ -584,11 +547,14 @@ class SandCastingProductionFloorQueryService
         $effectiveQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $line->current_stage);
         $totalWeight = round($effectiveQty * $unitWeight, 2);
         $aging = $this->calculateAging($line, $activeExec);
+        $stageEntryAt = $this->resolveStageEntryTimestamp($line, $line->current_stage);
+        $pouringSequence = self::extractPouringSequence($line->castingResult?->heat_number);
 
         return [
             'id' => $line->id,
             'traveler_number' => $line->traveler_number,
             'heat_number' => $line->castingResult?->heat_number,
+            'pouring_sequence' => $pouringSequence,
             'production_code' => $line->productionPlan?->code ?? $line->castingOrderLine?->code,
             'item_code' => $line->productionPlan?->item_code,
             'item_name' => $line->productionPlan?->item_name ?? $line->castingOrderLine?->item_name,
@@ -612,6 +578,8 @@ class SandCastingProductionFloorQueryService
             'is_urgent' => (bool) $line->is_urgent,
             'cast_date' => $line->castingResult?->cast_date?->format('Y-m-d'),
             'aging' => $aging,
+            'stage_entry_at' => $stageEntryAt?->format('Y-m-d H:i:s'),
+            'stage_entry_raw' => $stageEntryAt?->format('Y-m-d H:i:s'),
             'physical_done_at' => $activeExec?->physical_done_at?->format('Y-m-d H:i:s'),
             'qc_verified_at' => $activeExec?->qc_verified_at?->format('Y-m-d H:i:s'),
             'operator_name' => $activeExec?->operator?->name,
@@ -713,6 +681,161 @@ class SandCastingProductionFloorQueryService
     }
 
     /**
+     * Resolve preceding checkpoint code that feeds physical output into the given stage.
+     */
+    public static function resolvePredecessorCheckpointCode(string $stage): ?string
+    {
+        return match ($stage) {
+            'bubut_od' => 'NETTO_CUT',
+            'bubut_cnc' => 'OD_TURNING',
+            'bor' => 'CNC_MACHINING',
+            'qc' => 'BOR_DRILLING',
+            'gudang_jadi' => 'QC_FINAL_INSPECTION',
+            default => null,
+        };
+    }
+
+    /**
+     * Resolve authoritative stage entry timestamp for a KTR line.
+     * - Netto: cast_date at 00:00:00 (Asia/Jakarta), fallback to line created_at
+     * - Downstream stages: physical_done_at of predecessor checkpoint execution
+     */
+    public function resolveStageEntryTimestamp(SandCastingCastingResultLine $line, string $stage): ?\Carbon\Carbon
+    {
+        if ($stage === 'netto') {
+            return $line->castingResult?->cast_date
+                ? $line->castingResult->cast_date->copy()->startOfDay()
+                : ($line->created_at ? $line->created_at->copy()->startOfDay() : null);
+        }
+
+        $predCode = self::resolvePredecessorCheckpointCode($stage);
+        if ($predCode !== null) {
+            $predExec = $line->relationLoaded('stageExecutions')
+                ? $line->stageExecutions->firstWhere('checkpoint_code', $predCode)
+                : $line->stageExecutions()->where('checkpoint_code', $predCode)->first();
+
+            if (! $predExec && $stage === 'bor') {
+                // Historical compatibility fallback for bor
+                $predExec = $line->relationLoaded('stageExecutions')
+                    ? $line->stageExecutions->whereIn('checkpoint_code', ['QC_PRE_BOR', 'QC_POST_CNC'])->last()
+                    : $line->stageExecutions()->whereIn('checkpoint_code', ['QC_PRE_BOR', 'QC_POST_CNC'])->latest('id')->first();
+            }
+
+            if ($predExec) {
+                return $predExec->physical_done_at ?? $predExec->executed_at;
+            }
+        }
+
+        // Safe fallback if predecessor execution record is missing
+        $lastExec = $line->relationLoaded('stageExecutions')
+            ? $line->stageExecutions->last()
+            : $line->stageExecutions()->latest('id')->first();
+
+        return $lastExec?->physical_done_at ?? $lastExec?->executed_at ?? $line->created_at;
+    }
+
+    /**
+     * Extract numeric pouring sequence (nomor urut tuang) from Heat Number.
+     * Examples:
+     * - A218092604  -> 4
+     * - LA212092607 -> 7
+     * - LP312092601 -> 1
+     * - A218092610  -> 10
+     *
+     * Fallback for invalid formats returns 999999 to place them deterministically after valid numbers.
+     */
+    public static function extractPouringSequence(?string $heatNumber): int
+    {
+        if (empty($heatNumber)) {
+            return 999999;
+        }
+
+        $clean = trim((string) $heatNumber);
+
+        // Standard pattern: [Prefix][6-digit Date DDMMYY][1-3 digit Sequence]
+        if (preg_match('/^[A-Za-z0-9]+?\d{6}(\d{1,3})$/', $clean, $matches)) {
+            return (int) $matches[1];
+        }
+
+        // Secondary fallback: extract trailing 1-3 digits if present
+        if (preg_match('/(\d{1,3})$/', $clean, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return 999999;
+    }
+
+    /**
+     * Authoritative comparator for Operational Kanban cards across stages.
+     * Enforces:
+     * - Priority 1: queue_position ASC (Manual PPIC Reorder)
+     * - Priority 2: is_urgent DESC
+     * - For Netto:
+     *   - Priority 3: cast_date ASC (oldest cast date first)
+     *   - Priority 4: Pouring sequence from Heat Number numeric ASC (e.g. 02 before 10)
+     *   - Priority 5: Heat Number string fallback
+     * - For Downstream stages (bubut_od, bubut_cnc, bor, qc, gudang_jadi):
+     *   - Priority 3: Stage entry timestamp ASC (earliest entry to current stage first)
+     * - Final Tie-Breaker: id ASC (deterministic and stable)
+     */
+    public static function compareKanbanCards(array $a, array $b, string $stage): int
+    {
+        // 1. Manual Queue Position Override (PPIC Reorder) - Priority #1
+        $hasPosA = isset($a['queue_position']) && $a['queue_position'] !== null;
+        $hasPosB = isset($b['queue_position']) && $b['queue_position'] !== null;
+
+        if ($hasPosA && $hasPosB) {
+            if ($a['queue_position'] !== $b['queue_position']) {
+                return (int) $a['queue_position'] <=> (int) $b['queue_position'];
+            }
+        } elseif ($hasPosA && ! $hasPosB) {
+            return -1; // Explicit manual queue position comes first
+        } elseif (! $hasPosA && $hasPosB) {
+            return 1;
+        }
+
+        // 2. Urgent priority - Priority #2
+        if ($a['is_urgent'] !== $b['is_urgent']) {
+            return $a['is_urgent'] ? -1 : 1;
+        }
+
+        if ($stage === 'netto') {
+            // NETTO FIFO Rules:
+            // 3. cast_date ASC (oldest first, nulls last)
+            $castA = $a['cast_date'] ?? '9999-12-31';
+            $castB = $b['cast_date'] ?? '9999-12-31';
+            if ($castA !== $castB) {
+                return strcmp($castA, $castB);
+            }
+
+            // 4. Pouring sequence from Heat Number (numeric ASC)
+            $seqA = $a['pouring_sequence'] ?? self::extractPouringSequence($a['heat_number'] ?? null);
+            $seqB = $b['pouring_sequence'] ?? self::extractPouringSequence($b['heat_number'] ?? null);
+            if ($seqA !== $seqB) {
+                return $seqA <=> $seqB;
+            }
+
+            // 5. Heat Number string fallback
+            $heatA = $a['heat_number'] ?? '';
+            $heatB = $b['heat_number'] ?? '';
+            if ($heatA !== $heatB) {
+                return strcmp($heatA, $heatB);
+            }
+        } else {
+            // DOWNSTREAM FIFO Rules (bubut_od, bubut_cnc, bor, qc, gudang_jadi):
+            // 3. Stage entry timestamp ASC (earliest entry to this stage first)
+            $entryA = $a['stage_entry_raw'] ?? $a['stage_entry_at'] ?? $a['physical_done_at'] ?? '9999-12-31 23:59:59';
+            $entryB = $b['stage_entry_raw'] ?? $b['stage_entry_at'] ?? $b['physical_done_at'] ?? '9999-12-31 23:59:59';
+            if ($entryA !== $entryB) {
+                return strcmp($entryA, $entryB);
+            }
+        }
+
+        // Final tie-breaker: immutable line ID ASC (deterministic & stable)
+        return ($a['id'] ?? 0) <=> ($b['id'] ?? 0);
+    }
+
+    /**
      * Calculate dynamic aging for Kanban card.
      */
     public function calculateAging(SandCastingCastingResultLine $line, ?SandCastingStageExecution $activeExec = null): array
@@ -721,13 +844,19 @@ class SandCastingProductionFloorQueryService
         $castDate = $line->castingResult?->cast_date;
         $baseDate = $castDate ? $castDate->copy()->startOfDay() : ($line->created_at ? $line->created_at->copy()->startOfDay() : $now->copy()->startOfDay());
 
-        $totalDays = max(0, (int) $baseDate->diffInDays($now->startOfDay()));
+        $totalDays = max(0, (int) $baseDate->diffInDays($now->copy()->startOfDay()));
 
-        $stageTimestamp = $activeExec?->physical_done_at
-            ?? $activeExec?->executed_at
-            ?? $line->stageExecutions->last()?->qc_verified_at
-            ?? $line->created_at
-            ?? $now;
+        if ($line->current_stage === 'netto') {
+            // Netto aging is based strictly on casting_results.cast_date (startOfDay in Asia/Jakarta)
+            $stageTimestamp = $baseDate;
+        } else {
+            $stageTimestamp = $this->resolveStageEntryTimestamp($line, $line->current_stage ?? 'netto')
+                ?? $activeExec?->physical_done_at
+                ?? $activeExec?->executed_at
+                ?? $line->stageExecutions->last()?->qc_verified_at
+                ?? $line->created_at
+                ?? $now;
+        }
 
         $stageHours = max(0, (int) $stageTimestamp->diffInHours($now));
         $stageDays = max(0, (int) $stageTimestamp->diffInDays($now));
@@ -807,40 +936,8 @@ class SandCastingProductionFloorQueryService
             }
 
             // Sort existing ready items using standard FIFO / queue_position comparator
-            usort($readyItems, function (array $a, array $b): int {
-                $cardA = $a['card'];
-                $cardB = $b['card'];
-
-                $hasPosA = isset($cardA['queue_position']) && $cardA['queue_position'] !== null;
-                $hasPosB = isset($cardB['queue_position']) && $cardB['queue_position'] !== null;
-
-                if ($hasPosA && $hasPosB) {
-                    if ($cardA['queue_position'] !== $cardB['queue_position']) {
-                        return (int) $cardA['queue_position'] <=> (int) $cardB['queue_position'];
-                    }
-                } elseif ($hasPosA && ! $hasPosB) {
-                    return -1;
-                } elseif (! $hasPosA && $hasPosB) {
-                    return 1;
-                }
-
-                if ($cardA['is_urgent'] !== $cardB['is_urgent']) {
-                    return $cardA['is_urgent'] ? -1 : 1;
-                }
-
-                $castA = $cardA['cast_date'] ?? '9999-12-31';
-                $castB = $cardB['cast_date'] ?? '9999-12-31';
-                if ($castA !== $castB) {
-                    return strcmp($castA, $castB);
-                }
-
-                $createdA = $cardA['created_at_raw'] ?? '9999-12-31 23:59:59';
-                $createdB = $cardB['created_at_raw'] ?? '9999-12-31 23:59:59';
-                if ($createdA !== $createdB) {
-                    return strcmp($createdA, $createdB);
-                }
-
-                return ($cardA['id'] ?? 0) <=> ($cardB['id'] ?? 0);
+            usort($readyItems, function (array $a, array $b) use ($canonicalStage): int {
+                return SandCastingProductionFloorQueryService::compareKanbanCards($a['card'], $b['card'], $canonicalStage);
             });
 
             // Reorder array: move element from ($fromPos - 1) to ($toPos - 1)

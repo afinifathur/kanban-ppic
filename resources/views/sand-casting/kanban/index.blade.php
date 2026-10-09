@@ -144,29 +144,102 @@
             </div>
         </div>
 
-        {{-- FILTER LINE --}}
-        <div class="bg-white rounded-lg border border-slate-200 p-1.5 shadow-xs flex items-center justify-between gap-1 overflow-x-auto scrollbar-thin">
-            <div class="flex items-center gap-1 shrink-0">
-                <a href="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['line_number' => null])) }}"
-                    class="px-3 py-1.5 rounded-md text-xs font-black whitespace-nowrap min-h-[32px] flex items-center transition-all {{ !isset($filters['line_number']) ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
-                    SEMUA
-                </a>
-                @for($l = 1; $l <= 4; $l++)
-                    <a href="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['line_number' => $l])) }}"
-                        class="px-3 py-1.5 rounded-md text-xs font-black whitespace-nowrap min-h-[32px] flex items-center transition-all {{ (isset($filters['line_number']) && (int)$filters['line_number'] === $l) ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
-                        LINE {{ $l }}
-                    </a>
-                @endfor
-            </div>
-
-            @if(!empty($filters['search']))
-                <div class="flex items-center gap-1 shrink-0 pl-2">
-                    <span class="text-[11px] text-slate-500 font-medium">Cari: <strong class="text-slate-700">{{ $filters['search'] }}</strong></span>
-                    <a href="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['search' => null])) }}" class="text-slate-400 hover:text-slate-600 p-1" title="Hapus filter cari">
-                        <i class="fas fa-times text-xs"></i>
-                    </a>
+        {{-- SEARCH & FILTER BAR --}}
+        <div class="bg-white rounded-xl border border-slate-200 p-2 shadow-xs space-y-2">
+            {{-- Search Input Row --}}
+            <form id="kanbanSearchForm" onsubmit="event.preventDefault(); applyKanbanSearch(document.getElementById('kanbanSearchInput').value);" class="flex items-center gap-2">
+                <div class="relative flex-1 min-w-0">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <i class="fas fa-search text-xs sm:text-sm"></i>
+                    </div>
+                    <input
+                        type="text"
+                        id="kanbanSearchInput"
+                        name="search"
+                        value="{{ $filters['search'] ?? '' }}"
+                        placeholder="Cari Heat Number atau Nama Item..."
+                        autocomplete="off"
+                        class="block w-full pl-9 pr-9 py-1.5 sm:py-2 text-xs sm:text-sm bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg text-slate-900 placeholder-slate-400 transition-colors"
+                    >
+                    <button
+                        type="button"
+                        id="kanbanSearchClearBtn"
+                        onclick="clearKanbanSearch()"
+                        class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                        title="Hapus pencarian"
+                    >
+                        <i class="fas fa-times-circle text-sm"></i>
+                    </button>
                 </div>
-            @endif
+
+                <div class="flex items-center gap-1.5 shrink-0">
+                    {{-- Match Count Badge --}}
+                    <div id="kanbanSearchMatchBadge" class="hidden items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span id="kanbanSearchMatchCount">0</span>
+                        <span class="text-[10px] font-sans font-bold uppercase">COCOK</span>
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-xs transition-all min-h-[36px] touch-manipulation"
+                    >
+                        <i class="fas fa-search text-xs"></i>
+                        <span>CARI</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        id="kanbanSearchResetBtn"
+                        onclick="clearKanbanSearch()"
+                        class="hidden inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 border border-slate-200 shadow-xs transition-all min-h-[36px] touch-manipulation"
+                    >
+                        <i class="fas fa-undo text-xs"></i>
+                        <span>RESET</span>
+                    </button>
+                </div>
+            </form>
+
+            {{-- Line Filter Row --}}
+            <div class="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-100 overflow-x-auto scrollbar-thin">
+                <div class="flex items-center gap-1 shrink-0">
+                    <a href="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['line_number' => null])) }}"
+                        class="px-3 py-1.5 rounded-md text-xs font-black whitespace-nowrap min-h-[32px] flex items-center transition-all {{ !isset($filters['line_number']) ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                        SEMUA
+                    </a>
+                    @for($l = 1; $l <= 4; $l++)
+                        <a href="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['line_number' => $l])) }}"
+                            class="px-3 py-1.5 rounded-md text-xs font-black whitespace-nowrap min-h-[32px] flex items-center transition-all {{ (isset($filters['line_number']) && (int)$filters['line_number'] === $l) ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                            LINE {{ $l }}
+                        </a>
+                    @endfor
+                </div>
+
+                @if(!empty($filters['search']))
+                    <div class="flex items-center gap-1 shrink-0 pl-2">
+                        <span class="text-[11px] text-slate-500 font-medium">Server filter: <strong class="text-slate-700">{{ $filters['search'] }}</strong></span>
+                        <a href="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['search' => null])) }}" class="text-slate-400 hover:text-slate-600 p-1" title="Hapus filter server">
+                            <i class="fas fa-times text-xs"></i>
+                        </a>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    {{-- GLOBAL NO SEARCH RESULTS MESSAGE --}}
+    <div id="searchNoResults" class="hidden bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+        <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3 text-lg">
+            <i class="fas fa-search"></i>
+        </div>
+        <p class="text-sm font-bold text-slate-700">Tidak ada kartu yang cocok</p>
+        <p class="text-xs text-slate-400 mt-1">
+            Tidak ditemukan kartu antrean dengan kata kunci "<span id="searchNoResultsQuery" class="font-bold text-slate-600"></span>".
+        </p>
+        <div class="mt-4">
+            <button type="button" onclick="clearKanbanSearch()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all min-h-[36px]">
+                <i class="fas fa-undo text-xs"></i>
+                <span>Reset Pencarian</span>
+            </button>
         </div>
     </div>
 
@@ -205,12 +278,25 @@
                                     Tidak ada antrean Line {{ $lineNo }}
                                 </div>
                             @else
+                                <div class="line-no-matches hidden p-4 text-center text-slate-400 text-xs italic bg-white/60 rounded-lg border border-dashed border-slate-200">
+                                    Tidak ada kartu cocok di Line {{ $lineNo }}
+                                </div>
                                 {{-- 1. READY CARDS --}}
                                 @foreach($cardsInLine as $card)
                                     @php
                                         $agingInfo = $getAgingInfo($card['aging'] ?? null);
+                                        $searchText = strtolower(implode(' ', array_filter([
+                                            $card['heat_number'] ?? '',
+                                            $card['item_name'] ?? '',
+                                            $card['production_code'] ?? '',
+                                            $card['traveler_number'] ?? '',
+                                            $card['customer'] ?? '',
+                                            $card['item_code'] ?? '',
+                                        ])));
                                     @endphp
-                                    <div class="bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs">
+                                    <div class="kanban-card bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs"
+                                         data-search-text="{{ $searchText }}"
+                                         data-card-line="{{ $lineNo }}">
                                         <div>
                                              {{-- Top Row: Nama Barang & Nomor Antrian --}}
                                             <div class="flex items-start justify-between gap-1.5">
@@ -293,13 +379,26 @@
                             Tidak ada antrean pada Line {{ $lineNo }}
                         </div>
                     @else
+                        <div class="line-no-matches hidden p-8 text-center text-slate-400 text-xs italic bg-white rounded-lg border border-dashed border-slate-200">
+                            Tidak ada kartu cocok pada Line {{ $lineNo }}
+                        </div>
                         @if(count($cardsInLine) > 0)
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                                 @foreach($cardsInLine as $card)
                                     @php
                                         $agingInfo = $getAgingInfo($card['aging'] ?? null);
+                                        $searchText = strtolower(implode(' ', array_filter([
+                                            $card['heat_number'] ?? '',
+                                            $card['item_name'] ?? '',
+                                            $card['production_code'] ?? '',
+                                            $card['traveler_number'] ?? '',
+                                            $card['customer'] ?? '',
+                                            $card['item_code'] ?? '',
+                                        ])));
                                     @endphp
-                                    <div class="bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs">
+                                    <div class="kanban-card bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs"
+                                         data-search-text="{{ $searchText }}"
+                                         data-card-line="{{ $lineNo }}">
                                         <div>
                                             {{-- Top Row: Nama Barang & Nomor Antrian --}}
                                             <div class="flex items-start justify-between gap-1.5">
@@ -431,7 +530,113 @@
 @endif
 
 <script>
+    function applyKanbanSearch(rawQuery) {
+        const query = (rawQuery || '').trim().toLowerCase();
+        const cards = document.querySelectorAll('.kanban-card');
+        const clearBtn = document.getElementById('kanbanSearchClearBtn');
+        const resetBtn = document.getElementById('kanbanSearchResetBtn');
+        const matchBadge = document.getElementById('kanbanSearchMatchBadge');
+        const matchCountEl = document.getElementById('kanbanSearchMatchCount');
+        const noResultsEl = document.getElementById('searchNoResults');
+        const noResultsQueryEl = document.getElementById('searchNoResultsQuery');
+
+        if (!query) {
+            cards.forEach(card => card.classList.remove('hidden'));
+            if (clearBtn) clearBtn.classList.add('hidden');
+            if (resetBtn) resetBtn.classList.add('hidden');
+            if (matchBadge) {
+                matchBadge.classList.add('hidden');
+                matchBadge.classList.remove('inline-flex');
+            }
+            if (noResultsEl) noResultsEl.classList.add('hidden');
+            document.querySelectorAll('.line-no-matches').forEach(el => el.classList.add('hidden'));
+            return;
+        }
+
+        if (clearBtn) clearBtn.classList.remove('hidden');
+        if (resetBtn) resetBtn.classList.remove('hidden');
+
+        let totalMatches = 0;
+        const lineMatchCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+
+        cards.forEach(card => {
+            const searchText = (card.getAttribute('data-search-text') || '').toLowerCase();
+            const lineNo = parseInt(card.getAttribute('data-card-line') || '1', 10);
+
+            if (searchText.includes(query)) {
+                card.classList.remove('hidden');
+                totalMatches++;
+                if (lineMatchCounts[lineNo] !== undefined) {
+                    lineMatchCounts[lineNo]++;
+                }
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+
+        if (matchBadge && matchCountEl) {
+            matchCountEl.textContent = totalMatches;
+            matchBadge.classList.remove('hidden');
+            matchBadge.classList.add('inline-flex');
+        }
+
+        // Update line-level empty states
+        document.querySelectorAll('[data-line-column]').forEach(col => {
+            const lineNo = parseInt(col.getAttribute('data-line-column') || '0', 10);
+            const lineNoMatchesEl = col.querySelector('.line-no-matches');
+            const cardsInThisLine = col.querySelectorAll('.kanban-card');
+
+            if (lineNoMatchesEl && cardsInThisLine.length > 0) {
+                const matchesInLine = lineMatchCounts[lineNo] || 0;
+                if (matchesInLine === 0) {
+                    lineNoMatchesEl.classList.remove('hidden');
+                } else {
+                    lineNoMatchesEl.classList.add('hidden');
+                }
+            }
+        });
+
+        // Global empty state if 0 matches
+        if (noResultsEl) {
+            if (totalMatches === 0 && cards.length > 0) {
+                if (noResultsQueryEl) noResultsQueryEl.textContent = rawQuery.trim();
+                noResultsEl.classList.remove('hidden');
+            } else {
+                noResultsEl.classList.add('hidden');
+            }
+        }
+    }
+
+    function clearKanbanSearch() {
+        const input = document.getElementById('kanbanSearchInput');
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+        applyKanbanSearch('');
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('kanbanSearchInput');
+        if (searchInput) {
+            // Instant search on typing
+            searchInput.addEventListener('input', function () {
+                applyKanbanSearch(this.value);
+            });
+
+            // Clear on Escape
+            searchInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    clearKanbanSearch();
+                }
+            });
+
+            // Initial search if value exists (e.g. from server query param)
+            if (searchInput.value.trim() !== '') {
+                applyKanbanSearch(searchInput.value);
+            }
+        }
+
         // Auto-Refresh Logic (120000 ms = 2 minutes)
         // Desktop / Laptop / TV Display = ON
         // Android / Mobile Operational Devices = OFF
@@ -473,9 +678,14 @@
         updateDisplay();
 
         const intervalId = setInterval(function () {
-            // Pause auto-refresh if PPIC reorder modal is actively open so user input is preserved
+            // Pause auto-refresh if PPIC reorder modal is actively open
             const modal = document.getElementById('reorderModal');
             if (modal && !modal.classList.contains('hidden')) {
+                return;
+            }
+
+            // Pause auto-refresh if user has active search text
+            if (searchInput && searchInput.value.trim() !== '') {
                 return;
             }
 

@@ -60,7 +60,50 @@
 @endsection
 
 @section('content')
-    <div class="bg-white shadow-md rounded-lg p-6 h-full flex flex-col">
+    <div class="bg-white shadow-md rounded-lg p-4 sm:p-6 h-full flex flex-col space-y-3">
+        {{-- SEARCH & FILTER BAR --}}
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shadow-xs">
+            <div class="relative flex-1 min-w-0">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <i class="fas fa-search text-xs"></i>
+                </div>
+                <input
+                    type="text"
+                    id="planSearchInput"
+                    placeholder="Cari kode produksi, nama item, atau customer..."
+                    autocomplete="off"
+                    class="block w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md text-slate-900 placeholder-slate-400 transition-colors"
+                >
+                <button
+                    type="button"
+                    id="planSearchClearBtn"
+                    onclick="clearPlanSearch()"
+                    class="hidden absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                    title="Hapus pencarian"
+                >
+                    <i class="fas fa-times-circle text-xs"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0 justify-between sm:justify-end">
+                {{-- Match Count Badge --}}
+                <div id="planSearchMatchBadge" class="hidden items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                    <span id="planSearchMatchCount">0</span>
+                    <span class="text-[10px] font-sans font-bold uppercase">BARIS COCOK</span>
+                </div>
+
+                <button
+                    type="button"
+                    id="planSearchResetBtn"
+                    onclick="clearPlanSearch()"
+                    class="hidden inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-xs transition-all min-h-[32px]"
+                >
+                    <i class="fas fa-undo text-[10px]"></i>
+                    <span>RESET</span>
+                </button>
+            </div>
+        </div>
+
         <div class="flex-1 overflow-auto">
             <table class="min-w-full border-collapse border border-gray-200 text-sm">
                 <thead class="bg-gray-100 sticky top-0">
@@ -99,8 +142,37 @@
                     </tr>
                 </thead>
                 <tbody>
+                    <tr id="planNoMatchesRow" class="hidden">
+                        <td colspan="11" class="border border-gray-200 px-3 py-8 text-center text-slate-500 bg-slate-50/50">
+                            <div class="flex flex-col items-center justify-center gap-1.5">
+                                <i class="fas fa-search text-xl text-slate-400 mb-1"></i>
+                                <p class="font-bold text-slate-700 text-xs sm:text-sm">Tidak ada data yang cocok</p>
+                                <p class="text-[11px] text-slate-400">Tidak ditemukan rencana dengan kata kunci "<span id="planNoMatchesQuery" class="font-bold text-slate-600"></span>".</p>
+                                <button type="button" onclick="clearPlanSearch()" class="mt-2 inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-md bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
+                                    <i class="fas fa-undo text-[10px]"></i> Reset Pencarian
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                     @forelse($plans as $index => $plan)
-                        <tr class="hover:bg-gray-50 text-[12px]">
+                        @php
+                            $statusLabel = $plan->execution_status === 'COMPLETED' ? 'Completed' : ($plan->execution_status === 'IN_PROGRESS' ? 'In Progress' : 'Not Started');
+                            $searchText = strtolower(implode(' ', array_filter([
+                                $plan->code,
+                                $plan->customer,
+                                $plan->po_number,
+                                $plan->item_name,
+                                $plan->item_code,
+                                $plan->aisi,
+                                $plan->size,
+                                $plan->production_domain,
+                                $plan->execution_status,
+                                $statusLabel,
+                                'line ' . $plan->line_number,
+                                (string) $plan->line_number,
+                            ])));
+                        @endphp
+                        <tr class="plan-row hover:bg-gray-50 text-[12px]" data-search-text="{{ $searchText }}">
                             <td class="border border-gray-200 px-3 py-2 text-center text-gray-400">
                                 {{ $index + 1 }}</td>
                             <td class="border border-gray-200 px-3 py-2 font-mono text-xs text-center font-bold">
@@ -215,5 +287,81 @@
                 document.getElementById('editTitleForm').submit();
             }
         }
+
+        function applyPlanSearch(rawQuery) {
+            const query = (rawQuery || '').trim().toLowerCase();
+            const rows = document.querySelectorAll('.plan-row');
+            const clearBtn = document.getElementById('planSearchClearBtn');
+            const resetBtn = document.getElementById('planSearchResetBtn');
+            const matchBadge = document.getElementById('planSearchMatchBadge');
+            const matchCountEl = document.getElementById('planSearchMatchCount');
+            const noMatchesRow = document.getElementById('planNoMatchesRow');
+            const noMatchesQueryEl = document.getElementById('planNoMatchesQuery');
+
+            if (!query) {
+                rows.forEach(row => row.classList.remove('hidden'));
+                if (clearBtn) clearBtn.classList.add('hidden');
+                if (resetBtn) resetBtn.classList.add('hidden');
+                if (matchBadge) {
+                    matchBadge.classList.add('hidden');
+                    matchBadge.classList.remove('inline-flex');
+                }
+                if (noMatchesRow) noMatchesRow.classList.add('hidden');
+                return;
+            }
+
+            if (clearBtn) clearBtn.classList.remove('hidden');
+            if (resetBtn) resetBtn.classList.remove('hidden');
+
+            let matchCount = 0;
+            rows.forEach(row => {
+                const searchText = (row.getAttribute('data-search-text') || '').toLowerCase();
+                if (searchText.includes(query)) {
+                    row.classList.remove('hidden');
+                    matchCount++;
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+
+            if (matchBadge && matchCountEl) {
+                matchCountEl.textContent = matchCount;
+                matchBadge.classList.remove('hidden');
+                matchBadge.classList.add('inline-flex');
+            }
+
+            if (noMatchesRow) {
+                if (matchCount === 0 && rows.length > 0) {
+                    if (noMatchesQueryEl) noMatchesQueryEl.textContent = rawQuery.trim();
+                    noMatchesRow.classList.remove('hidden');
+                } else {
+                    noMatchesRow.classList.add('hidden');
+                }
+            }
+        }
+
+        function clearPlanSearch() {
+            const input = document.getElementById('planSearchInput');
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+            applyPlanSearch('');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchInput = document.getElementById('planSearchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', function () {
+                    applyPlanSearch(this.value);
+                });
+
+                searchInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') {
+                        clearPlanSearch();
+                    }
+                });
+            }
+        });
     </script>
 @endsection

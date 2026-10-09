@@ -449,4 +449,49 @@ class ProductionPlanControlTowerTest extends TestCase
         // 10 plans across 10 groups: The execution queries must be aggregated via whereIn (2 queries), not 1 per plan.
         $this->assertLessThan(20, count($queries), 'Query count must remain small and constant regardless of number of plan cards.');
     }
+
+    /** 15. Detail view search UI components and row search attributes */
+    public function test_detail_plan_list_search_ui_and_data_attributes(): void
+    {
+        $plan = $this->createPlan([
+            'code' => '269UN121',
+            'title' => 'A02 NOVEMBER',
+            'item_code' => '4.1041DINPN16ID.A0050',
+            'item_name' => 'SS304 RAISED DIN 2501 PN 16',
+            'customer' => 'A02',
+            'po_number' => 'PO-9988',
+            'line_number' => 3,
+            'qty_planned' => 50,
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'product_scope' => 'FLANGE_STAINLESS',
+            'created_at' => '2026-10-01 08:00:00',
+        ]);
+
+        $response = $this->actingAs($this->ppicStainless)->get(route('plan.index', [
+            'date' => '2026-10-01',
+            'title' => 'A02 NOVEMBER',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'product_scope' => 'FLANGE_STAINLESS',
+        ]));
+
+        $response->assertStatus(200);
+
+        // UI Search components
+        $response->assertSee('id="planSearchInput"', false);
+        $response->assertSee('placeholder="Cari kode produksi, nama item, atau customer..."', false);
+        $response->assertSee('id="planSearchClearBtn"', false);
+        $response->assertSee('id="planSearchResetBtn"', false);
+        $response->assertSee('id="planSearchMatchBadge"', false);
+        $response->assertSee('id="planSearchMatchCount"', false);
+        $response->assertSee('id="planNoMatchesRow"', false);
+        $response->assertSee('Tidak ada data yang cocok');
+
+        // Row search attributes
+        $response->assertSee('plan-row', false);
+        $response->assertSee('269un121', false);
+        $response->assertSee('4.1041dinpn16id.a0050', false);
+        $response->assertSee('ss304 raised din 2501 pn 16', false);
+        $response->assertSee('not started', false);
+        $response->assertSee('line 3', false);
+    }
 }
