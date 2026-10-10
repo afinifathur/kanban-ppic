@@ -295,6 +295,16 @@
                     </button>
                     <ul id="sandCastingMenu"
                         class="{{ $isSandCastingActive ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        @if(Auth::user() && \App\Http\Controllers\SandCasting\SandCastingDashboardController::isUserAuthorized(Auth::user()))
+                        <li>
+                            <a href="{{ route('sand-casting.dashboard') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.dashboard*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                title="Sand Casting Dashboard">
+                                <i class="fas fa-tachometer-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Sand Casting Dashboard</span>
+                            </a>
+                        </li>
+                        @endif
                         @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
                             <a href="{{ route('sand-casting.casting-orders.plans') }}"
