@@ -899,4 +899,425 @@ class DashboardEndpointTest extends TestCase
             \App\Services\SandCasting\SandCastingDashboardService::resetSchemaCache();
         }
     }
+
+    public function test_zone_3_quality_analytics_30_day_trend_verified_filtering_and_empty_handling(): void
+    {
+        [$plan1, $line1] = $this->createPlanWithKtrLine(['qty_good' => 50]);
+        [$plan2, $line2] = $this->createPlanWithKtrLine(['qty_good' => 50]);
+        [$plan3, $line3] = $this->createPlanWithKtrLine(['qty_good' => 50]);
+
+        $tenDaysAgo = now()->subDays(10)->toDateString();
+        $threeDaysAgo = now()->subDays(3)->toDateString();
+
+        // 1. Confirmed defect 10 days ago (must appear in 30-day trend)
+        $line1->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 50,
+            'defect_qty' => 7,
+            'good_qty' => 43,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $tenDaysAgo,
+            'qc_verified_at' => now()->subDays(10),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(10),
+            'physical_done_at' => now()->subDays(10),
+        ]);
+
+        // 2. Unverified defect 3 days ago (WAITING_QC) - MUST NOT appear in 30-day trend
+        $line2->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 50,
+            'defect_qty' => 12,
+            'good_qty' => 38,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => $threeDaysAgo,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(3),
+            'physical_done_at' => now()->subDays(3),
+        ]);
+
+        // 3. Confirmed zero-defect execution 3 days ago - MUST have status 'zero_defect' and defect_pcs = 0
+        $line3->stageExecutions()->create([
+            'stage' => 'bor',
+            'checkpoint_code' => 'BOR_DRILLING',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $threeDaysAgo,
+            'qc_verified_at' => now()->subDays(3),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(3),
+            'physical_done_at' => now()->subDays(3),
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3&fresh=1');
+        $res->assertStatus(200);
+
+        $trend30 = $res->json('zone_3.defect_trend_30_days');
+        $this->assertCount(30, $trend30);
+
+        $trendMap = collect($trend30)->keyBy('date');
+
+        // Ten days ago has 7 confirmed defect pcs
+        $this->assertSame(7, $trendMap[$tenDaysAgo]['defect_pcs']);
+        $this->assertTrue($trendMap[$tenDaysAgo]['is_data_available']);
+        $this->assertSame('has_defect', $trendMap[$tenDaysAgo]['status']);
+
+        // Three days ago only has confirmed zero defect (unverified 12 pcs excluded)
+        $this->assertSame(0, $trendMap[$threeDaysAgo]['defect_pcs']);
+        $this->assertTrue($trendMap[$threeDaysAgo]['is_data_available']);
+        $this->assertSame('zero_defect', $trendMap[$threeDaysAgo]['status']);
+
+        // A day with no inspections at all (e.g. 20 days ago) has is_data_available = false & defect_pcs = null
+        $twentyDaysAgo = now()->subDays(20)->toDateString();
+        $this->assertNull($trendMap[$twentyDaysAgo]['defect_pcs']);
+        $this->assertFalse($trendMap[$twentyDaysAgo]['is_data_available']);
+        $this->assertSame('no_data', $trendMap[$twentyDaysAgo]['status']);
+    }
+
+    public function test_zone_3_six_stage_defect_contribution_and_composition(): void
+    {
+        $defectPorosity = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+        $defectRetak = \App\Models\DefectType::firstOrCreate(['name' => 'Retak'], ['department' => 'COR', 'is_active' => true]);
+
+        [$plan1, $line1] = $this->createPlanWithKtrLine(['qty_good' => 50]);
+        [$plan2, $line2] = $this->createPlanWithKtrLine(['qty_good' => 50]);
+
+        $twoDaysAgo = now()->subDays(2)->toDateString();
+
+        // Execution 1: Netto with 6 pcs defect (4 porosity, 2 retak)
+        $exec1 = $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 6,
+            'good_qty' => 44,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $twoDaysAgo,
+            'qc_verified_at' => now()->subDays(2),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(2),
+            'physical_done_at' => now()->subDays(2),
+        ]);
+        $exec1->defects()->create(['defect_type_id' => $defectPorosity->id, 'qty' => 4]);
+        $exec1->defects()->create(['defect_type_id' => $defectRetak->id, 'qty' => 2]);
+
+        // Execution 2: Bubut OD with 4 pcs defect (4 retak)
+        $exec2 = $line2->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 50,
+            'defect_qty' => 4,
+            'good_qty' => 46,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $twoDaysAgo,
+            'qc_verified_at' => now()->subDays(2),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(2),
+            'physical_done_at' => now()->subDays(2),
+        ]);
+        $exec2->defects()->create(['defect_type_id' => $defectRetak->id, 'qty' => 4]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3&fresh=1');
+        $res->assertStatus(200);
+
+        // 1. Stage Contribution: Netto = 6 pcs (15.0 kg, 60%), Bubut OD = 4 pcs (10.0 kg, 40%), Total = 10 pcs (25.0 kg)
+        $contrib = collect($res->json('zone_3.stage_defect_contribution'))->keyBy('stage');
+        $this->assertCount(6, $contrib);
+        $this->assertSame(6, $contrib['netto']['pcs_defect']);
+        $this->assertSame(6, $contrib['netto']['defect_pcs']);
+        $this->assertEquals(15.0, (float) $contrib['netto']['estimated_defect_kg']);
+        $this->assertEquals(15.0, (float) $contrib['netto']['weight_kg']);
+        $this->assertEquals(60.0, (float) $contrib['netto']['weight_contribution_pct']);
+        $this->assertEquals(60.0, (float) $contrib['netto']['pcs_contribution_pct']);
+        $this->assertEquals(60.0, (float) $contrib['netto']['percentage']);
+        $this->assertTrue($contrib['netto']['is_weight_available']);
+        $this->assertTrue($contrib['netto']['is_weight_complete']);
+
+        $this->assertSame(4, $contrib['bubut_od']['pcs_defect']);
+        $this->assertSame(4, $contrib['bubut_od']['defect_pcs']);
+        $this->assertEquals(10.0, (float) $contrib['bubut_od']['estimated_defect_kg']);
+        $this->assertEquals(40.0, (float) $contrib['bubut_od']['weight_contribution_pct']);
+        $this->assertEquals(40.0, (float) $contrib['bubut_od']['percentage']);
+
+        $this->assertSame(0, $contrib['bor']['pcs_defect']);
+        $this->assertEquals(0.0, (float) $contrib['bor']['estimated_defect_kg']);
+        $this->assertEquals(0.0, (float) $contrib['bor']['weight_contribution_pct']);
+        $this->assertEquals(0.0, (float) $contrib['bor']['percentage']);
+
+        // 2. Overall Composition: Porosity = 4 pcs (10.0 kg, 40%), Retak = 6 pcs (15.0 kg, 60%)
+        $overall = collect($res->json('zone_3.overall_defect_types'))->keyBy('name');
+        $this->assertSame(4, $overall['Porosity']['qty_pcs']);
+        $this->assertEquals(10.0, (float) $overall['Porosity']['estimated_defect_kg']);
+        $this->assertEquals(40.0, (float) $overall['Porosity']['weight_percentage']);
+        $this->assertEquals(40.0, (float) $overall['Porosity']['percentage']);
+
+        $this->assertSame(6, $overall['Retak']['qty_pcs']);
+        $this->assertEquals(15.0, (float) $overall['Retak']['estimated_defect_kg']);
+        $this->assertEquals(60.0, (float) $overall['Retak']['weight_percentage']);
+        $this->assertEquals(60.0, (float) $overall['Retak']['percentage']);
+
+        // 3. Stage Defect Types for Netto & Bor
+        $stageTypes = $res->json('zone_3.stage_defect_types');
+        $this->assertSame(6, $stageTypes['netto']['total_pcs']);
+        $this->assertEquals(15.0, (float) $stageTypes['netto']['total_estimated_defect_kg']);
+        $this->assertCount(2, $stageTypes['netto']['types']);
+
+        // Netto defect types: Porosity (4 pcs, 10.0 kg -> 66.7%), Retak (2 pcs, 5.0 kg -> 33.3%)
+        $nettoTypes = collect($stageTypes['netto']['types'])->keyBy('name');
+        $this->assertEquals(10.0, (float) $nettoTypes['Porosity']['estimated_defect_kg']);
+        $this->assertEquals(66.7, (float) $nettoTypes['Porosity']['weight_percentage']);
+        $this->assertEquals(5.0, (float) $nettoTypes['Retak']['estimated_defect_kg']);
+        $this->assertEquals(33.3, (float) $nettoTypes['Retak']['weight_percentage']);
+
+        // Bor has 0 pcs, types array is empty
+        $this->assertSame(0, $stageTypes['bor']['total_pcs']);
+        $this->assertEquals(0.0, (float) $stageTypes['bor']['total_estimated_defect_kg']);
+        $this->assertCount(0, $stageTypes['bor']['types']);
+
+        // 4. Quality Analytics Summary
+        $summary = $res->json('zone_3.quality_analytics_summary');
+        $this->assertSame(10, $summary['total_verified_pcs']);
+        $this->assertEquals(25.0, (float) $summary['total_estimated_defect_kg']);
+        $this->assertSame(10, $summary['valid_weight_pcs']);
+        $this->assertSame(0, $summary['unavailable_weight_pcs']);
+        $this->assertEquals(100.0, (float) $summary['weight_coverage_pct']);
+        $this->assertTrue($summary['is_weight_fully_available']);
+    }
+
+    public function test_zone_3_quality_analytics_weight_resolution_hierarchy_and_data_quality_metadata(): void
+    {
+        $defectRough = \App\Models\DefectType::firstOrCreate(['name' => 'Kasar / Erosi'], ['department' => 'COR', 'is_active' => true]);
+        $defectPin = \App\Models\DefectType::firstOrCreate(['name' => 'Pin Hole'], ['department' => 'COR', 'is_active' => true]);
+
+        $twoDaysAgo = now()->subDays(2)->toDateString();
+
+        // 1. Line 1: Snapshot precedence (line.unit_weight_kg = 8.0, plan.weight = 2.0). 3 pcs defect in Netto -> 24.0 kg
+        [$plan1, $line1] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 8.0], ['weight' => 2.0]);
+        $exec1 = $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 3,
+            'good_qty' => 47,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $twoDaysAgo,
+            'qc_verified_at' => now()->subDays(2),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(2),
+            'physical_done_at' => now()->subDays(2),
+        ]);
+        $exec1->defects()->create(['defect_type_id' => $defectRough->id, 'qty' => 3]);
+
+        // 2. Line 2: Fallback to Plan weight (line.unit_weight_kg = 0.0, plan.weight = 4.0). 2 pcs defect in Bubut OD -> 8.0 kg
+        [$plan2, $line2] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 0.0], ['weight' => 4.0]);
+        $exec2 = $line2->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 50,
+            'defect_qty' => 2,
+            'good_qty' => 48,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $twoDaysAgo,
+            'qc_verified_at' => now()->subDays(2),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(2),
+            'physical_done_at' => now()->subDays(2),
+        ]);
+        $exec2->defects()->create(['defect_type_id' => $defectPin->id, 'qty' => 2]);
+
+        // 3. Line 3: Both weights invalid (line.unit_weight_kg = 0.0, plan.weight = 0.0). 5 pcs defect in Bubut CNC -> Weight unavailable
+        [$plan3, $line3] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 0.0], ['weight' => 0.0]);
+        $exec3 = $line3->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $twoDaysAgo,
+            'qc_verified_at' => now()->subDays(2),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(2),
+            'physical_done_at' => now()->subDays(2),
+        ]);
+        $exec3->defects()->create(['defect_type_id' => $defectPin->id, 'qty' => 5]);
+
+        // 4. Line 4: WAITING_QC status (must NOT be counted in 30-day analytics)
+        [$plan4, $line4] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 10.0], ['weight' => 10.0]);
+        $line4->stageExecutions()->create([
+            'stage' => 'bor',
+            'checkpoint_code' => 'BOR_DRILLING',
+            'input_qty' => 50,
+            'defect_qty' => 10,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => $twoDaysAgo,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(2),
+            'physical_done_at' => now()->subDays(2),
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3&fresh=1');
+        $res->assertStatus(200);
+
+        // Assert 1: Summary metadata
+        $summary = $res->json('zone_3.quality_analytics_summary');
+        $this->assertSame(10, $summary['total_verified_pcs']); // 3 + 2 + 5 pcs (unverified 10 excluded)
+        $this->assertSame(5, $summary['valid_weight_pcs']);    // 3 (netto) + 2 (bubut_od)
+        $this->assertSame(5, $summary['unavailable_weight_pcs']); // 5 (bubut_cnc)
+        $this->assertEquals(32.0, (float) $summary['total_estimated_defect_kg']); // 24.0 kg + 8.0 kg
+        $this->assertEquals(50.0, (float) $summary['weight_coverage_pct']); // 5 / 10 = 50.0%
+        $this->assertFalse($summary['is_weight_fully_available']);
+        $this->assertSame(1, $summary['unweighted_records_count']);
+
+        // Assert 2: Stage Contributions
+        $contrib = collect($res->json('zone_3.stage_defect_contribution'))->keyBy('stage');
+
+        // Netto: 3 pcs, 24.0 kg. Weight contribution % = 24.0 / 32.0 * 100 = 75.0%
+        $this->assertSame(3, $contrib['netto']['defect_pcs']);
+        $this->assertEquals(24.0, (float) $contrib['netto']['estimated_defect_kg']);
+        $this->assertEquals(75.0, (float) $contrib['netto']['weight_contribution_pct']);
+        $this->assertEquals(30.0, (float) $contrib['netto']['pcs_contribution_pct']); // 3 / 10 = 30%
+        $this->assertTrue($contrib['netto']['is_weight_available']);
+        $this->assertTrue($contrib['netto']['is_weight_complete']);
+
+        // Bubut OD: 2 pcs, 8.0 kg. Weight contribution % = 8.0 / 32.0 * 100 = 25.0%
+        $this->assertSame(2, $contrib['bubut_od']['defect_pcs']);
+        $this->assertEquals(8.0, (float) $contrib['bubut_od']['estimated_defect_kg']);
+        $this->assertEquals(25.0, (float) $contrib['bubut_od']['weight_contribution_pct']);
+        $this->assertEquals(20.0, (float) $contrib['bubut_od']['pcs_contribution_pct']); // 2 / 10 = 20%
+        $this->assertTrue($contrib['bubut_od']['is_weight_available']);
+        $this->assertTrue($contrib['bubut_od']['is_weight_complete']);
+
+        // Bubut CNC: 5 pcs, 0.0 kg valid. Weight unavailable
+        $this->assertSame(5, $contrib['bubut_cnc']['defect_pcs']);
+        $this->assertEquals(0.0, (float) $contrib['bubut_cnc']['estimated_defect_kg']);
+        $this->assertEquals(0.0, (float) $contrib['bubut_cnc']['weight_contribution_pct']);
+        $this->assertEquals(50.0, (float) $contrib['bubut_cnc']['pcs_contribution_pct']); // 5 / 10 = 50%
+        $this->assertFalse($contrib['bubut_cnc']['is_weight_available']);
+        $this->assertFalse($contrib['bubut_cnc']['is_weight_complete']);
+        $this->assertSame(5, $contrib['bubut_cnc']['unavailable_weight_pcs']);
+
+        // Sum of weight contributions for stages with valid weights equals 100% (75% + 25%)
+        $totalWeightPct = (float) $contrib['netto']['weight_contribution_pct'] + (float) $contrib['bubut_od']['weight_contribution_pct'];
+        $this->assertEquals(100.0, $totalWeightPct);
+
+        // Assert 3: Overall Defect Types
+        $overall = collect($res->json('zone_3.overall_defect_types'))->keyBy('name');
+        // Rough (Kasar): 3 pcs, 24.0 kg -> 24 / 32 * 100 = 75.0%
+        $this->assertSame(3, $overall['Kasar / Erosi']['qty_pcs']);
+        $this->assertEquals(24.0, (float) $overall['Kasar / Erosi']['estimated_defect_kg']);
+        $this->assertEquals(75.0, (float) $overall['Kasar / Erosi']['weight_percentage']);
+        $this->assertTrue($overall['Kasar / Erosi']['is_weight_available']);
+
+        // Pin Hole: 7 pcs total (2 valid = 8.0 kg, 5 unavailable = 0 kg) -> 8 / 32 * 100 = 25.0%
+        $this->assertSame(7, $overall['Pin Hole']['qty_pcs']);
+        $this->assertEquals(8.0, (float) $overall['Pin Hole']['estimated_defect_kg']);
+        $this->assertEquals(25.0, (float) $overall['Pin Hole']['weight_percentage']);
+        $this->assertSame(2, $overall['Pin Hole']['valid_weight_pcs']);
+        $this->assertSame(5, $overall['Pin Hole']['unavailable_weight_pcs']);
+
+        // Assert 4: 30-Day Trend on two days ago
+        $trendMap = collect($res->json('zone_3.defect_trend_30_days'))->keyBy('date');
+        $this->assertSame(10, $trendMap[$twoDaysAgo]['defect_pcs']);
+        $this->assertEquals(32.0, (float) $trendMap[$twoDaysAgo]['estimated_defect_kg']);
+        $this->assertSame(5, $trendMap[$twoDaysAgo]['valid_weight_pcs']);
+        $this->assertSame(5, $trendMap[$twoDaysAgo]['unavailable_weight_pcs']);
+        $this->assertFalse($trendMap[$twoDaysAgo]['is_weight_complete']);
+    }
+
+    public function test_admin_qc_flange_can_view_zone_1_throughput_chart_across_product_scopes(): void
+    {
+        // 1. Setup multi-scope data
+        // Scope A: FLANGE_BESI (100 pcs good, 2.0 kg/pcs => 0.20 Ton)
+        [$planBesi, $lineBesi] = $this->createPlanWithKtrLine(
+            ['qty_good' => 100, 'unit_weight_kg' => 2.0],
+            ['product_scope' => 'FLANGE_BESI']
+        );
+        $lineBesi->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Scope B: FLANGE_STAINLESS (50 pcs good, 4.0 kg/pcs => 0.20 Ton)
+        [$planStainless, $lineStainless] = $this->createPlanWithKtrLine(
+            ['qty_good' => 50, 'unit_weight_kg' => 4.0],
+            ['product_scope' => 'FLANGE_STAINLESS']
+        );
+        $lineStainless->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // 2. Admin QC Flange (adminqcflange@peroniks.com) requests Zone 1
+        $resQc = $this->actingAs($this->qcUser)->getJson('/sand-casting/dashboard/data?zone=1');
+        $resQc->assertStatus(200);
+
+        $stagesQc = collect($resQc->json('zone_1.daily_throughput_stages'))->keyBy('stage');
+        $this->assertCount(7, $stagesQc);
+
+        // Throughput must combine all scopes for adminqcflange@peroniks.com:
+        // Cor: 100 (Besi) + 50 (Stainless) = 150 pcs, 0.40 Ton
+        $this->assertSame(150, $stagesQc['cor']['good_pcs']);
+        $this->assertEquals(0.40, (float) $stagesQc['cor']['good_tonnage']);
+
+        // Netto: 100 (Besi) + 50 (Stainless) = 150 pcs, 0.40 Ton
+        $this->assertSame(150, $stagesQc['netto']['good_pcs']);
+        $this->assertEquals(0.40, (float) $stagesQc['netto']['good_tonnage']);
+
+        // 3. PPIC user with scope FLANGE_BESI still only sees FLANGE_BESI
+        $resPpic = $this->actingAs($this->ppicUser)->getJson('/sand-casting/dashboard/data?zone=1');
+        $resPpic->assertStatus(200);
+
+        $stagesPpic = collect($resPpic->json('zone_1.daily_throughput_stages'))->keyBy('stage');
+        $this->assertSame(100, $stagesPpic['cor']['good_pcs']);
+        $this->assertEquals(0.20, (float) $stagesPpic['cor']['good_tonnage']);
+        $this->assertSame(100, $stagesPpic['netto']['good_pcs']);
+        $this->assertEquals(0.20, (float) $stagesPpic['netto']['good_tonnage']);
+
+        // 4. Other QC user with scope FLANGE_BESI does NOT bypass scope
+        $otherQcUser = User::factory()->create([
+            'name' => 'Other QC User',
+            'email' => 'otherqc@peroniks.com',
+            'product_scope' => 'FLANGE_BESI',
+        ]);
+        $otherQcUser->assignRole('qc');
+
+        $resOtherQc = $this->actingAs($otherQcUser)->getJson('/sand-casting/dashboard/data?zone=1&fresh=1');
+        $resOtherQc->assertStatus(200);
+
+        $stagesOtherQc = collect($resOtherQc->json('zone_1.daily_throughput_stages'))->keyBy('stage');
+        $this->assertSame(100, $stagesOtherQc['cor']['good_pcs']);
+        $this->assertEquals(0.20, (float) $stagesOtherQc['cor']['good_tonnage']);
+
+        // 5. Verification: adminqcflange on Production Report page maintains its scope (not bypassed)
+        $reportRes = $this->actingAs($this->qcUser)->get('/sand-casting/report/production?stage=cor');
+        $reportRes->assertStatus(200);
+        $reportRes->assertViewHas('items', function ($items) {
+            return count($items) === 1;
+        });
+
+        // 6. Cache isolation check:
+        // Cache keys are separated: PPIC uses sc_dashboard_data_FLANGE_BESI_zone_1, admin/adminqcflange uses sc_dashboard_data_all_zone_1
+        $this->assertTrue(Cache::has('sc_dashboard_data_FLANGE_BESI_zone_1'));
+        $this->assertTrue(Cache::has('sc_dashboard_data_all_zone_1'));
+    }
 }

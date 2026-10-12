@@ -59,7 +59,7 @@ class SandCastingProductionReportService
     public function getProductionDataset(array $filters = [], ?User $user = null, bool $includeDetails = true): array
     {
         $currentUser = $user ?? auth()->user();
-        $scope = $currentUser?->product_scope;
+        $scope = array_key_exists('scope', $filters) ? $filters['scope'] : $currentUser?->product_scope;
 
         $dateFrom = ! empty($filters['date_from']) ? $filters['date_from'] : date('Y-m-d');
         $dateTo = ! empty($filters['date_to']) ? $filters['date_to'] : date('Y-m-d');

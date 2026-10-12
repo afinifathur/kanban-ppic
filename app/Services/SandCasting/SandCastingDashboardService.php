@@ -143,11 +143,18 @@ class SandCastingDashboardService
         $distinctHeatCount = $corLines->pluck('sand_casting_casting_result_id')->unique()->count();
 
         // 2. Daily Throughput by Stage (Reuses ProductionReportService for 100% reconciliation)
-        $reportDataset = $this->reportService->getProductionDataset([
+        $reportFilters = [
             'date_from' => $todayStr,
             'date_to' => $todayStr,
             'stage' => 'all',
-        ], $user, includeDetails: false);
+        ];
+
+        // Specific access exception for adminqcflange@peroniks.com on Zone 1 throughput chart (Phase 5F)
+        if (self::shouldBypassZone1ThroughputScope($user)) {
+            $reportFilters['scope'] = null;
+        }
+
+        $reportDataset = $this->reportService->getProductionDataset($reportFilters, $user, includeDetails: false);
 
         /** @var Collection $stageSummaries */
         $stageSummaries = $reportDataset['stage_summaries'] ?? collect();
@@ -596,6 +603,9 @@ class SandCastingDashboardService
         // 4. Top Action Required Items (Up to 5 actionable KTRs)
         $topActionItems = $this->resolveTopActionItems($scope);
 
+        // 5. Phase 5D: 30-Day Quality Analytics (Trend, Contribution, Overall Donut, Per-Stage Donuts)
+        $analytics30Days = $this->build30DayQualityAnalytics($todayStr, $scope, $baseExecQuery);
+
         return [
             'action_cards' => [
                 'unrecorded_defects' => $unrecordedCard,
@@ -613,6 +623,381 @@ class SandCastingDashboardService
             ],
             'defect_trend_7_days' => $trendDays,
             'top_action_items' => $topActionItems,
+
+            // Phase 5D & 5E Quality Analytics Keys (30 Days - Weight & PCS)
+            'defect_trend_30_days' => $analytics30Days['defect_trend_30_days'],
+            'stage_defect_contribution' => $analytics30Days['stage_defect_contribution'],
+            'overall_defect_types' => $analytics30Days['overall_defect_types'],
+            'stage_defect_types' => $analytics30Days['stage_defect_types'],
+            'quality_analytics_summary' => [
+                'total_verified_pcs' => $analytics30Days['total_verified_pcs'],
+                'total_estimated_defect_kg' => $analytics30Days['total_estimated_defect_kg'],
+                'valid_weight_pcs' => $analytics30Days['valid_weight_pcs'],
+                'unavailable_weight_pcs' => $analytics30Days['unavailable_weight_pcs'],
+                'weight_coverage_pct' => $analytics30Days['weight_coverage_pct'],
+                'unweighted_records_count' => $analytics30Days['unweighted_records_count'],
+                'is_weight_fully_available' => $analytics30Days['is_weight_fully_available'],
+                'period_days' => 30,
+                'period_start' => Carbon::parse($todayStr, self::TIMEZONE)->subDays(29)->toDateString(),
+                'period_end' => $todayStr,
+            ],
+        ];
+    }
+
+    /**
+     * Build 30-day Quality Analytics: 30-day daily trend, 6-stage defect contribution,
+     * overall defect types composition, and per-stage defect types composition.
+     * Primary metrics are in KG (estimated_defect_kg), with PCS as companion metric.
+     * Uses only QC-verified defects (STATUS_CONFIRMED).
+     *
+     * @return array<string, mixed>
+     */
+    protected function build30DayQualityAnalytics(string $todayStr, ?string $scope, $baseExecQuery): array
+    {
+        $startDateStr = Carbon::parse($todayStr, self::TIMEZONE)->subDays(29)->toDateString();
+        $endDateStr = $todayStr;
+
+        // 6 Standard Process Stages for Quality Analytics
+        $stageDefs = [
+            'netto' => 'Netto',
+            'bubut_od' => 'Bubut OD',
+            'bubut_cnc' => 'Bubut CNC',
+            'bor' => 'Bor',
+            'qc' => 'QC',
+            'gudang_jadi' => 'Gudang Jadi',
+        ];
+
+        // Fetch all confirmed executions within the 30-day window with their defects & defectType
+        $confirmedQuery = (clone $baseExecQuery)
+            ->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
+            ->where(function ($q) use ($startDateStr, $endDateStr) {
+                $q->whereBetween('inspection_date', [$startDateStr, $endDateStr])
+                    ->orWhere(function ($sq) use ($startDateStr, $endDateStr) {
+                        $sq->whereNull('inspection_date')
+                            ->where(function ($ssq) use ($startDateStr, $endDateStr) {
+                                $ssq->whereBetween('qc_verified_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
+                                    ->orWhereBetween('defect_entered_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59']);
+                            });
+                    });
+            })
+            ->with(['defects.defectType', 'castingResultLine.productionPlan']);
+
+        $confirmedExecs = $confirmedQuery->get();
+
+        // Also query executions (any status) within 30-day window to identify active inspection dates
+        $activityDates = (clone $baseExecQuery)
+            ->where(function ($q) use ($startDateStr, $endDateStr) {
+                $q->whereBetween('inspection_date', [$startDateStr, $endDateStr])
+                    ->orWhere(function ($sq) use ($startDateStr, $endDateStr) {
+                        $sq->whereNull('inspection_date')
+                            ->where(function ($ssq) use ($startDateStr, $endDateStr) {
+                                $ssq->whereBetween('qc_verified_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
+                                    ->orWhereBetween('defect_entered_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
+                                    ->orWhereBetween('physical_done_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
+                                    ->orWhereBetween('executed_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59']);
+                            });
+                    });
+            })
+            ->get(['inspection_date', 'qc_verified_at', 'defect_entered_at', 'physical_done_at', 'executed_at']);
+
+        $activeDatesSet = [];
+        foreach ($activityDates as $act) {
+            $d = $act->inspection_date?->toDateString()
+                ?? $act->qc_verified_at?->toDateString()
+                ?? $act->defect_entered_at?->toDateString()
+                ?? $act->physical_done_at?->toDateString()
+                ?? $act->executed_at?->toDateString();
+            if ($d) {
+                $activeDatesSet[$d] = true;
+            }
+        }
+
+        // Map confirmed executions by effective date
+        $confirmedByDate = [];
+        foreach ($confirmedExecs as $ce) {
+            $d = $ce->inspection_date?->toDateString()
+                ?? $ce->qc_verified_at?->toDateString()
+                ?? $ce->defect_entered_at?->toDateString();
+            if ($d) {
+                $confirmedByDate[$d][] = $ce;
+            }
+        }
+
+        // 1. 30-Day Daily Defect Trend (KG primary, PCS secondary)
+        $trend30Days = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $targetDate = Carbon::parse($todayStr, self::TIMEZONE)->subDays($i)->toDateString();
+            $dayLabel = Carbon::parse($targetDate, self::TIMEZONE)->format('d M');
+
+            $hasActivity = isset($activeDatesSet[$targetDate]) || isset($confirmedByDate[$targetDate]);
+
+            if (! $hasActivity) {
+                $trend30Days[] = [
+                    'date' => $targetDate,
+                    'day_label' => $dayLabel,
+                    'defect_pcs' => null,
+                    'estimated_defect_kg' => null,
+                    'is_data_available' => false,
+                    'is_weight_available' => false,
+                    'valid_weight_pcs' => 0,
+                    'unavailable_weight_pcs' => 0,
+                    'is_weight_complete' => true,
+                    'status' => 'no_data',
+                ];
+            } else {
+                $dayExecs = $confirmedByDate[$targetDate] ?? [];
+                $dayPcs = 0;
+                $dayValidKg = 0.0;
+                $dayValidPcs = 0;
+                $dayUnavailablePcs = 0;
+
+                foreach ($dayExecs as $de) {
+                    $qty = (int) $de->defect_qty;
+                    $dayPcs += $qty;
+
+                    $unitWeight = $this->resolveEffectiveUnitWeightKg($de->castingResultLine);
+                    if ($unitWeight !== null && $unitWeight > 0) {
+                        $dayValidKg += ($qty * $unitWeight);
+                        $dayValidPcs += $qty;
+                    } else {
+                        $dayUnavailablePcs += $qty;
+                    }
+                }
+
+                $hasDefect = ($dayPcs > 0);
+                $isWeightAvail = ($dayValidPcs > 0 || ! $hasDefect);
+
+                $trend30Days[] = [
+                    'date' => $targetDate,
+                    'day_label' => $dayLabel,
+                    'defect_pcs' => $dayPcs,
+                    'estimated_defect_kg' => $isWeightAvail ? round($dayValidKg, 2) : null,
+                    'is_data_available' => true,
+                    'is_weight_available' => $isWeightAvail,
+                    'valid_weight_pcs' => $dayValidPcs,
+                    'unavailable_weight_pcs' => $dayUnavailablePcs,
+                    'is_weight_complete' => ($dayUnavailablePcs === 0),
+                    'status' => $hasDefect ? 'has_defect' : 'zero_defect',
+                ];
+            }
+        }
+
+        // 2. 6-Stage Defect Contribution (KG % primary, PCS % secondary)
+        $stageStats = [];
+        foreach ($stageDefs as $k => $lbl) {
+            $stageStats[$k] = [
+                'pcs' => 0,
+                'valid_kg' => 0.0,
+                'valid_pcs' => 0,
+                'unavailable_pcs' => 0,
+            ];
+        }
+
+        $totalAllStagesPcs = 0;
+        $totalAllStagesValidKg = 0.0;
+        $totalAllStagesValidPcs = 0;
+        $totalAllStagesUnavailablePcs = 0;
+        $unweightedRecordsCount = 0;
+
+        foreach ($confirmedExecs as $ce) {
+            $stg = (string) $ce->stage;
+            if (! isset($stageStats[$stg])) {
+                continue;
+            }
+
+            $qty = (int) $ce->defect_qty;
+            $stageStats[$stg]['pcs'] += $qty;
+            $totalAllStagesPcs += $qty;
+
+            $unitWeight = $this->resolveEffectiveUnitWeightKg($ce->castingResultLine);
+            if ($unitWeight !== null && $unitWeight > 0) {
+                $kg = $qty * $unitWeight;
+                $stageStats[$stg]['valid_kg'] += $kg;
+                $stageStats[$stg]['valid_pcs'] += $qty;
+                $totalAllStagesValidKg += $kg;
+                $totalAllStagesValidPcs += $qty;
+            } else {
+                $stageStats[$stg]['unavailable_pcs'] += $qty;
+                $totalAllStagesUnavailablePcs += $qty;
+                if ($qty > 0) {
+                    $unweightedRecordsCount++;
+                }
+            }
+        }
+
+        $stageContribution = [];
+        foreach ($stageDefs as $k => $lbl) {
+            $pcs = $stageStats[$k]['pcs'];
+            $validKg = $stageStats[$k]['valid_kg'];
+            $validPcs = $stageStats[$k]['valid_pcs'];
+            $unavailPcs = $stageStats[$k]['unavailable_pcs'];
+
+            $pcsPct = ($totalAllStagesPcs > 0) ? round(($pcs / $totalAllStagesPcs) * 100, 1) : 0.0;
+            $weightPct = ($totalAllStagesValidKg > 0) ? round(($validKg / $totalAllStagesValidKg) * 100, 1) : 0.0;
+
+            $isWeightAvail = ($validPcs > 0 || $pcs === 0);
+            $isComplete = ($unavailPcs === 0);
+
+            $stageContribution[] = [
+                'stage' => $k,
+                'label' => $lbl,
+                'defect_pcs' => $pcs,
+                'pcs_defect' => $pcs,
+                'estimated_defect_kg' => round($validKg, 2),
+                'weight_kg' => round($validKg, 2),
+                'pcs_contribution_pct' => $pcsPct,
+                'weight_contribution_pct' => $weightPct,
+                'percentage' => $weightPct,
+                'valid_weight_pcs' => $validPcs,
+                'unavailable_weight_pcs' => $unavailPcs,
+                'is_weight_available' => $isWeightAvail,
+                'is_weight_complete' => $isComplete,
+            ];
+        }
+
+        // 3. Overall Defect Types & 6 Per-Stage Defect Types (KG primary)
+        $allDefectItems = [];
+        foreach ($confirmedExecs as $ce) {
+            $stg = (string) $ce->stage;
+            if (! isset($stageDefs[$stg])) {
+                continue;
+            }
+
+            $unitWeight = $this->resolveEffectiveUnitWeightKg($ce->castingResultLine);
+            $hasWeight = ($unitWeight !== null && $unitWeight > 0);
+
+            foreach ($ce->defects as $defItem) {
+                $qty = (int) $defItem->qty;
+                $allDefectItems[] = [
+                    'stage' => $stg,
+                    'defect_type_id' => (int) $defItem->defect_type_id,
+                    'name' => (string) ($defItem->defectType?->name ?? 'Lain-lain'),
+                    'department' => (string) ($defItem->defectType?->department ?? '-'),
+                    'qty' => $qty,
+                    'unit_weight' => $hasWeight ? $unitWeight : null,
+                    'has_weight' => $hasWeight,
+                    'estimated_kg' => $hasWeight ? ($qty * $unitWeight) : 0.0,
+                ];
+            }
+        }
+
+        // Overall Defect Types
+        $overallTypeGroups = collect($allDefectItems)->groupBy('defect_type_id');
+        $overallDefectTypes = [];
+        $totalOverallTypePcs = (int) collect($allDefectItems)->sum('qty');
+        $totalOverallTypeValidKg = (float) collect($allDefectItems)->where('has_weight', true)->sum('estimated_kg');
+
+        foreach ($overallTypeGroups as $typeId => $items) {
+            $first = $items->first();
+            $qty = (int) $items->sum('qty');
+            $validItems = $items->where('has_weight', true);
+            $validKg = (float) $validItems->sum('estimated_kg');
+            $validPcs = (int) $validItems->sum('qty');
+            $unavailPcs = $qty - $validPcs;
+
+            $weightPct = ($totalOverallTypeValidKg > 0) ? round(($validKg / $totalOverallTypeValidKg) * 100, 1) : 0.0;
+            $pcsPct = ($totalOverallTypePcs > 0) ? round(($qty / $totalOverallTypePcs) * 100, 1) : 0.0;
+
+            $overallDefectTypes[] = [
+                'defect_type_id' => (int) $typeId,
+                'name' => $first['name'],
+                'department' => $first['department'],
+                'qty_pcs' => $qty,
+                'estimated_defect_kg' => round($validKg, 2),
+                'weight_percentage' => $weightPct,
+                'pcs_percentage' => $pcsPct,
+                'percentage' => $weightPct,
+                'valid_weight_pcs' => $validPcs,
+                'unavailable_weight_pcs' => $unavailPcs,
+                'is_weight_available' => ($validPcs > 0 || $qty === 0),
+            ];
+        }
+
+        usort($overallDefectTypes, function ($a, $b) {
+            if ($b['estimated_defect_kg'] !== $a['estimated_defect_kg']) {
+                return $b['estimated_defect_kg'] <=> $a['estimated_defect_kg'];
+            }
+
+            return $b['qty_pcs'] <=> $a['qty_pcs'];
+        });
+
+        // 6 Per-Stage Defect Types
+        $stageDefectTypes = [];
+        $itemsByStage = collect($allDefectItems)->groupBy('stage');
+
+        foreach ($stageDefs as $k => $lbl) {
+            $stageItems = $itemsByStage->get($k, collect());
+            $stageTotalPcs = (int) $stageItems->sum('qty');
+            $stageValidItems = $stageItems->where('has_weight', true);
+            $stageTotalValidKg = (float) $stageValidItems->sum('estimated_kg');
+            $stageTotalValidPcs = (int) $stageValidItems->sum('qty');
+            $stageUnavailPcs = $stageTotalPcs - $stageTotalValidPcs;
+
+            $typeGroups = $stageItems->groupBy('defect_type_id');
+            $typesList = [];
+
+            foreach ($typeGroups as $typeId => $items) {
+                $first = $items->first();
+                $qty = (int) $items->sum('qty');
+                $tValidItems = $items->where('has_weight', true);
+                $tValidKg = (float) $tValidItems->sum('estimated_kg');
+                $tValidPcs = (int) $tValidItems->sum('qty');
+
+                $weightPct = ($stageTotalValidKg > 0) ? round(($tValidKg / $stageTotalValidKg) * 100, 1) : 0.0;
+                $pcsPct = ($stageTotalPcs > 0) ? round(($qty / $stageTotalPcs) * 100, 1) : 0.0;
+
+                $typesList[] = [
+                    'defect_type_id' => (int) $typeId,
+                    'name' => $first['name'],
+                    'department' => $first['department'],
+                    'qty_pcs' => $qty,
+                    'estimated_defect_kg' => round($tValidKg, 2),
+                    'weight_percentage' => $weightPct,
+                    'pcs_percentage' => $pcsPct,
+                    'percentage' => $weightPct,
+                    'valid_weight_pcs' => $tValidPcs,
+                    'unavailable_weight_pcs' => $qty - $tValidPcs,
+                    'is_weight_available' => ($tValidPcs > 0 || $qty === 0),
+                ];
+            }
+
+            usort($typesList, function ($a, $b) {
+                if ($b['estimated_defect_kg'] !== $a['estimated_defect_kg']) {
+                    return $b['estimated_defect_kg'] <=> $a['estimated_defect_kg'];
+                }
+
+                return $b['qty_pcs'] <=> $a['qty_pcs'];
+            });
+
+            $stageDefectTypes[$k] = [
+                'stage' => $k,
+                'label' => $lbl,
+                'total_pcs' => $stageTotalPcs,
+                'total_estimated_defect_kg' => round($stageTotalValidKg, 2),
+                'valid_weight_pcs' => $stageTotalValidPcs,
+                'unavailable_weight_pcs' => $stageUnavailPcs,
+                'is_weight_available' => ($stageTotalValidPcs > 0 || $stageTotalPcs === 0),
+                'is_weight_complete' => ($stageUnavailPcs === 0),
+                'types' => $typesList,
+            ];
+        }
+
+        $coveragePct = ($totalAllStagesPcs > 0)
+            ? round(($totalAllStagesValidPcs / $totalAllStagesPcs) * 100, 1)
+            : 100.0;
+
+        return [
+            'defect_trend_30_days' => $trend30Days,
+            'stage_defect_contribution' => $stageContribution,
+            'overall_defect_types' => $overallDefectTypes,
+            'stage_defect_types' => $stageDefectTypes,
+            'total_verified_pcs' => $totalAllStagesPcs,
+            'total_estimated_defect_kg' => round($totalAllStagesValidKg, 2),
+            'valid_weight_pcs' => $totalAllStagesValidPcs,
+            'unavailable_weight_pcs' => $totalAllStagesUnavailablePcs,
+            'weight_coverage_pct' => $coveragePct,
+            'unweighted_records_count' => $unweightedRecordsCount,
+            'is_weight_fully_available' => ($totalAllStagesUnavailablePcs === 0),
         ];
     }
 
@@ -713,11 +1098,17 @@ class SandCastingDashboardService
     }
 
     /**
-     * Resolve effective unit weight in KG with standard application fallback:
-     * line.unit_weight_kg > 0 ? line.unit_weight_kg : (plan.weight ?? 0.0)
+     * Resolve effective unit weight in KG with priority:
+     * 1. line.unit_weight_kg > 0
+     * 2. plan.weight > 0
+     * 3. null (unavailable)
      */
-    protected function resolveEffectiveUnitWeight(SandCastingCastingResultLine $line): float
+    protected function resolveEffectiveUnitWeightKg(?SandCastingCastingResultLine $line): ?float
     {
+        if (! $line) {
+            return null;
+        }
+
         if ($line->unit_weight_kg !== null && (float) $line->unit_weight_kg > 0) {
             return (float) $line->unit_weight_kg;
         }
@@ -726,7 +1117,31 @@ class SandCastingDashboardService
             return (float) $line->productionPlan->weight;
         }
 
-        return 0.0;
+        return null;
+    }
+
+    /**
+     * Resolve effective unit weight in KG with standard application fallback:
+     * line.unit_weight_kg > 0 ? line.unit_weight_kg : (plan.weight ?? 0.0)
+     */
+    protected function resolveEffectiveUnitWeight(SandCastingCastingResultLine $line): float
+    {
+        return $this->resolveEffectiveUnitWeightKg($line) ?? 0.0;
+    }
+
+    /**
+     * Check if user is granted an explicit unscoped view exception for Zone 1 throughput chart.
+     * Specific exception for adminqcflange@peroniks.com (Phase 5F).
+     */
+    public static function shouldBypassZone1ThroughputScope(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $email = strtolower(trim((string) $user->email));
+
+        return $email === 'adminqcflange@peroniks.com';
     }
 
     protected static ?bool $hasAutoNihilColumn = null;

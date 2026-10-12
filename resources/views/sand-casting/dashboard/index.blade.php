@@ -1,52 +1,49 @@
 @extends('layouts.app')
 
 @section('top_bar')
-    <div class="flex flex-col md:flex-row md:items-center justify-between w-full gap-2 py-1">
-        <!-- Left: Title & Subtitle -->
-        <div class="flex items-center gap-2.5 shrink-0">
-            <span class="px-2 py-0.5 rounded text-[10px] font-black bg-blue-600 text-white tracking-wider uppercase">
-                SAND CASTING
+    <div class="flex flex-col md:flex-row md:items-center justify-between w-full gap-2 py-0.5">
+        <!-- Left: SCADA Title -->
+        <div class="flex items-center gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded text-[10px] font-black bg-slate-800 text-white tracking-wider uppercase">
+                SCADA
             </span>
-            <div>
-                <h1 class="text-base sm:text-lg font-black text-slate-800 tracking-tight leading-tight uppercase flex items-center gap-2">
-                    DASHBOARD OPERASIONAL
-                </h1>
-                <p class="text-slate-500 text-[11px]">Monitoring visual terpadu lantai produksi pengecoran pasir</p>
-            </div>
+            <h1 class="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-none uppercase">
+                DASHBOARD OPERASIONAL
+            </h1>
         </div>
 
         <!-- Center: Zone Switcher Pills -->
-        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs shrink-0 self-start md:self-auto overflow-x-auto no-scrollbar">
+        <div class="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs shrink-0 self-start md:self-auto overflow-x-auto no-scrollbar">
             <a href="{{ route('sand-casting.dashboard') }}"
-                class="px-2.5 py-1 rounded-md font-bold transition-all {{ $activeZone === 'all' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
+                class="px-3 py-1 rounded-md font-bold transition-all {{ $activeZone === 'all' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
                 Semua Zona
             </a>
             <a href="{{ route('sand-casting.dashboard', ['zone' => '1']) }}"
-                class="px-2.5 py-1 rounded-md font-bold transition-all {{ $activeZone === '1' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
-                Zona 1 <span class="hidden lg:inline font-normal text-slate-400">(Overview)</span>
+                class="px-3 py-1 rounded-md font-bold transition-all {{ $activeZone === '1' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
+                Zona 1
             </a>
             <a href="{{ route('sand-casting.dashboard', ['zone' => '2']) }}"
-                class="px-2.5 py-1 rounded-md font-bold transition-all {{ $activeZone === '2' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
-                Zona 2 <span class="hidden lg:inline font-normal text-slate-400">(WIP)</span>
+                class="px-3 py-1 rounded-md font-bold transition-all {{ $activeZone === '2' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
+                Zona 2
             </a>
             <a href="{{ route('sand-casting.dashboard', ['zone' => '3']) }}"
-                class="px-2.5 py-1 rounded-md font-bold transition-all {{ $activeZone === '3' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
-                Zona 3 <span class="hidden lg:inline font-normal text-slate-400">(Quality)</span>
+                class="px-3 py-1 rounded-md font-bold transition-all {{ $activeZone === '3' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
+                Zona 3
             </a>
         </div>
 
         <!-- Right: Status Badge & Live Clock -->
-        <div class="flex items-center gap-2 text-xs shrink-0">
+        <div class="flex items-center gap-2.5 text-xs shrink-0">
             <!-- Heartbeat Status Indicator -->
-            <div id="heartbeat-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-bold uppercase tracking-wider text-[11px] bg-emerald-50 text-emerald-700 border-emerald-300">
-                <span id="heartbeat-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <div id="heartbeat-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-black uppercase tracking-wider text-[11px] bg-emerald-50 text-emerald-800 border-emerald-300">
+                <span id="heartbeat-dot" class="w-2 h-2 rounded-full bg-emerald-600"></span>
                 <span id="heartbeat-text">LIVE</span>
             </div>
 
-            <!-- Last Refresh & Clock -->
-            <div class="hidden sm:flex flex-col text-right leading-tight">
-                <span id="live-clock" class="font-mono font-bold text-slate-800 text-xs">--:--:-- WIB</span>
-                <span id="last-refresh-time" class="text-[10px] text-slate-500">Update: Baru saja</span>
+            <!-- Last Refresh & Live Clock -->
+            <div class="flex flex-col text-right leading-tight">
+                <span id="live-clock" class="font-mono font-black text-slate-900 text-xs">--:--:-- WIB</span>
+                <span id="last-refresh-time" class="text-[10px] font-mono text-slate-500 font-medium">Update: Baru saja</span>
             </div>
 
             <!-- Manual Refresh Button -->
@@ -60,7 +57,7 @@
 @endsection
 
 @section('content')
-<div class="space-y-6">
+<div class="space-y-4">
     <!-- Alert Banner for STALE or OFFLINE state -->
     <div id="connection-alert" class="hidden rounded-xl p-3 border text-xs flex items-center justify-between shadow-xs">
         <div class="flex items-center gap-2">
@@ -70,8 +67,8 @@
         <span class="text-[10px] uppercase font-mono opacity-80" id="connection-alert-sub">Mempertahankan Data Terakhir</span>
     </div>
 
-    <!-- Master Industrial Dashboard Container (Light Mode) -->
-    <div class="space-y-6 lg:space-y-8">
+    <!-- Master Industrial Dashboard Container (Light Mode, Compact SCADA) -->
+    <div class="space-y-4">
         {{-- Zone 1: Executive Overview --}}
         @if($activeZone === 'all' || $activeZone === '1')
             @include('sand-casting.dashboard.partials.zone-1')
@@ -82,7 +79,7 @@
             @include('sand-casting.dashboard.partials.zone-2')
         @endif
 
-        {{-- Zone 3: Quality, Defect & Action Required --}}
+        {{-- Zone 3: Quality & Defect Analysis --}}
         @if($activeZone === 'all' || $activeZone === '3')
             @include('sand-casting.dashboard.partials.zone-3')
         @endif
@@ -130,6 +127,80 @@
         });
     }
 
+    // Custom Chart.js Plugin for Direct Data Labels on Throughput Bars (SCADA style, no hover needed)
+    const directDataLabelsPlugin = {
+        id: 'directDataLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx, data } = chart;
+            const meta = chart.getDatasetMeta(0); // Bar dataset (Good Output TON)
+            if (!meta || meta.hidden) return;
+
+            const barDataset = data.datasets[0];
+            const stages = barDataset.stagesData || [];
+
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+
+            meta.data.forEach((bar, index) => {
+                const tonVal = Number(barDataset.data[index] || 0);
+                const stage = stages[index] || {};
+                const pcsVal = Number(stage.good_pcs || 0);
+                const isZero = (tonVal === 0 && pcsVal === 0);
+
+                const x = bar.x;
+                const topY = bar.y;
+
+                // Format values
+                const tonText = `${formatNumber(tonVal, 2)} TON`;
+                const pcsText = `${formatNumber(pcsVal, 0)} PCS`;
+
+                // Safe clearance from chartArea top to guarantee no clipping
+                const safeTopLimit = chart.chartArea.top + 36;
+                const pcsY = Math.max(topY - 6, safeTopLimit);
+                const tonY = pcsY - 16;
+
+                // Subtle semi-transparent rounded pill for background contrast
+                ctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
+                const textWidth = Math.max(ctx.measureText(tonText).width, ctx.measureText(pcsText).width);
+                const pillW = textWidth + 16;
+                const pillH = 34;
+                const pillX = x - pillW / 2;
+                const pillY = tonY - 16;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                    ctx.roundRect(pillX, pillY, pillW, pillH, 5);
+                } else {
+                    ctx.rect(pillX, pillY, pillW, pillH);
+                }
+                ctx.fill();
+
+                // Subtle border on pill
+                ctx.strokeStyle = isZero ? '#cbd5e1' : '#bfdbfe';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Baris 1: Tonase aktual (TON)
+                ctx.font = isZero
+                    ? 'bold 12px ui-sans-serif, system-ui, sans-serif'
+                    : 'bold 14px ui-sans-serif, system-ui, sans-serif';
+                ctx.fillStyle = isZero ? '#64748b' : '#0f172a';
+                ctx.fillText(tonText, x, tonY);
+
+                // Baris 2: PCS aktual (PCS)
+                ctx.font = isZero
+                    ? 'bold 11px ui-sans-serif, system-ui, sans-serif'
+                    : 'bold 12px ui-sans-serif, system-ui, sans-serif';
+                ctx.fillStyle = isZero ? '#64748b' : '#1e3a8a';
+                ctx.fillText(pcsText, x, pcsY);
+            });
+
+            ctx.restore();
+        }
+    };
+
     // Initialize Chart.js instances
     function initCharts(data) {
         // 1. Throughput Chart (Zone 1)
@@ -139,10 +210,12 @@
             const labels = stages.map(s => s.label);
             const tonnageData = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
             const defectRateData = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
+            const maxTon = Math.max(...tonnageData, 1);
 
             const ctx = throughputCanvas.getContext('2d');
             dashboardCharts.throughput = new Chart(ctx, {
                 type: 'bar',
+                plugins: [directDataLabelsPlugin],
                 data: {
                     labels: labels,
                     datasets: [
@@ -150,8 +223,9 @@
                             type: 'bar',
                             label: 'Good Output (TON)',
                             data: tonnageData,
-                            backgroundColor: '#3b82f6',
-                            borderColor: '#2563eb',
+                            stagesData: stages,
+                            backgroundColor: '#2563eb',
+                            borderColor: '#1d4ed8',
                             borderWidth: 1,
                             borderRadius: 4,
                             yAxisID: 'yTon',
@@ -165,8 +239,9 @@
                             borderWidth: 2,
                             pointBackgroundColor: '#dc2626',
                             pointBorderColor: '#ffffff',
-                            pointBorderWidth: 1.5,
+                            pointBorderWidth: 2,
                             pointRadius: 4,
+                            pointHoverRadius: 6,
                             yAxisID: 'yPct',
                         }
                     ]
@@ -175,8 +250,16 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
+                    layout: {
+                        padding: {
+                            top: 40, // Ensure ample headroom for direct above-bar labels
+                            left: 10,
+                            right: 10,
+                            bottom: 6,
+                        }
+                    },
                     plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 12, color: '#334155', font: { size: 11, weight: 'bold' } } },
+                        legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -184,29 +267,34 @@
                                     if (context.datasetIndex === 0) {
                                         return ` Good: ${formatNumber(context.raw, 2)} TON (${formatNumber(stage.good_pcs || 0)} PCS)`;
                                     } else {
-                                        return ` Defect Rate: ${formatNumber(context.raw, 2)}% (${formatNumber(stage.defect_pcs || 0)} PCS cacat dari input ${formatNumber(stage.input_pcs || 0)} PCS)`;
+                                        return ` Defect Rate: ${formatNumber(context.raw, 2)}% (${formatNumber(stage.defect_pcs || 0)} PCS defect)`;
                                     }
                                 }
                             }
                         }
                     },
                     scales: {
-                        x: { grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { weight: 'bold' } } },
+                        x: {
+                            grid: { color: '#f1f5f9' },
+                            ticks: { color: '#0f172a', font: { weight: 'bold', size: 12 } }
+                        },
                         yTon: {
                             type: 'linear',
                             position: 'left',
                             beginAtZero: true,
+                            suggestedMax: maxTon > 0 ? maxTon * 1.45 : 5,
                             grid: { color: '#e2e8f0' },
-                            title: { display: true, text: 'TON', color: '#2563eb', font: { size: 10, weight: 'bold' } },
-                            ticks: { color: '#64748b' }
+                            title: { display: true, text: 'TON', color: '#1d4ed8', font: { size: 11, weight: 'bold' } },
+                            ticks: { color: '#475569', font: { weight: 'bold' } }
                         },
                         yPct: {
                             type: 'linear',
                             position: 'right',
                             beginAtZero: true,
+                            suggestedMax: Math.max(...defectRateData, 5) * 1.25,
                             grid: { drawOnChartArea: false },
-                            title: { display: true, text: 'Defect %', color: '#dc2626', font: { size: 10, weight: 'bold' } },
-                            ticks: { callback: v => v + '%', color: '#64748b' }
+                            title: { display: true, text: 'Defect %', color: '#dc2626', font: { size: 11, weight: 'bold' } },
+                            ticks: { callback: v => v + '%', color: '#dc2626', font: { weight: 'bold' } }
                         }
                     }
                 }
@@ -237,7 +325,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 10, color: '#475569', font: { size: 11 } } },
+                        legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -247,27 +335,27 @@
                             }
                         }
                     },
-                    cutout: '65%',
+                    cutout: '62%',
                 }
             });
         }
 
-        // 3. Verified Defect Breakdown Donut Chart (Zone 3)
-        const defectDonutCanvas = document.getElementById('chartVerifiedDefects');
-        if (defectDonutCanvas && (data.zone_3 || DASHBOARD_CONFIG.zone === '3' || DASHBOARD_CONFIG.zone === 'all')) {
-            const verified = (data.zone_3 && data.zone_3.defects_today && data.zone_3.defects_today.verified_breakdown) ? data.zone_3.defects_today.verified_breakdown : [];
-            const labels = verified.length > 0 ? verified.map(d => d.name) : ['Nihil Defect'];
-            const pcs = verified.length > 0 ? verified.map(d => Number(d.qty_pcs || 0)) : [0];
-            const colors = ['#dc2626', '#ea580c', '#d97706', '#0284c7', '#4f46e5', '#7c3aed'];
+        // 3. Overall Defect Types Donut Chart (Zone 3 - KG Primary)
+        const overallDonutCanvas = document.getElementById('chartOverallDefectTypes');
+        if (overallDonutCanvas && (data.zone_3 || DASHBOARD_CONFIG.zone === '3' || DASHBOARD_CONFIG.zone === 'all')) {
+            const overallTypes = (data.zone_3 && data.zone_3.overall_defect_types) ? data.zone_3.overall_defect_types : (data.zone_3 && data.zone_3.defects_today ? data.zone_3.defects_today.verified_breakdown || [] : []);
+            const labels = overallTypes.length > 0 ? overallTypes.map(d => d.name) : ['Nihil Defect'];
+            const kgValues = overallTypes.length > 0 ? overallTypes.map(d => Number(d.estimated_defect_kg || 0)) : [0];
+            const colors = ['#dc2626', '#ea580c', '#d97706', '#0284c7', '#4f46e5', '#7c3aed', '#059669', '#0891b2', '#64748b'];
 
-            const ctx = defectDonutCanvas.getContext('2d');
-            dashboardCharts.verifiedDefects = new Chart(ctx, {
+            const ctx = overallDonutCanvas.getContext('2d');
+            dashboardCharts.overallDefects = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: labels,
                     datasets: [{
-                        data: pcs,
-                        backgroundColor: verified.length > 0 ? colors.slice(0, labels.length) : ['#e2e8f0'],
+                        data: kgValues,
+                        backgroundColor: overallTypes.length > 0 ? overallTypes.map((_, i) => colors[i % colors.length]) : ['#e2e8f0'],
                         borderColor: '#ffffff',
                         borderWidth: 2,
                     }]
@@ -276,12 +364,15 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 10, color: '#475569', font: { size: 10 } } },
+                        legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    const d = verified[context.dataIndex] || {};
-                                    return ` ${context.label}: ${formatNumber(context.raw)} PCS (${formatNumber(d.percentage || 0, 1)}%)`;
+                                    const d = overallTypes[context.dataIndex] || {};
+                                    const kgStr = formatNumber(d.estimated_defect_kg || 0, 1) + ' kg';
+                                    const pctStr = formatNumber(d.weight_percentage ?? d.percentage ?? 0, 1) + '%';
+                                    const pcsStr = formatNumber(d.qty_pcs || 0) + ' PCS';
+                                    return ` ${context.label}: ${kgStr} (${pctStr}) · ${pcsStr}`;
                                 }
                             }
                         }
@@ -291,31 +382,25 @@
             });
         }
 
-        // 4. 7-Day Defect Trend Chart (Zone 3)
-        const trendCanvas = document.getElementById('chartDefectTrend');
+        // 4. 30-Day Defect Trend Bar Chart (Zone 3 - KG Primary)
+        const trendCanvas = document.getElementById('chartDefectTrend30Days');
         if (trendCanvas && (data.zone_3 || DASHBOARD_CONFIG.zone === '3' || DASHBOARD_CONFIG.zone === 'all')) {
-            const trend = (data.zone_3 && data.zone_3.defect_trend_7_days) ? data.zone_3.defect_trend_7_days : [];
+            const trend = (data.zone_3 && data.zone_3.defect_trend_30_days) ? data.zone_3.defect_trend_30_days : (data.zone_3 && data.zone_3.defect_trend_7_days ? data.zone_3.defect_trend_7_days : []);
             const labels = trend.map(t => t.day_label);
-            const defectPcs = trend.map(t => Number(t.defect_pcs || 0));
+            const defectKg = trend.map(t => (t.estimated_defect_kg !== null && t.estimated_defect_kg !== undefined) ? Number(t.estimated_defect_kg) : 0);
+            const barColors = trend.map(t => (t.defect_pcs === null) ? 'rgba(203, 213, 225, 0.4)' : ((t.estimated_defect_kg > 0 || t.defect_pcs > 0) ? '#e11d48' : '#e2e8f0'));
 
             const ctx = trendCanvas.getContext('2d');
-            dashboardCharts.defectTrend = new Chart(ctx, {
-                type: 'line',
+            dashboardCharts.defectTrend30 = new Chart(ctx, {
+                type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Defect (PCS)',
-                        data: defectPcs,
-                        borderColor: '#dc2626',
-                        backgroundColor: 'rgba(220, 38, 38, 0.06)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.2,
-                        pointBackgroundColor: '#dc2626',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 1.5,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
+                        label: 'Estimasi Defect (kg)',
+                        data: defectKg,
+                        backgroundColor: barColors,
+                        borderRadius: 3,
+                        maxBarThickness: 24,
                     }]
                 },
                 options: {
@@ -327,22 +412,90 @@
                             callbacks: {
                                 label: function(context) {
                                     const t = trend[context.dataIndex] || {};
-                                    return ` Defect: ${formatNumber(context.raw)} PCS (${formatNumber(t.defect_tonnage ?? t.defect_ton ?? 0, 2)} TON)`;
+                                    if (t.defect_pcs === null) {
+                                        return ' Data Tidak Tersedia';
+                                    }
+                                    if (t.defect_pcs === 0) {
+                                        return ' 0,0 kg · 0 PCS (Nihil Defect QC)';
+                                    }
+                                    const kgVal = (t.estimated_defect_kg !== null && t.estimated_defect_kg !== undefined) ? formatNumber(t.estimated_defect_kg, 1) + ' kg' : 'Berat n/a';
+                                    const pcsVal = formatNumber(t.defect_pcs) + ' PCS';
+                                    const unavailText = (t.unavailable_weight_pcs > 0) ? ` (${formatNumber(t.unavailable_weight_pcs)} PCS tanpa data berat)` : '';
+                                    return ` Estimasi Defect: ${kgVal} · ${pcsVal}${unavailText}`;
                                 }
                             }
                         }
                     },
                     scales: {
-                        x: { grid: { color: '#f1f5f9' }, ticks: { color: '#64748b' } },
+                        x: {
+                            grid: { color: '#f8fafc' },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 9 },
+                                autoSkip: true,
+                                maxTicksLimit: 15,
+                            }
+                        },
                         y: {
                             beginAtZero: true,
-                            grid: { color: '#e2e8f0' },
-                            ticks: { precision: 0, color: '#64748b' }
+                            grid: { color: '#f1f5f9' },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 10 },
+                                callback: function(value) { return formatNumber(value) + ' kg'; }
+                            }
                         }
                     }
                 }
             });
         }
+
+        // 5. 6 Per-Stage Donut Charts (Zone 3 - KG Primary)
+        dashboardCharts.stageDonuts = dashboardCharts.stageDonuts || {};
+        const stageKeys = ['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
+        const sharedPalette = ['#dc2626', '#ea580c', '#d97706', '#0284c7', '#4f46e5', '#7c3aed', '#059669', '#0891b2', '#64748b'];
+
+        stageKeys.forEach(stgKey => {
+            const stgCanvas = document.getElementById('chartStageDonut_' + stgKey);
+            if (stgCanvas && data.zone_3 && data.zone_3.stage_defect_types) {
+                const stgData = data.zone_3.stage_defect_types[stgKey] || {};
+                const types = stgData.types || [];
+                if (types.length > 0) {
+                    const ctx = stgCanvas.getContext('2d');
+                    dashboardCharts.stageDonuts[stgKey] = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: types.map(t => t.name),
+                            datasets: [{
+                                data: types.map(t => Number(t.estimated_defect_kg || 0)),
+                                backgroundColor: types.map((t, idx) => sharedPalette[(t.defect_type_id || idx) % sharedPalette.length]),
+                                borderColor: '#ffffff',
+                                borderWidth: 1.5,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const item = types[context.dataIndex] || {};
+                                            const kgStr = formatNumber(item.estimated_defect_kg || 0, 1) + ' kg';
+                                            const pctStr = formatNumber(item.weight_percentage ?? item.percentage ?? 0, 1) + '%';
+                                            const pcsStr = formatNumber(item.qty_pcs || 0) + ' PCS';
+                                            return ` ${context.label}: ${kgStr} (${pctStr}) · ${pcsStr}`;
+                                        }
+                                    }
+                                }
+                            },
+                            cutout: '58%',
+                        }
+                    });
+                }
+            }
+        });
     }
 
     // In-place Chart update
@@ -350,9 +503,15 @@
         // Update Throughput
         if (dashboardCharts.throughput && data.zone_1 && data.zone_1.daily_throughput_stages) {
             const stages = data.zone_1.daily_throughput_stages;
+            const newTonnage = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
+            const newDefectRate = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
+            const maxT = Math.max(...newTonnage, 1);
             dashboardCharts.throughput.data.labels = stages.map(s => s.label);
-            dashboardCharts.throughput.data.datasets[0].data = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
-            dashboardCharts.throughput.data.datasets[1].data = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
+            dashboardCharts.throughput.data.datasets[0].data = newTonnage;
+            dashboardCharts.throughput.data.datasets[0].stagesData = stages;
+            dashboardCharts.throughput.data.datasets[1].data = newDefectRate;
+            dashboardCharts.throughput.options.scales.yTon.suggestedMax = maxT * 1.45;
+            dashboardCharts.throughput.options.scales.yPct.suggestedMax = Math.max(...newDefectRate, 5) * 1.25;
             dashboardCharts.throughput.update();
         }
 
@@ -364,20 +523,39 @@
             dashboardCharts.wipDonut.update();
         }
 
-        // Update Verified Defect Donut
-        if (dashboardCharts.verifiedDefects && data.zone_3 && data.zone_3.defects_today) {
-            const verified = data.zone_3.defects_today.verified_breakdown || [];
-            dashboardCharts.verifiedDefects.data.labels = verified.length > 0 ? verified.map(d => d.name) : ['Nihil Defect'];
-            dashboardCharts.verifiedDefects.data.datasets[0].data = verified.length > 0 ? verified.map(d => Number(d.qty_pcs || 0)) : [0];
-            dashboardCharts.verifiedDefects.update();
+        // Update 30-Day Defect Trend (KG Primary)
+        if (dashboardCharts.defectTrend30 && data.zone_3 && data.zone_3.defect_trend_30_days) {
+            const trend = data.zone_3.defect_trend_30_days;
+            dashboardCharts.defectTrend30.data.labels = trend.map(t => t.day_label);
+            dashboardCharts.defectTrend30.data.datasets[0].data = trend.map(t => (t.estimated_defect_kg !== null && t.estimated_defect_kg !== undefined) ? Number(t.estimated_defect_kg) : 0);
+            dashboardCharts.defectTrend30.data.datasets[0].backgroundColor = trend.map(t => (t.defect_pcs === null) ? 'rgba(203, 213, 225, 0.4)' : ((t.estimated_defect_kg > 0 || t.defect_pcs > 0) ? '#e11d48' : '#e2e8f0'));
+            dashboardCharts.defectTrend30.update();
         }
 
-        // Update Defect Trend
-        if (dashboardCharts.defectTrend && data.zone_3 && data.zone_3.defect_trend_7_days) {
-            const trend = data.zone_3.defect_trend_7_days;
-            dashboardCharts.defectTrend.data.labels = trend.map(t => t.day_label);
-            dashboardCharts.defectTrend.data.datasets[0].data = trend.map(t => Number(t.defect_pcs || 0));
-            dashboardCharts.defectTrend.update();
+        // Update Overall Defect Donut (KG Primary)
+        if (dashboardCharts.overallDefects && data.zone_3 && data.zone_3.overall_defect_types) {
+            const overallTypes = data.zone_3.overall_defect_types;
+            const colors = ['#dc2626', '#ea580c', '#d97706', '#0284c7', '#4f46e5', '#7c3aed', '#059669', '#0891b2', '#64748b'];
+            dashboardCharts.overallDefects.data.labels = overallTypes.length > 0 ? overallTypes.map(d => d.name) : ['Nihil Defect'];
+            dashboardCharts.overallDefects.data.datasets[0].data = overallTypes.length > 0 ? overallTypes.map(d => Number(d.estimated_defect_kg || 0)) : [0];
+            dashboardCharts.overallDefects.data.datasets[0].backgroundColor = overallTypes.length > 0 ? overallTypes.map((_, i) => colors[i % colors.length]) : ['#e2e8f0'];
+            dashboardCharts.overallDefects.update();
+        }
+
+        // Update 6 Per-Stage Donut Charts (KG Primary)
+        if (dashboardCharts.stageDonuts && data.zone_3 && data.zone_3.stage_defect_types) {
+            const stageKeys = ['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
+            const sharedPalette = ['#dc2626', '#ea580c', '#d97706', '#0284c7', '#4f46e5', '#7c3aed', '#059669', '#0891b2', '#64748b'];
+            stageKeys.forEach(stgKey => {
+                const chart = dashboardCharts.stageDonuts[stgKey];
+                const stgData = data.zone_3.stage_defect_types[stgKey];
+                if (chart && stgData && stgData.types) {
+                    chart.data.labels = stgData.types.map(t => t.name);
+                    chart.data.datasets[0].data = stgData.types.map(t => Number(t.estimated_defect_kg || 0));
+                    chart.data.datasets[0].backgroundColor = stgData.types.map((t, idx) => sharedPalette[(t.defect_type_id || idx) % sharedPalette.length]);
+                    chart.update();
+                }
+            });
         }
     }
 
@@ -422,6 +600,16 @@
 
             const elTotalPlans = document.getElementById('z1-total-plans');
             if (elTotalPlans) elTotalPlans.textContent = formatNumber(h.total_plan_count ?? 0);
+
+            const elYDef = document.getElementById('z1-yesterday-defect-container');
+            if (elYDef && z1.yesterday_verified_defect && z1.yesterday_verified_defect.pcs !== undefined) {
+                const yd = z1.yesterday_verified_defect;
+                let html = `<span class="text-base sm:text-lg font-black text-rose-700 leading-tight">${formatNumber(yd.pcs)} PCS</span>`;
+                if (yd.weight_kg !== undefined) {
+                    html += ` <span class="text-slate-300">/</span> <span class="text-xs sm:text-sm font-bold text-slate-700">${formatNumber(yd.weight_kg, 1)} kg</span>`;
+                }
+                elYDef.innerHTML = html;
+            }
         }
 
         // Zone 2 DOM
@@ -432,6 +620,18 @@
 
             const elTotalWipPcs = document.getElementById('z2-total-wip-pcs');
             if (elTotalWipPcs) elTotalWipPcs.textContent = formatNumber(z2.total_active_wip_pcs ?? 0) + ' PCS';
+
+            // Update pipeline active stages if present
+            if (z2.wip_distribution) {
+                z2.wip_distribution.forEach(w => {
+                    const elTon = document.getElementById(`p-${w.stage}-ton`);
+                    if (elTon) elTon.innerHTML = `${formatNumber(w.wip_ton || 0, 2)} <span class="text-xs font-black text-blue-600 uppercase">TON</span>`;
+                    const elPcs = document.getElementById(`p-${w.stage}-pcs`);
+                    if (elPcs) elPcs.textContent = `${formatNumber(w.wip_pcs || 0)} PCS`;
+                    const elKtr = document.getElementById(`p-${w.stage}-ktr`);
+                    if (elKtr) elKtr.textContent = `${formatNumber(w.ktr_count || 0)} KTR`;
+                });
+            }
         }
 
         // Zone 3 DOM
@@ -439,6 +639,27 @@
             const z3 = data.zone_3;
             const cards = z3.action_cards || {};
             const defToday = z3.defects_today || {};
+
+            const elTotal30dKg = document.getElementById('z3-total-30d-kg');
+            if (elTotal30dKg && z3.quality_analytics_summary) {
+                elTotal30dKg.textContent = formatNumber(z3.quality_analytics_summary.total_estimated_defect_kg ?? 0, 1);
+            }
+
+            const elTotal30d = document.getElementById('z3-total-30d-pcs');
+            if (elTotal30d && z3.quality_analytics_summary) {
+                elTotal30d.textContent = formatNumber(z3.quality_analytics_summary.total_verified_pcs ?? 0);
+            }
+
+            const elCoverageBadge = document.getElementById('z3-coverage-badge');
+            if (elCoverageBadge && z3.quality_analytics_summary) {
+                const cov = z3.quality_analytics_summary;
+                if (!cov.is_weight_fully_available) {
+                    elCoverageBadge.textContent = `Cakupan Berat: ${formatNumber(cov.weight_coverage_pct ?? 100, 1)}% (${formatNumber(cov.unavailable_weight_pcs ?? 0)} PCS N/A)`;
+                    elCoverageBadge.classList.remove('hidden');
+                } else {
+                    elCoverageBadge.classList.add('hidden');
+                }
+            }
 
             const elUnrecKtr = document.getElementById('z3-unrecorded-ktr');
             if (elUnrecKtr) elUnrecKtr.textContent = formatNumber(cards.unrecorded_defects?.ktr_count ?? 0);
@@ -479,14 +700,15 @@
         const alertIcon = document.getElementById('connection-alert-icon');
         const lastRefreshLabel = document.getElementById('last-refresh-time');
 
-        // Update refresh time text
+        // Update refresh time text (unambiguous format)
         if (lastRefreshLabel) {
-            if (elapsedSec < 15) {
-                lastRefreshLabel.textContent = 'Update: Baru saja';
+            const timeStr = lastSuccessfulRefresh.toLocaleTimeString('id-ID', { hour12: false });
+            if (elapsedSec < 10) {
+                lastRefreshLabel.textContent = `Update ${timeStr} WIB (Baru saja)`;
             } else if (elapsedSec < 60) {
-                lastRefreshLabel.textContent = `Update: ${elapsedSec}d lalu`;
+                lastRefreshLabel.textContent = `Update ${timeStr} WIB (${elapsedSec} detik lalu)`;
             } else {
-                lastRefreshLabel.textContent = `Update: ${Math.floor(elapsedSec / 60)}m lalu`;
+                lastRefreshLabel.textContent = `Update ${timeStr} WIB (${Math.floor(elapsedSec / 60)} menit lalu)`;
             }
         }
 
@@ -506,12 +728,12 @@
 
         // Apply UI styling according to state (Light Mode)
         if (state === 'LIVE') {
-            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-bold uppercase tracking-wider text-[11px] bg-emerald-50 text-emerald-800 border-emerald-300';
+            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-black uppercase tracking-wider text-[11px] bg-emerald-50 text-emerald-800 border-emerald-300';
             dot.className = 'w-2 h-2 rounded-full bg-emerald-600';
             text.textContent = 'LIVE';
             alertBox.classList.add('hidden');
         } else if (state === 'STALE') {
-            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-bold uppercase tracking-wider text-[11px] bg-amber-50 text-amber-800 border-amber-300';
+            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-black uppercase tracking-wider text-[11px] bg-amber-50 text-amber-800 border-amber-300';
             dot.className = 'w-2 h-2 rounded-full bg-amber-500';
             text.textContent = 'STALE';
 
@@ -520,7 +742,7 @@
             alertMsg.textContent = `Data berpotensi usang (Terakhir berhasil ${elapsedSec} detik lalu, ${consecutiveFailures} percobaan gagal).`;
             alertBox.classList.remove('hidden');
         } else {
-            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-bold uppercase tracking-wider text-[11px] bg-rose-50 text-rose-800 border-rose-300';
+            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-black uppercase tracking-wider text-[11px] bg-rose-50 text-rose-800 border-rose-300';
             dot.className = 'w-2 h-2 rounded-full bg-rose-600';
             text.textContent = 'OFFLINE';
 
@@ -565,7 +787,6 @@
         } catch (error) {
             console.warn('[Dashboard Polling Error]', error.message);
             consecutiveFailures++;
-            // Note: We intentionally DO NOT wipe out DOM/charts with zeros on network failure!
         } finally {
             isPolling = false;
             if (refreshIcon) refreshIcon.classList.remove('fa-spin');
@@ -593,7 +814,7 @@
             }
         }, DASHBOARD_CONFIG.pollIntervalMs);
 
-        // Visibility handling (save resources when tab is backgrounded, refresh on return)
+        // Visibility handling (refresh if returning after >= 45s)
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
                 const elapsedSec = Math.floor((Date.now() - lastSuccessfulRefresh.getTime()) / 1000);
