@@ -107,7 +107,7 @@ class SandCastingDashboardService
     // =========================================================================
 
     /**
-     * Build Zone 1 payload: Casting output, 7-stage throughput, warehouse receipts, and order statuses.
+     * Build Zone 1 payload: Casting output, 6-stage throughput (Netto to Gudang Jadi), warehouse receipts, and order statuses.
      *
      * @return array<string, mixed>
      */
@@ -162,6 +162,9 @@ class SandCastingDashboardService
         $throughputStages = [];
         foreach ($stageSummaries as $stg) {
             $stgKey = (string) $stg['stage'];
+            if ($stgKey === 'cor') {
+                continue; // Phase 5G: Exclude Cor stage from Zone 1 throughput chart
+            }
             $throughputStages[] = [
                 'stage' => $stgKey,
                 'label' => (string) $stg['stage_label'],

@@ -63,7 +63,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
             <h3 class="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <i class="fas fa-chart-bar text-blue-600"></i>
-                THROUGHPUT 7 TAHAP PROSES (TON & PCS)
+                THROUGHPUT 6 TAHAP PROSES (TON & PCS)
             </h3>
             <div class="flex items-center gap-2 text-xs font-bold">
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px]">

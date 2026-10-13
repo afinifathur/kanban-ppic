@@ -206,7 +206,8 @@
         // 1. Throughput Chart (Zone 1)
         const throughputCanvas = document.getElementById('chartThroughput');
         if (throughputCanvas && (data.zone_1 || DASHBOARD_CONFIG.zone === '1' || DASHBOARD_CONFIG.zone === 'all')) {
-            const stages = (data.zone_1 && data.zone_1.daily_throughput_stages) ? data.zone_1.daily_throughput_stages : [];
+            const rawStages = (data.zone_1 && data.zone_1.daily_throughput_stages) ? data.zone_1.daily_throughput_stages : [];
+            const stages = rawStages.filter(s => s.stage !== 'cor');
             const labels = stages.map(s => s.label);
             const tonnageData = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
             const defectRateData = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
@@ -276,7 +277,7 @@
                     scales: {
                         x: {
                             grid: { color: '#f1f5f9' },
-                            ticks: { color: '#0f172a', font: { weight: 'bold', size: 12 } }
+                            ticks: { color: '#E5E7EB', font: { weight: 'bold', size: 12 } }
                         },
                         yTon: {
                             type: 'linear',
@@ -502,7 +503,8 @@
     function updateChartsInPlace(data) {
         // Update Throughput
         if (dashboardCharts.throughput && data.zone_1 && data.zone_1.daily_throughput_stages) {
-            const stages = data.zone_1.daily_throughput_stages;
+            const rawStages = data.zone_1.daily_throughput_stages || [];
+            const stages = rawStages.filter(s => s.stage !== 'cor');
             const newTonnage = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
             const newDefectRate = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
             const maxT = Math.max(...newTonnage, 1);
@@ -512,6 +514,9 @@
             dashboardCharts.throughput.data.datasets[1].data = newDefectRate;
             dashboardCharts.throughput.options.scales.yTon.suggestedMax = maxT * 1.45;
             dashboardCharts.throughput.options.scales.yPct.suggestedMax = Math.max(...newDefectRate, 5) * 1.25;
+            if (dashboardCharts.throughput.options.scales.x && dashboardCharts.throughput.options.scales.x.ticks) {
+                dashboardCharts.throughput.options.scales.x.ticks.color = '#E5E7EB';
+            }
             dashboardCharts.throughput.update();
         }
 

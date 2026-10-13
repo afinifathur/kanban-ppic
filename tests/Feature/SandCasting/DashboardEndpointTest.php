@@ -621,15 +621,19 @@ class DashboardEndpointTest extends TestCase
 
         $stages = collect($res->json('zone_1.daily_throughput_stages'))->keyBy('stage');
 
-        // Exactly 7 stages
-        $this->assertCount(7, $stages);
-        $this->assertTrue($stages->has(['cor', 'netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi']));
+        // Exactly 6 stages (Phase 5G: Cor excluded from Zone 1 throughput chart)
+        $this->assertCount(6, $stages);
+        $this->assertFalse($stages->has('cor'));
+        $this->assertTrue($stages->has(['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi']));
 
-        // COR: good 100 pcs, 200kg = 0.20 Ton, reject 10 pcs
-        $cor = $stages['cor'];
-        $this->assertSame(100, $cor['good_pcs']);
-        $this->assertEquals(0.20, $cor['good_tonnage']);
-        $this->assertSame(10, $cor['defect_pcs']);
+        // Fixed order: Netto, Bubut OD, Bubut CNC, Bor, QC, Gudang Jadi
+        $stageOrder = collect($res->json('zone_1.daily_throughput_stages'))->pluck('stage')->all();
+        $this->assertSame(['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'], $stageOrder);
+
+        // Verify COR is still present in casting_today and other aggregates
+        $this->assertSame(100, $res->json('zone_1.casting_today.good_pcs'));
+        $this->assertEquals(0.20, (float) $res->json('zone_1.casting_today.good_tonnage'));
+        $this->assertSame(10, $res->json('zone_1.casting_today.reject_pcs'));
 
         // Netto: input 100, good 95 pcs (190kg = 0.19 Ton), defect 5 pcs (defect rate 5%)
         $netto = $stages['netto'];
@@ -1272,24 +1276,24 @@ class DashboardEndpointTest extends TestCase
         $resQc->assertStatus(200);
 
         $stagesQc = collect($resQc->json('zone_1.daily_throughput_stages'))->keyBy('stage');
-        $this->assertCount(7, $stagesQc);
+        $this->assertCount(6, $stagesQc);
+        $this->assertFalse($stagesQc->has('cor'));
 
-        // Throughput must combine all scopes for adminqcflange@peroniks.com:
-        // Cor: 100 (Besi) + 50 (Stainless) = 150 pcs, 0.40 Ton
-        $this->assertSame(150, $stagesQc['cor']['good_pcs']);
-        $this->assertEquals(0.40, (float) $stagesQc['cor']['good_tonnage']);
-
-        // Netto: 100 (Besi) + 50 (Stainless) = 150 pcs, 0.40 Ton
+        // Throughput must combine all scopes for adminqcflange@peroniks.com on Netto (100 Besi + 50 Stainless = 150 pcs, 0.40 Ton)
         $this->assertSame(150, $stagesQc['netto']['good_pcs']);
         $this->assertEquals(0.40, (float) $stagesQc['netto']['good_tonnage']);
+
+        // Verify casting_today still has Cor combined:
+        $this->assertSame(150, $resQc->json('zone_1.casting_today.good_pcs'));
+        $this->assertEquals(0.40, (float) $resQc->json('zone_1.casting_today.good_tonnage'));
 
         // 3. PPIC user with scope FLANGE_BESI still only sees FLANGE_BESI
         $resPpic = $this->actingAs($this->ppicUser)->getJson('/sand-casting/dashboard/data?zone=1');
         $resPpic->assertStatus(200);
 
         $stagesPpic = collect($resPpic->json('zone_1.daily_throughput_stages'))->keyBy('stage');
-        $this->assertSame(100, $stagesPpic['cor']['good_pcs']);
-        $this->assertEquals(0.20, (float) $stagesPpic['cor']['good_tonnage']);
+        $this->assertCount(6, $stagesPpic);
+        $this->assertFalse($stagesPpic->has('cor'));
         $this->assertSame(100, $stagesPpic['netto']['good_pcs']);
         $this->assertEquals(0.20, (float) $stagesPpic['netto']['good_tonnage']);
 
@@ -1305,8 +1309,10 @@ class DashboardEndpointTest extends TestCase
         $resOtherQc->assertStatus(200);
 
         $stagesOtherQc = collect($resOtherQc->json('zone_1.daily_throughput_stages'))->keyBy('stage');
-        $this->assertSame(100, $stagesOtherQc['cor']['good_pcs']);
-        $this->assertEquals(0.20, (float) $stagesOtherQc['cor']['good_tonnage']);
+        $this->assertCount(6, $stagesOtherQc);
+        $this->assertFalse($stagesOtherQc->has('cor'));
+        $this->assertSame(100, $stagesOtherQc['netto']['good_pcs']);
+        $this->assertEquals(0.20, (float) $stagesOtherQc['netto']['good_tonnage']);
 
         // 5. Verification: adminqcflange on Production Report page maintains its scope (not bypassed)
         $reportRes = $this->actingAs($this->qcUser)->get('/sand-casting/report/production?stage=cor');
@@ -1319,5 +1325,77 @@ class DashboardEndpointTest extends TestCase
         // Cache keys are separated: PPIC uses sc_dashboard_data_FLANGE_BESI_zone_1, admin/adminqcflange uses sc_dashboard_data_all_zone_1
         $this->assertTrue(Cache::has('sc_dashboard_data_FLANGE_BESI_zone_1'));
         $this->assertTrue(Cache::has('sc_dashboard_data_all_zone_1'));
+    }
+
+    public function test_phase_5g_zone_1_throughput_chart_specifications(): void
+    {
+        [$plan, $line, $result] = $this->createPlanWithKtrLine([
+            'qty_good' => 60,
+            'qty_reject' => 5,
+            'unit_weight_kg' => 2.0,
+            'current_stage' => 'netto',
+        ]);
+
+        SandCastingStageExecution::create([
+            'sand_casting_casting_result_line_id' => $line->id,
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 60,
+            'defect_qty' => 2,
+            'good_qty' => 58,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // 1. Endpoint returns exactly 6 categories in fixed order
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=1&fresh=1');
+        $res->assertStatus(200);
+
+        $throughputStages = $res->json('zone_1.daily_throughput_stages');
+        $this->assertCount(6, $throughputStages);
+
+        $expectedStages = ['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
+        $expectedLabels = ['Netto', 'Bubut OD', 'Bubut CNC', 'Bor', 'QC', 'Gudang Jadi'];
+
+        $this->assertSame($expectedStages, array_column($throughputStages, 'stage'));
+        $this->assertSame($expectedLabels, array_column($throughputStages, 'label'));
+
+        // 2. Cor is absent from throughput stages
+        $stagesKeyed = collect($throughputStages)->keyBy('stage');
+        $this->assertFalse($stagesKeyed->has('cor'));
+
+        // 3. TON and PCS metrics for Netto match aggregation correctly
+        $netto = $stagesKeyed['netto'];
+        $this->assertSame(60, $netto['input_pcs']);
+        $this->assertSame(58, $netto['good_pcs']);
+        $this->assertEquals(0.12, (float) $netto['good_tonnage']);
+        $this->assertSame(2, $netto['defect_pcs']);
+
+        // 4. Cor data is preserved in casting_today
+        $castingToday = $res->json('zone_1.casting_today');
+        $this->assertSame(60, $castingToday['good_pcs']);
+        $this->assertEquals(0.12, (float) $castingToday['good_tonnage']);
+        $this->assertSame(5, $castingToday['reject_pcs']);
+
+        // 5. Cor data is preserved in production report dataset
+        $reportService = app(\App\Services\SandCasting\SandCastingProductionReportService::class);
+        $reportData = $reportService->getProductionDataset(['date_from' => now()->toDateString(), 'date_to' => now()->toDateString()], $this->adminUser);
+        $reportStages = collect($reportData['stage_summaries'])->keyBy('stage');
+        $this->assertTrue($reportStages->has('cor'));
+        $this->assertSame(60, $reportStages['cor']['good_pcs']);
+
+        // 6. Blade template contains explicit #E5E7EB tick color and does not re-add Cor
+        $viewRes = $this->actingAs($this->adminUser)->get('/sand-casting/dashboard');
+        $viewRes->assertStatus(200);
+        $viewContent = $viewRes->getContent();
+
+        // Check explicit X-axis tick color in initCharts and in updateChartsInPlace
+        $this->assertStringContainsString("ticks: { color: '#E5E7EB', font: { weight: 'bold', size: 12 } }", $viewContent);
+        $this->assertStringContainsString("dashboardCharts.throughput.options.scales.x.ticks.color = '#E5E7EB';", $viewContent);
+
+        // Check that Cor filter is present in JS
+        $this->assertStringContainsString("filter(s => s.stage !== 'cor')", $viewContent);
     }
 }
