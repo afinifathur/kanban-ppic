@@ -91,10 +91,6 @@
             <!-- Stage Filter Pills -->
             <div class="hidden lg:flex items-center gap-1 text-[11px] overflow-x-auto py-1">
                 <span class="text-slate-400 font-bold mr-1">Tahap:</span>
-                <a href="{{ route('sand-casting.defects.index', array_merge(request()->query(), ['stage' => 'all', 'page' => 1])) }}"
-                    class="px-2 py-0.5 rounded font-bold transition {{ empty($selectedStage) ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
-                    Semua
-                </a>
                 @foreach($stages as $stgKey)
                     @php
                         $stgLabel = $stageLabels[$stgKey] ?? strtoupper($stgKey);
@@ -116,6 +112,9 @@
         <div class="bg-white px-3 py-2 rounded-b-lg border border-t-0 border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2">
             <form method="GET" action="{{ route('sand-casting.defects.index') }}" class="w-full flex flex-wrap items-center gap-2">
                 <input type="hidden" name="mode" value="{{ $mode }}">
+                @if($selectedStage)
+                    <input type="hidden" name="stage" value="{{ $selectedStage }}">
+                @endif
                 
                 <div class="relative flex-1 min-w-[200px] max-w-md">
                     <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 text-xs">
@@ -129,7 +128,7 @@
                 <!-- Dropdown Stage Filter on Mobile/Tablet -->
                 <div class="lg:hidden">
                     <select name="stage" onchange="this.form.submit()" class="py-1.5 px-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-md text-xs font-bold">
-                        <option value="all" {{ empty($selectedStage) ? 'selected' : '' }}>Semua Tahap</option>
+                        <option value="" disabled {{ empty($selectedStage) ? 'selected' : '' }}>-- Pilih Tahap --</option>
                         @foreach($stages as $stgKey)
                             <option value="{{ $stgKey }}" {{ $selectedStage === $stgKey ? 'selected' : '' }}>
                                 {{ $stageLabels[$stgKey] ?? strtoupper($stgKey) }}
@@ -143,8 +142,8 @@
                     Filter
                 </button>
 
-                @if($search || $selectedStage)
-                    <a href="{{ route('sand-casting.defects.index', ['mode' => $mode]) }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
+                @if($search)
+                    <a href="{{ route('sand-casting.defects.index', array_filter(['mode' => $mode, 'stage' => $selectedStage])) }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
                         Reset
                     </a>
                 @endif
@@ -153,7 +152,34 @@
 
         <!-- 4. MAIN EXCEL-LIKE WORK QUEUE TABLE -->
         <div class="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden flex flex-col">
-            @if($executions->isEmpty())
+            @if(empty($selectedStage))
+                <div class="p-12 text-center">
+                    <div class="w-14 h-14 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-amber-200 shadow-xs">
+                        <i class="fas fa-hand-pointer"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800">
+                        Pilih Tahap Produksi Terlebih Dahulu
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                        Pilih tahap produksi terlebih dahulu untuk menampilkan daftar KTR. Pencatatan defect wajib dilakukan dalam konteks tahap yang eksplisit.
+                    </p>
+                    <div class="mt-4 flex flex-wrap justify-center gap-2">
+                        @foreach($stages as $stgKey)
+                            @php
+                                $stgLabel = $stageLabels[$stgKey] ?? strtoupper($stgKey);
+                                $stageCounter = ($mode === 'recorded') ? ($summary['stage_recorded_counts'][$stgKey] ?? 0) : ($summary['stage_counts'][$stgKey] ?? 0);
+                            @endphp
+                            <a href="{{ route('sand-casting.defects.index', array_merge(request()->query(), ['stage' => $stgKey, 'page' => 1])) }}"
+                                class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-300 text-slate-700 font-bold text-xs transition flex items-center gap-1.5 shadow-xs">
+                                <span>{{ $stgLabel }}</span>
+                                @if($stageCounter > 0)
+                                    <span class="text-[10px] px-1.5 py-0.2 bg-amber-100 text-amber-800 font-black rounded-full">{{ $stageCounter }}</span>
+                                @endif
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @elseif($executions->isEmpty())
                 <div class="p-12 text-center">
                     <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
                         <i class="fas fa-check-circle"></i>
@@ -193,11 +219,14 @@
                                         {{ $rowNumber }}
                                     </td>
 
-                                    <!-- KTR + Aging Badge -->
+                                    <!-- KTR + Stage + Aging Badge -->
                                     <td class="py-2 px-3 whitespace-nowrap">
-                                        <div class="flex items-center gap-1.5">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
                                             <span class="font-mono font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
                                                 {{ $card['traveler_number'] }}
+                                            </span>
+                                            <span class="text-[10px] font-bold px-1 py-0.2 bg-slate-100 text-slate-600 rounded border border-slate-200 uppercase">
+                                                {{ $stageLabels[$card['stage']] ?? strtoupper($card['stage']) }}
                                             </span>
                                             @if(!empty($card['aging']['stage_aging_label']))
                                                 <span class="text-[10px] font-bold px-1 py-0.2 bg-amber-100 text-amber-800 rounded border border-amber-200" title="Aging proses">
@@ -331,7 +360,7 @@
 
     </div>
 
-    <!-- 5A. MODAL CATAT RUSAK AWAL (PPIC INITIAL RECORDING) -->
+    <!-- 5A. MODAL INPUT DEFECT AWAL (PPIC INITIAL RECORDING) -->
     <div id="defectModal" tabindex="-1" aria-hidden="true"
         class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full bg-slate-900/60 backdrop-blur-xs">
         <div class="relative p-4 w-full max-w-md max-h-full">
@@ -374,6 +403,10 @@
                                 <span id="modalItemName" class="font-bold text-slate-800 text-right truncate max-w-[200px]"></span>
                             </div>
                             <div class="flex justify-between items-center">
+                                <span class="text-slate-500">Tahap Produksi:</span>
+                                <span id="modalStageDisplay" class="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 uppercase text-[10px]"></span>
+                            </div>
+                            <div class="flex justify-between items-center">
                                 <span class="text-slate-500">Checkpoint:</span>
                                 <span id="modalCheckpoint" class="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100"></span>
                             </div>
@@ -383,6 +416,7 @@
                             </div>
                         </div>
 
+                        <input type="hidden" name="stage" id="modalStageInput" value="">
                         <input type="hidden" id="modalInputQty" value="0">
 
                         <!-- Input Defect Qty -->
@@ -490,6 +524,10 @@
                                 <span id="addModalItemName" class="font-bold text-slate-800 text-right truncate max-w-[220px]"></span>
                             </div>
                             <div class="flex justify-between items-center">
+                                <span class="text-slate-500">Tahap Produksi:</span>
+                                <span id="addModalStageDisplay" class="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 uppercase text-[10px]"></span>
+                            </div>
+                            <div class="flex justify-between items-center">
                                 <span class="text-slate-500">Checkpoint:</span>
                                 <span id="addModalCheckpoint" class="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100"></span>
                             </div>
@@ -513,6 +551,7 @@
                             </div>
                         </div>
 
+                        <input type="hidden" name="stage" id="addModalStageInput" value="">
                         <input type="hidden" id="addHiddenInputQty" value="0">
                         <input type="hidden" id="addHiddenCurrentDefect" value="0">
 
@@ -606,6 +645,8 @@
             document.getElementById('modalKtr').textContent = card.traveler_number || '-';
             document.getElementById('modalHeat').textContent = card.heat_number || '-';
             document.getElementById('modalItemName').textContent = card.item_name || '-';
+            document.getElementById('modalStageDisplay').textContent = (card.stage || '').replace('_', ' ').toUpperCase();
+            document.getElementById('modalStageInput').value = card.stage || '';
             document.getElementById('modalCheckpoint').textContent = card.checkpoint_code || '-';
             document.getElementById('modalInputQtyDisplay').textContent = (card.input_qty || 0) + ' pcs';
             document.getElementById('modalInputQty').value = card.input_qty || 0;
@@ -683,6 +724,8 @@
 
             document.getElementById('addModalKtr').textContent = card.traveler_number || '-';
             document.getElementById('addModalItemName').textContent = card.item_name || '-';
+            document.getElementById('addModalStageDisplay').textContent = (card.stage || '').replace('_', ' ').toUpperCase();
+            document.getElementById('addModalStageInput').value = card.stage || '';
             document.getElementById('addModalCheckpoint').textContent = card.checkpoint_code || '-';
             document.getElementById('addModalInputQty').textContent = inputQty + ' pcs';
             document.getElementById('addModalCurrentDefectQty').textContent = currentDefect + ' pcs';

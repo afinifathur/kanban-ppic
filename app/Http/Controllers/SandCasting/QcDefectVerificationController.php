@@ -49,11 +49,21 @@ class QcDefectVerificationController extends Controller
             'search' => $request->query('search'),
         ];
 
-        $selectedStage = $request->query('stage');
-        if ($selectedStage && $selectedStage !== 'all') {
-            $selectedStage = SandCastingStageAuthorizationService::normalizeStage($selectedStage);
-        } else {
-            $selectedStage = null;
+        $rawStage = $request->query('stage');
+        $selectedStage = null;
+        $invalidStage = null;
+
+        if ($rawStage !== null && $rawStage !== '') {
+            if ($rawStage === 'all') {
+                $invalidStage = 'all';
+            } else {
+                $canonical = SandCastingStageAuthorizationService::normalizeStage($rawStage);
+                if ($canonical && in_array($canonical, SandCastingStageExecutionService::STAGES, true)) {
+                    $selectedStage = $canonical;
+                } else {
+                    $invalidStage = $rawStage;
+                }
+            }
         }
 
         $summary = $this->queryService->getQcVerificationSummary();
@@ -62,8 +72,7 @@ class QcDefectVerificationController extends Controller
 
         // Backward compatibility queue data
         $queues = $this->queryService->getAllQcVerificationQueues($filters);
-        $activeTab = $request->query('tab', 'netto');
-        $activeTab = SandCastingStageAuthorizationService::normalizeStage($activeTab) ?? 'netto';
+        $activeTab = $selectedStage ?? 'netto';
 
         // Defect types map per stage for modal dropdown
         $defectTypesMap = [];
@@ -79,6 +88,7 @@ class QcDefectVerificationController extends Controller
             'summary' => $summary,
             'executions' => $paginatedExecutions,
             'selectedStage' => $selectedStage,
+            'invalidStage' => $invalidStage,
             'queues' => $queues,
             'stages' => SandCastingStageExecutionService::STAGES,
             'stageLabels' => self::STAGE_LABELS,
@@ -99,8 +109,27 @@ class QcDefectVerificationController extends Controller
             // 1. Authorization check
             $this->authorizationService->authorizeVerifyQc($user);
 
-            // 2. Validate request
+            // 2. Validate cross-stage safety
+            $executionStage = SandCastingStageAuthorizationService::normalizeStage($execution->stage);
+            if (! $executionStage || ! in_array($executionStage, SandCastingStageExecutionService::STAGES, true)) {
+                throw new InvalidArgumentException("Tahap eksekusi '{$execution->stage}' tidak valid dalam alur Sand Casting.");
+            }
+
+            $requestStage = $request->input('stage') ?? $request->query('stage');
+            if ($requestStage !== null && $requestStage !== '') {
+                $normalizedRequestStage = SandCastingStageAuthorizationService::normalizeStage($requestStage);
+                if ($normalizedRequestStage === null || ! in_array($normalizedRequestStage, SandCastingStageExecutionService::STAGES, true)) {
+                    throw new InvalidArgumentException("Tahap '{$requestStage}' tidak valid dalam alur Sand Casting.");
+                }
+
+                if ($normalizedRequestStage !== $executionStage) {
+                    throw new InvalidArgumentException("Tahap yang dipilih ('{$requestStage}') tidak sesuai dengan tahap aktual eksekusi ini ('{$execution->stage}').");
+                }
+            }
+
+            // 3. Validate request
             $validated = $request->validate([
+                'stage' => 'nullable|string',
                 'defects' => 'nullable|array',
                 'defects.*.defect_type_id' => 'required_with:defects|integer|exists:defect_types,id',
                 'defects.*.qty' => 'required_with:defects|integer|min:1',
@@ -115,7 +144,7 @@ class QcDefectVerificationController extends Controller
 
             $rawDefects = $validated['defects'] ?? [];
 
-            // 3. State machine execution: QC Inspector verifies defect classification breakdown
+            // 4. State machine execution: QC Inspector verifies defect classification breakdown
             $confirmedExecution = $this->executionService->verifyQcBreakdown(
                 executionOrId: $execution,
                 defects: $rawDefects,
@@ -146,7 +175,7 @@ class QcDefectVerificationController extends Controller
             }
 
             return redirect()
-                ->route('sand-casting.qc-defects.index', ['tab' => $confirmedExecution->stage])
+                ->route('sand-casting.qc-defects.index', ['stage' => $confirmedExecution->stage])
                 ->with('success', $successMessage);
 
         } catch (AuthorizationException $e) {

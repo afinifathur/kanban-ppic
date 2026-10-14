@@ -698,4 +698,191 @@ class QcDefectVerificationTest extends TestCase
         $this->assertEquals(93, $reconfirmed->good_qty);
         $this->assertCount(2, $reconfirmed->defects);
     }
+
+    protected function createWaitingQcExecutionDirect(string $stage, int $defectQty = 2, ?SandCastingCastingResultLine $line = null): SandCastingStageExecution
+    {
+        if (! $line) {
+            $line = $this->createKtrLine(['current_stage' => $stage]);
+        }
+
+        $checkpoint = match ($stage) {
+            'netto' => 'NETTO_CUT',
+            'bubut_od' => 'BUBUT_OD_FACING',
+            'bubut_cnc' => 'CNC_MACHINING',
+            'bor' => 'BOR_DRILLING',
+            'qc' => 'QC_FINAL',
+            'gudang_jadi' => 'GUDANG_RECEIPT',
+            default => 'NETTO_CUT',
+        };
+
+        return $line->stageExecutions()->create([
+            'stage' => $stage,
+            'checkpoint_code' => $checkpoint,
+            'input_qty' => 100,
+            'defect_qty' => $defectQty,
+            'good_qty' => 100 - $defectQty,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now()->subMinutes(10),
+            'executed_at' => now()->subHours(1),
+            'physical_done_at' => now()->subHours(1),
+        ]);
+    }
+
+    /**
+     * TEST 11: Phase 5J-A — QC verification page requires explicit stage and has no SEMUA TAHAP.
+     */
+    public function test_11_qc_verification_page_requires_explicit_stage_and_has_no_semua_tahap(): void
+    {
+        // Setup realistic records waiting QC on multiple stages
+        $this->createWaitingQcExecutionDirect('netto', 3);
+        $this->createWaitingQcExecutionDirect('bubut_od', 2);
+        $this->createWaitingQcExecutionDirect('bor', 4);
+
+        // 1. Missing stage: /sand-casting/qc-defects
+        $resMissing = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects');
+        $resMissing->assertStatus(200);
+        $resMissing->assertDontSee('SEMUA TAHAP');
+        $resMissing->assertSee('Pilih Tahap Produksi Terlebih Dahulu');
+        $executionsMissing = $resMissing->viewData('executions');
+        $this->assertCount(0, $executionsMissing);
+        $this->assertNull($resMissing->viewData('selectedStage'));
+
+        // 2. Empty stage: /sand-casting/qc-defects?stage=
+        $resEmpty = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=');
+        $resEmpty->assertStatus(200);
+        $resEmpty->assertDontSee('SEMUA TAHAP');
+        $resEmpty->assertSee('Pilih Tahap Produksi Terlebih Dahulu');
+        $this->assertCount(0, $resEmpty->viewData('executions'));
+        $this->assertNull($resEmpty->viewData('selectedStage'));
+
+        // 3. stage=all: /sand-casting/qc-defects?stage=all
+        $resAll = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=all');
+        $resAll->assertStatus(200);
+        $resAll->assertDontSee('SEMUA TAHAP');
+        $this->assertSame('all', $resAll->viewData('invalidStage'));
+        $resAll->assertSee("Tahap 'all' Tidak Valid", false);
+        $this->assertCount(0, $resAll->viewData('executions'));
+        $this->assertNull($resAll->viewData('selectedStage'));
+
+        // 4. Invalid stage: /sand-casting/qc-defects?stage=invalid_stage
+        $resInvalid = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=invalid_stage');
+        $resInvalid->assertStatus(200);
+        $this->assertSame('invalid_stage', $resInvalid->viewData('invalidStage'));
+        $resInvalid->assertSee("Tahap 'invalid_stage' Tidak Valid", false);
+        $this->assertCount(0, $resInvalid->viewData('executions'));
+        $this->assertNull($resInvalid->viewData('selectedStage'));
+    }
+
+    /**
+     * TEST 12: Phase 5J-A — Each of the six valid stages returns only records for that stage.
+     */
+    public function test_12_qc_verification_returns_only_records_for_explicitly_selected_stage(): void
+    {
+        $allStages = ['netto', 'bubut_od', 'bubut_cnc', 'bor', 'qc', 'gudang_jadi'];
+        $createdMap = [];
+
+        foreach ($allStages as $stg) {
+            $createdMap[$stg] = $this->createWaitingQcExecutionDirect($stg, 2);
+        }
+
+        foreach ($allStages as $stg) {
+            $res = $this->actingAs($this->adminQc)->get("/sand-casting/qc-defects?stage={$stg}");
+            $res->assertStatus(200);
+            $this->assertSame($stg, $res->viewData('selectedStage'));
+
+            $paginated = $res->viewData('executions');
+            $this->assertCount(1, $paginated);
+            $card = $paginated->first();
+
+            $this->assertSame($createdMap[$stg]->id, $card['id']);
+            $this->assertSame($stg, $card['stage']);
+        }
+    }
+
+    /**
+     * TEST 13: Phase 5J-A — Pagination and search preserve the selected stage.
+     */
+    public function test_13_qc_verification_pagination_and_search_preserves_selected_stage(): void
+    {
+        // 1 Netto with unique search term
+        $lineSpecial = $this->createKtrLine(['current_stage' => 'netto']);
+        $lineSpecial->productionPlan->update(['item_name' => 'SPECIAL FLANGE 99']);
+        $execSpecial = $this->createWaitingQcExecutionDirect('netto', 3, $lineSpecial);
+
+        // 1 Bubut OD with same search term (should NOT be returned when stage=netto)
+        $lineOther = $this->createKtrLine(['current_stage' => 'bubut_od']);
+        $lineOther->productionPlan->update(['item_name' => 'SPECIAL FLANGE 99']);
+        $execOther = $this->createWaitingQcExecutionDirect('bubut_od', 3, $lineOther);
+
+        $res = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&search=SPECIAL+FLANGE+99');
+        $res->assertStatus(200);
+
+        $paginated = $res->viewData('executions');
+        $this->assertCount(1, $paginated);
+        $this->assertSame($execSpecial->id, $paginated->first()['id']);
+        $this->assertSame('netto', $paginated->first()['stage']);
+
+        // Check reset link preserves stage=netto
+        $res->assertSee(route('sand-casting.qc-defects.index', ['stage' => 'netto']));
+    }
+
+    /**
+     * TEST 14: Phase 5J-A — Cross-stage verification attempt is rejected without mutating data.
+     */
+    public function test_14_cross_stage_verification_attempt_is_rejected_without_mutating_data(): void
+    {
+        // Execution belongs to netto
+        $exec = $this->prepareWaitingQcExecution('netto', 5);
+
+        // 1. Cross-stage mismatch attempt: client claims stage is bubut_cnc
+        $resMismatch = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'bubut_cnc',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+        ]);
+
+        $resMismatch->assertStatus(422);
+        $resMismatch->assertJsonPath('success', false);
+        $this->assertStringContainsString('tidak sesuai dengan tahap aktual eksekusi ini', $resMismatch->json('message'));
+
+        // Assert DB state is 100% UNCHANGED
+        $fresh = $exec->fresh();
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_QC, $fresh->status);
+        $this->assertSame(5, $fresh->defect_qty);
+        $this->assertSame(95, $fresh->good_qty);
+        $this->assertNull($fresh->qc_verified_at);
+        $this->assertNull($fresh->qc_verified_by);
+        $this->assertCount(0, $fresh->defects);
+
+        // 2. Invalid stage string attempt
+        $resInvalid = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'cor',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+        ]);
+        $resInvalid->assertStatus(422);
+        $resInvalid->assertJsonPath('success', false);
+
+        // 3. Legitimate verification with matching stage=netto succeeds
+        $resValid = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+        ]);
+        $resValid->assertStatus(200);
+        $resValid->assertJsonPath('success', true);
+
+        $confirmed = $exec->fresh();
+        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $confirmed->status);
+        $this->assertSame(5, $confirmed->defect_qty);
+        $this->assertSame(95, $confirmed->good_qty);
+        $this->assertNotNull($confirmed->qc_verified_at);
+        $this->assertSame($this->adminQc->id, $confirmed->qc_verified_by);
+        $this->assertCount(1, $confirmed->defects);
+    }
 }

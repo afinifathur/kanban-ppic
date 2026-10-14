@@ -198,8 +198,8 @@ class DefectRecordingTest extends TestCase
         $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
         $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
 
-        // Step 1: In Belum Dicatat tab
-        $responseUnrecorded = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded');
+        // Step 1: In Belum Dicatat tab with explicit stage=netto
+        $responseUnrecorded = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=netto');
         $responseUnrecorded->assertStatus(200);
         $responseUnrecorded->assertSee($line->traveler_number);
         $responseUnrecorded->assertSee('CATAT RUSAK');
@@ -207,13 +207,14 @@ class DefectRecordingTest extends TestCase
         // Step 2: Record initial defect 5
         $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/record", [
             'defect_qty' => 5,
+            'stage' => 'netto',
         ])->assertStatus(200);
 
         // Step 3: Now appears in Sudah Dicatat tab, not in Belum Dicatat
-        $responseUnrecordedAfter = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded');
+        $responseUnrecordedAfter = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=netto');
         $responseUnrecordedAfter->assertDontSee($line->traveler_number);
 
-        $responseRecorded = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=recorded');
+        $responseRecorded = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=recorded&stage=netto');
         $responseRecorded->assertStatus(200);
         $responseRecorded->assertSee($line->traveler_number);
         $responseRecorded->assertSee('TAMBAH DEFECT');
@@ -656,5 +657,305 @@ class DefectRecordingTest extends TestCase
         $this->assertFalse((bool) $freshRevised->defectLogs[1]->is_system_action);
         $this->assertEquals(3, $freshRevised->defectLogs[1]->added_qty);
         $this->assertEquals(0, $freshRevised->defectLogs[1]->previous_total);
+    }
+
+    /**
+     * PHASE 5I - TEST 1: Tab 'Semua' tidak ditampilkan pada UI.
+     */
+    public function test_phase5i_1_semua_tab_not_displayed_in_ui(): void
+    {
+        $response = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=netto');
+        $response->assertStatus(200);
+
+        // Assert no link pointing to stage=all
+        $response->assertDontSee('stage=all');
+        // Assert no mobile option with value="all"
+        $response->assertDontSee('value="all"', false);
+
+        // Assert all 6 explicit canonical stage labels exist in stage filter pills
+        $response->assertSee('NETTO');
+        $response->assertSee('BUBUT OD');
+        $response->assertSee('BUBUT CNC');
+        $response->assertSee('BOR');
+        $response->assertSee('QC');
+        $response->assertSee('GUDANG JADI');
+    }
+
+    /**
+     * PHASE 5I - TEST 2: Tahap kosong tidak menampilkan daftar KTR yang bisa langsung dicatat.
+     */
+    public function test_phase5i_2_empty_stage_does_not_display_recordable_ktr_list(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        $response = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded');
+        $response->assertStatus(200);
+
+        // Must show explicit instruction to select a stage first
+        $response->assertSee('Pilih tahap produksi terlebih dahulu untuk menampilkan daftar KTR.');
+
+        // Must NOT render any KTR or record button
+        $response->assertDontSee($line->traveler_number);
+        $response->assertDontSee('CATAT RUSAK');
+    }
+
+    /**
+     * PHASE 5I - TEST 3: Parameter stage=all tidak menghasilkan daftar lintas tahap yang dapat digunakan untuk pencatatan.
+     */
+    public function test_phase5i_3_stage_all_does_not_return_cross_stage_list(): void
+    {
+        $lineNetto = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $this->executionService->markPhysicalDone($lineNetto->traveler_number, 'netto', $this->spvUser->id);
+
+        $lineOd = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'bubut_od']);
+        $lineOd->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=all');
+        $response->assertStatus(200);
+
+        // Instructs user to select stage and does not return cross-stage records
+        $response->assertSee('Pilih tahap produksi terlebih dahulu untuk menampilkan daftar KTR.');
+        $response->assertDontSee($lineNetto->traveler_number);
+        $response->assertDontSee($lineOd->traveler_number);
+        $response->assertDontSee('CATAT RUSAK');
+    }
+
+    /**
+     * PHASE 5I - TEST 4: Tahap valid hanya menampilkan KTR yang memenuhi syarat untuk pencatatan pada tahap tersebut.
+     */
+    public function test_phase5i_4_valid_stage_only_displays_ktrs_for_that_stage(): void
+    {
+        $lineNetto = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $this->executionService->markPhysicalDone($lineNetto->traveler_number, 'netto', $this->spvUser->id);
+
+        $lineOd = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'bubut_od']);
+        $lineOd->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        // Viewing stage Netto
+        $responseNetto = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=netto');
+        $responseNetto->assertStatus(200);
+        $responseNetto->assertSee($lineNetto->traveler_number);
+        $responseNetto->assertSee('CATAT RUSAK');
+        $responseNetto->assertDontSee($lineOd->traveler_number);
+
+        // Viewing stage Bubut OD
+        $responseOd = $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=bubut_od');
+        $responseOd->assertStatus(200);
+        $responseOd->assertSee($lineOd->traveler_number);
+        $responseOd->assertSee('CATAT RUSAK');
+        $responseOd->assertDontSee($lineNetto->traveler_number);
+    }
+
+    /**
+     * PHASE 5I - TEST 5: Pencarian Heat dan KTR tidak melewati batasan tahap.
+     */
+    public function test_phase5i_5_heat_and_ktr_search_is_strictly_scoped_to_selected_stage(): void
+    {
+        $sharedHeatNumber = 'HEAT-SAFETY-5I-'.rand(1000, 9999);
+
+        // Create shared heat casting result
+        $sharedResult = SandCastingCastingResult::create([
+            'heat_number' => $sharedHeatNumber,
+            'cast_date' => now()->toDateString(),
+            'furnace' => 'F1',
+            'shift' => '1',
+            'operator_name' => 'Budi Cor',
+            'recorded_by' => $this->adminPpic->id,
+            'total_qty_good' => 200,
+            'total_qty_reject' => 0,
+        ]);
+
+        $lineNetto = $this->createKtrLine(['current_stage' => 'netto'], $sharedResult);
+        $this->executionService->markPhysicalDone($lineNetto->traveler_number, 'netto', $this->spvUser->id);
+
+        $lineOd = $this->createKtrLine(['current_stage' => 'bubut_od'], $sharedResult);
+        $lineOd->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        // Search with stage=netto -> only Netto KTR appears, Bubut OD KTR is hidden even though heat is identical
+        $responseNettoSearch = $this->actingAs($this->adminPpic)->get("/sand-casting/defects?mode=unrecorded&stage=netto&search={$sharedHeatNumber}");
+        $responseNettoSearch->assertStatus(200);
+        $responseNettoSearch->assertSee($lineNetto->traveler_number);
+        $responseNettoSearch->assertDontSee($lineOd->traveler_number);
+
+        // Search with stage=bubut_od -> only Bubut OD KTR appears
+        $responseOdSearch = $this->actingAs($this->adminPpic)->get("/sand-casting/defects?mode=unrecorded&stage=bubut_od&search={$sharedHeatNumber}");
+        $responseOdSearch->assertStatus(200);
+        $responseOdSearch->assertSee($lineOd->traveler_number);
+        $responseOdSearch->assertDontSee($lineNetto->traveler_number);
+
+        // Search without stage -> returns empty with stage prompt
+        $responseNoStageSearch = $this->actingAs($this->adminPpic)->get("/sand-casting/defects?mode=unrecorded&search={$sharedHeatNumber}");
+        $responseNoStageSearch->assertStatus(200);
+        $responseNoStageSearch->assertSee('Pilih tahap produksi terlebih dahulu untuk menampilkan daftar KTR.');
+        $responseNoStageSearch->assertDontSee($lineNetto->traveler_number);
+        $responseNoStageSearch->assertDontSee($lineOd->traveler_number);
+    }
+
+    /**
+     * PHASE 5I - TEST 6: Mengubah parameter tahap secara manual tidak dapat menyebabkan defect dicatat pada tahap yang salah.
+     */
+    public function test_phase5i_6_tampering_stage_parameter_cannot_record_defect_on_wrong_stage(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $execNetto = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        // 1. Client attempts to record defect on Netto execution while submitting stage='bubut_od'
+        $responseTamperRecord = $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$execNetto->id}/record", [
+            'defect_qty' => 5,
+            'stage' => 'bubut_od', // Mismatch!
+        ]);
+        $responseTamperRecord->assertStatus(422);
+
+        // Verify Netto execution remains untouched
+        $fresh = $execNetto->fresh();
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $fresh->status);
+        $this->assertEquals(0, $fresh->defect_qty);
+
+        // 2. Now record properly with stage='netto'
+        $responseValidRecord = $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$execNetto->id}/record", [
+            'defect_qty' => 5,
+            'stage' => 'netto',
+        ]);
+        $responseValidRecord->assertStatus(200);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $execNetto->fresh()->status);
+
+        // 3. Client attempts to add cumulative defect with stage='bor'
+        $responseTamperAdd = $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$execNetto->id}/add", [
+            'added_qty' => 2,
+            'stage' => 'bor', // Mismatch!
+        ]);
+        $responseTamperAdd->assertStatus(422);
+
+        // Verify defect qty remained 5
+        $this->assertEquals(5, $execNetto->fresh()->defect_qty);
+    }
+
+    /**
+     * PHASE 5I - TEST 7: Tahap tidak valid ditolak dengan respons yang sesuai.
+     */
+    public function test_phase5i_7_invalid_stage_is_rejected(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        // 1. GET with nonexistent stage -> 404
+        $this->actingAs($this->adminPpic)->get('/sand-casting/defects?mode=unrecorded&stage=invalid_stage')
+            ->assertStatus(404);
+
+        // 2. POST record with invalid stage -> 422
+        $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 3,
+            'stage' => 'invalid_stage',
+        ])->assertStatus(422);
+
+        // 3. POST record with stage='all' -> 422
+        $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 3,
+            'stage' => 'all',
+        ])->assertStatus(422);
+
+        // 4. POST add with invalid stage -> 422
+        $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/add", [
+            'added_qty' => 1,
+            'stage' => 'invalid_stage',
+        ])->assertStatus(422);
+    }
+
+    /**
+     * PHASE 5I - TEST 8: Workflow Verifikasi QC dan data defect historis tidak berubah.
+     */
+    public function test_phase5i_8_qc_verification_workflow_and_historical_defects_remain_unaffected(): void
+    {
+        $defectType = DefectType::firstOrCreate(
+            ['department' => 'netto', 'name' => 'Keropos Netto Safety'],
+            ['is_active' => true]
+        );
+
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        // PPIC records initial defect
+        $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 10,
+            'stage' => 'netto',
+        ])->assertStatus(200);
+
+        $fresh = $exec->fresh();
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $fresh->status);
+
+        // Admin QC confirms breakdown via standard QC verification service
+        $confirmedExec = $this->executionService->verifyQcBreakdown($fresh, [
+            ['defect_type_id' => $defectType->id, 'qty' => 10],
+        ], $this->qcUser->id);
+
+        $this->assertEquals(SandCastingStageExecution::STATUS_CONFIRMED, $confirmedExec->status);
+        $this->assertEquals(10, $confirmedExec->defect_qty);
+        $this->assertEquals(90, $confirmedExec->good_qty);
+        $this->assertCount(1, $confirmedExec->defects);
+        $this->assertEquals(10, $confirmedExec->defects->first()->qty);
+    }
+
+    /**
+     * PHASE 5I - TEST 9: Hak akses user tetap mengikuti RBAC yang sudah berlaku.
+     */
+    public function test_phase5i_9_rbac_permissions_remain_enforced(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 100, 'current_stage' => 'netto']);
+        $exec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+
+        // 1. Unauthorized regular user without role -> 403
+        $this->actingAs($this->unauthorizedUser)->get('/sand-casting/defects?stage=netto')->assertStatus(403);
+        $this->actingAs($this->unauthorizedUser)->postJson("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 5,
+            'stage' => 'netto',
+        ])->assertStatus(403);
+
+        // 2. Production floor SPV cannot access PPIC defect recording -> 403
+        $this->actingAs($this->spvUser)->get('/sand-casting/defects?stage=netto')->assertStatus(403);
+        $this->actingAs($this->spvUser)->postJson("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 5,
+            'stage' => 'netto',
+        ])->assertStatus(403);
+
+        // 3. Authorized PPIC -> 200
+        $this->actingAs($this->adminPpic)->get('/sand-casting/defects?stage=netto')->assertStatus(200);
+        $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$exec->id}/record", [
+            'defect_qty' => 5,
+            'stage' => 'netto',
+        ])->assertStatus(200);
+
+        // 4. Authorized Superadmin -> 200
+        $this->actingAs($this->adminUser)->get('/sand-casting/defects?stage=netto')->assertStatus(200);
     }
 }

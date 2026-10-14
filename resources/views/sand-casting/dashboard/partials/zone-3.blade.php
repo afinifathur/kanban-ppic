@@ -55,7 +55,7 @@
             </h3>
             <div class="flex items-center gap-2">
                 <span class="text-[10px] font-black px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 uppercase font-mono">
-                    SATUAN: KG
+                    SATUAN: PCS & KG
                 </span>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase font-mono">
                     30 HARI TERAKHIR
@@ -67,7 +67,7 @@
             <canvas id="chartDefectTrend30Days"></canvas>
         </div>
         <div class="pt-1.5 mt-1 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 font-sans">
-            <span>Metrik utama: Estimasi Berat Defect (kg) terverifikasi QC fisik (CONFIRMED) berdasarkan tanggal inspeksi.</span>
+            <span>Label batang: Baris 1 = Defect PCS, Baris 2 = Estimasi kg. Terverifikasi QC fisik (CONFIRMED).</span>
             <span class="font-bold text-slate-700 font-mono">Periode: {{ $summary['period_start'] ?? '-' }} s/d {{ $summary['period_end'] ?? '-' }}</span>
         </div>
     </div>

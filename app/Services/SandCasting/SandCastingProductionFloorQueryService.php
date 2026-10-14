@@ -1113,10 +1113,17 @@ class SandCastingProductionFloorQueryService
                 ->orderBy('id', 'asc');
         }
 
-        if ($stage !== null && $stage !== '' && $stage !== 'all') {
-            $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage) ?? $stage;
-            $query->where('stage', $canonicalStage);
+        // Stage must be explicitly selected and valid; never return cross-stage listing
+        if ($stage === null || $stage === '' || $stage === 'all') {
+            return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
         }
+
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage);
+        if ($canonicalStage === null) {
+            return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
+        }
+
+        $query->where('stage', $canonicalStage);
 
         if (! empty($filters['search'])) {
             $term = '%'.trim((string) $filters['search']).'%';
@@ -1370,7 +1377,18 @@ class SandCastingProductionFloorQueryService
      */
     public function getQcVerificationPaginated(?string $stage = null, array $filters = [], int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
+        // Stage must be explicitly selected and valid; never return cross-stage listing
+        if ($stage === null || $stage === '' || $stage === 'all') {
+            return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
+        }
+
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage);
+        if ($canonicalStage === null || ! in_array($canonicalStage, SandCastingStageExecutionService::STAGES, true)) {
+            return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
+        }
+
         $query = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+            ->where('stage', $canonicalStage)
             ->with([
                 'castingResultLine.castingResult',
                 'castingResultLine.productionPlan',
@@ -1383,11 +1401,6 @@ class SandCastingProductionFloorQueryService
             ])
             ->orderBy('defect_entered_at', 'asc')
             ->orderBy('id', 'asc');
-
-        if ($stage !== null && $stage !== '' && $stage !== 'all') {
-            $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage) ?? $stage;
-            $query->where('stage', $canonicalStage);
-        }
 
         if (! empty($filters['search'])) {
             $term = '%'.trim((string) $filters['search']).'%';

@@ -50,11 +50,13 @@ class DefectRecordingController extends Controller
             $mode = 'unrecorded';
         }
 
-        $selectedStage = $request->query('stage');
-        if ($selectedStage && $selectedStage !== 'all') {
-            $selectedStage = SandCastingStageAuthorizationService::normalizeStage($selectedStage);
-        } else {
-            $selectedStage = null;
+        $rawStage = $request->query('stage');
+        $selectedStage = null;
+        if ($rawStage !== null && $rawStage !== '' && $rawStage !== 'all') {
+            $selectedStage = SandCastingStageAuthorizationService::normalizeStage($rawStage);
+            if (! $selectedStage) {
+                abort(404, "Tahap operasional '{$rawStage}' tidak valid.");
+            }
         }
 
         $filters = [
@@ -100,6 +102,21 @@ class DefectRecordingController extends Controller
                 'notes' => 'nullable|string|max:500',
                 'inspection_date' => 'nullable|date|before_or_equal:today',
                 'process_date' => 'nullable|date|before_or_equal:today',
+                'stage' => [
+                    'nullable',
+                    'string',
+                    function ($attribute, $value, $fail) use ($execution) {
+                        $canonical = SandCastingStageAuthorizationService::normalizeStage($value);
+                        if (! $canonical) {
+                            $fail("Tahap operasional '{$value}' tidak valid.");
+
+                            return;
+                        }
+                        if ($canonical !== $execution->stage) {
+                            $fail("Tahap '{$value}' tidak sesuai dengan tahap eksekusi KTR ({$execution->stage}).");
+                        }
+                    },
+                ],
             ], [
                 'defect_qty.required' => 'Jumlah rusak (defect) wajib diisi.',
                 'defect_qty.integer' => 'Jumlah rusak harus berupa angka bulat.',
@@ -108,6 +125,25 @@ class DefectRecordingController extends Controller
                 'inspection_date.before_or_equal' => 'Tanggal pemeriksaan fisik tidak boleh di masa depan.',
                 'process_date.before_or_equal' => 'Tanggal pemeriksaan tidak boleh di masa depan.',
             ]);
+
+            // Verify submitted stage matches execution stage
+            if ($request->has('stage') && $request->input('stage') !== null && $request->input('stage') !== '') {
+                $submittedStage = $request->input('stage');
+                $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($submittedStage);
+
+                if (! $canonicalStage) {
+                    throw new InvalidArgumentException("Tahap operasional '{$submittedStage}' tidak valid.");
+                }
+
+                if ($canonicalStage !== $execution->stage) {
+                    throw new InvalidArgumentException("Tahap '{$submittedStage}' tidak sesuai dengan tahap eksekusi KTR ({$execution->stage}).");
+                }
+            }
+
+            $execStage = SandCastingStageAuthorizationService::normalizeStage($execution->stage);
+            if (! $execStage) {
+                throw new InvalidArgumentException('Tahap operasional pada data eksekusi KTR ini tidak valid.');
+            }
 
             $defectQty = (int) $validated['defect_qty'];
             $inspectionDate = $validated['inspection_date'] ?? $validated['process_date'] ?? null;
@@ -204,11 +240,45 @@ class DefectRecordingController extends Controller
             $validated = $request->validate([
                 'added_qty' => 'required|integer|min:1',
                 'notes' => 'nullable|string|max:500',
+                'stage' => [
+                    'nullable',
+                    'string',
+                    function ($attribute, $value, $fail) use ($execution) {
+                        $canonical = SandCastingStageAuthorizationService::normalizeStage($value);
+                        if (! $canonical) {
+                            $fail("Tahap operasional '{$value}' tidak valid.");
+
+                            return;
+                        }
+                        if ($canonical !== $execution->stage) {
+                            $fail("Tahap '{$value}' tidak sesuai dengan tahap eksekusi KTR ({$execution->stage}).");
+                        }
+                    },
+                ],
             ], [
                 'added_qty.required' => 'Jumlah penambahan defect wajib diisi.',
                 'added_qty.integer' => 'Jumlah penambahan defect harus berupa angka bulat.',
                 'added_qty.min' => 'Jumlah penambahan defect minimal 1 PCS.',
             ]);
+
+            // Verify submitted stage matches execution stage
+            if ($request->has('stage') && $request->input('stage') !== null && $request->input('stage') !== '') {
+                $submittedStage = $request->input('stage');
+                $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($submittedStage);
+
+                if (! $canonicalStage) {
+                    throw new InvalidArgumentException("Tahap operasional '{$submittedStage}' tidak valid.");
+                }
+
+                if ($canonicalStage !== $execution->stage) {
+                    throw new InvalidArgumentException("Tahap '{$submittedStage}' tidak sesuai dengan tahap eksekusi KTR ({$execution->stage}).");
+                }
+            }
+
+            $execStage = SandCastingStageAuthorizationService::normalizeStage($execution->stage);
+            if (! $execStage) {
+                throw new InvalidArgumentException('Tahap operasional pada data eksekusi KTR ini tidak valid.');
+            }
 
             $addedQty = (int) $validated['added_qty'];
 

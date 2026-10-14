@@ -109,8 +109,9 @@
     const dashboardCharts = {
         throughput: null,
         wipDonut: null,
-        verifiedDefects: null,
-        defectTrend: null,
+        overallDefects: null,
+        defectTrend30: null,
+        stageDonuts: {},
     };
 
     // Light industrial Chart.js defaults
@@ -201,6 +202,107 @@
         }
     };
 
+    // Custom Chart.js Plugin for Direct Data Labels on 30-Day Defect Trend Bars (Zone 3 - PCS & KG above bar)
+    const defectTrendDirectLabelsPlugin = {
+        id: 'defectTrendDirectLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx, data } = chart;
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || meta.hidden) return;
+
+            const barDataset = data.datasets[0];
+            const trendData = barDataset.trendData || [];
+            if (!trendData.length) return;
+
+            // Determine available slot width per bar to adapt font size
+            const barCount = meta.data.length;
+            const chartWidth = chart.chartArea.right - chart.chartArea.left;
+            const slotWidth = barCount > 0 ? (chartWidth / barCount) : 30;
+
+            // Adaptive font sizes based on horizontal density
+            const fontSizePcs = slotWidth < 22 ? 8 : (slotWidth < 30 ? 8.5 : 9);
+            const fontSizeKg = slotWidth < 22 ? 7.5 : (slotWidth < 30 ? 8 : 8.5);
+
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+
+            meta.data.forEach((bar, index) => {
+                const item = trendData[index];
+                if (!item) return;
+
+                // Tahap 3: Tanggal dengan no_data (defect_pcs === null) atau zero_defect (defect_pcs === 0)
+                // Jangan menampilkan angka nol palsu untuk data tidak tersedia.
+                // Hindari label 0 PCS / 0 kg berulang agar chart 30-31 titik tidak tertumpuk/padat.
+                if (item.defect_pcs === null || item.defect_pcs === undefined || Number(item.defect_pcs) <= 0) {
+                    return;
+                }
+
+                const pcsVal = Number(item.defect_pcs);
+                const kgVal = item.estimated_defect_kg;
+                const isWeightAvail = (kgVal !== null && kgVal !== undefined && item.is_weight_available !== false);
+
+                // Baris 1: Defect PCS
+                const pcsText = slotWidth >= 44 ? `${formatNumber(pcsVal)} PCS` : `${formatNumber(pcsVal)}`;
+
+                // Baris 2: Estimasi kg aktual dari payload
+                let kgText;
+                if (isWeightAvail) {
+                    const numKg = Number(kgVal);
+                    const formattedKg = formatNumber(numKg, (numKg % 1 === 0) ? 0 : 1);
+                    kgText = `${formattedKg} kg`;
+                } else {
+                    kgText = 'n/a';
+                }
+
+                const x = bar.x;
+                const topY = bar.y;
+
+                // Safe clearance from chartArea top to guarantee no clipping
+                const safeTopLimit = chart.chartArea.top + 22;
+                const kgY = Math.max(topY - 3, safeTopLimit);
+                const pcsY = kgY - (fontSizeKg + 2);
+
+                // Subtle semi-transparent rounded pill for background contrast
+                ctx.font = `bold ${fontSizePcs}px ui-sans-serif, system-ui, sans-serif`;
+                const pcsWidth = ctx.measureText(pcsText).width;
+                ctx.font = `bold ${fontSizeKg}px ui-sans-serif, system-ui, sans-serif`;
+                const kgWidth = ctx.measureText(kgText).width;
+                const maxTextW = Math.max(pcsWidth, kgWidth);
+
+                const pillW = Math.min(maxTextW + 4, Math.max(slotWidth - 2, maxTextW));
+                const pillH = fontSizePcs + fontSizeKg + 5;
+                const pillX = x - (pillW / 2);
+                const pillY = pcsY - fontSizePcs - 1;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                    ctx.roundRect(pillX, pillY, pillW, pillH, 3);
+                } else {
+                    ctx.rect(pillX, pillY, pillW, pillH);
+                }
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(226, 232, 240, 0.8)';
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+
+                // Draw Baris 1: Defect PCS
+                ctx.font = `bold ${fontSizePcs}px ui-sans-serif, system-ui, sans-serif`;
+                ctx.fillStyle = '#0f172a';
+                ctx.fillText(pcsText, x, pcsY);
+
+                // Draw Baris 2: Estimasi Defect kg
+                ctx.font = `bold ${fontSizeKg}px ui-sans-serif, system-ui, sans-serif`;
+                ctx.fillStyle = isWeightAvail ? '#be123c' : '#d97706';
+                ctx.fillText(kgText, x, kgY);
+            });
+
+            ctx.restore();
+        }
+    };
+
     // Initialize Chart.js instances
     function initCharts(data) {
         // 1. Throughput Chart (Zone 1)
@@ -277,7 +379,7 @@
                     scales: {
                         x: {
                             grid: { color: '#f1f5f9' },
-                            ticks: { color: '#E5E7EB', font: { weight: 'bold', size: 12 } }
+                            ticks: { color: '#4B5563', font: { weight: 'bold', size: 12 } }
                         },
                         yTon: {
                             type: 'linear',
@@ -390,15 +492,18 @@
             const labels = trend.map(t => t.day_label);
             const defectKg = trend.map(t => (t.estimated_defect_kg !== null && t.estimated_defect_kg !== undefined) ? Number(t.estimated_defect_kg) : 0);
             const barColors = trend.map(t => (t.defect_pcs === null) ? 'rgba(203, 213, 225, 0.4)' : ((t.estimated_defect_kg > 0 || t.defect_pcs > 0) ? '#e11d48' : '#e2e8f0'));
+            const maxDefectKg = Math.max(...defectKg, 0);
 
             const ctx = trendCanvas.getContext('2d');
             dashboardCharts.defectTrend30 = new Chart(ctx, {
                 type: 'bar',
+                plugins: [defectTrendDirectLabelsPlugin],
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Estimasi Defect (kg)',
                         data: defectKg,
+                        trendData: trend,
                         backgroundColor: barColors,
                         borderRadius: 3,
                         maxBarThickness: 24,
@@ -407,12 +512,21 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            top: 28,
+                            left: 4,
+                            right: 4,
+                            bottom: 2,
+                        }
+                    },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    const t = trend[context.dataIndex] || {};
+                                    const currentTrend = context.chart.data.datasets[0].trendData || trend;
+                                    const t = currentTrend[context.dataIndex] || {};
                                     if (t.defect_pcs === null) {
                                         return ' Data Tidak Tersedia';
                                     }
@@ -439,6 +553,7 @@
                         },
                         y: {
                             beginAtZero: true,
+                            suggestedMax: maxDefectKg > 0 ? maxDefectKg * 1.25 : 10,
                             grid: { color: '#f1f5f9' },
                             ticks: {
                                 color: '#475569',
@@ -515,7 +630,7 @@
             dashboardCharts.throughput.options.scales.yTon.suggestedMax = maxT * 1.45;
             dashboardCharts.throughput.options.scales.yPct.suggestedMax = Math.max(...newDefectRate, 5) * 1.25;
             if (dashboardCharts.throughput.options.scales.x && dashboardCharts.throughput.options.scales.x.ticks) {
-                dashboardCharts.throughput.options.scales.x.ticks.color = '#E5E7EB';
+                dashboardCharts.throughput.options.scales.x.ticks.color = '#4B5563';
             }
             dashboardCharts.throughput.update();
         }
@@ -531,9 +646,13 @@
         // Update 30-Day Defect Trend (KG Primary)
         if (dashboardCharts.defectTrend30 && data.zone_3 && data.zone_3.defect_trend_30_days) {
             const trend = data.zone_3.defect_trend_30_days;
+            const newDefectKg = trend.map(t => (t.estimated_defect_kg !== null && t.estimated_defect_kg !== undefined) ? Number(t.estimated_defect_kg) : 0);
+            const maxDefectKg = Math.max(...newDefectKg, 0);
             dashboardCharts.defectTrend30.data.labels = trend.map(t => t.day_label);
-            dashboardCharts.defectTrend30.data.datasets[0].data = trend.map(t => (t.estimated_defect_kg !== null && t.estimated_defect_kg !== undefined) ? Number(t.estimated_defect_kg) : 0);
+            dashboardCharts.defectTrend30.data.datasets[0].data = newDefectKg;
+            dashboardCharts.defectTrend30.data.datasets[0].trendData = trend;
             dashboardCharts.defectTrend30.data.datasets[0].backgroundColor = trend.map(t => (t.defect_pcs === null) ? 'rgba(203, 213, 225, 0.4)' : ((t.estimated_defect_kg > 0 || t.defect_pcs > 0) ? '#e11d48' : '#e2e8f0'));
+            dashboardCharts.defectTrend30.options.scales.y.suggestedMax = maxDefectKg > 0 ? maxDefectKg * 1.25 : 10;
             dashboardCharts.defectTrend30.update();
         }
 

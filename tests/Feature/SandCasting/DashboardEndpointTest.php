@@ -1386,16 +1386,131 @@ class DashboardEndpointTest extends TestCase
         $this->assertTrue($reportStages->has('cor'));
         $this->assertSame(60, $reportStages['cor']['good_pcs']);
 
-        // 6. Blade template contains explicit #E5E7EB tick color and does not re-add Cor
+        // 6. Blade template contains explicit #4B5563 tick color (Phase 5H) and does not re-add Cor
         $viewRes = $this->actingAs($this->adminUser)->get('/sand-casting/dashboard');
         $viewRes->assertStatus(200);
         $viewContent = $viewRes->getContent();
 
         // Check explicit X-axis tick color in initCharts and in updateChartsInPlace
-        $this->assertStringContainsString("ticks: { color: '#E5E7EB', font: { weight: 'bold', size: 12 } }", $viewContent);
-        $this->assertStringContainsString("dashboardCharts.throughput.options.scales.x.ticks.color = '#E5E7EB';", $viewContent);
+        $this->assertStringContainsString("ticks: { color: '#4B5563', font: { weight: 'bold', size: 12 } }", $viewContent);
+        $this->assertStringContainsString("dashboardCharts.throughput.options.scales.x.ticks.color = '#4B5563';", $viewContent);
 
         // Check that Cor filter is present in JS
+        $this->assertStringContainsString("filter(s => s.stage !== 'cor')", $viewContent);
+    }
+
+    public function test_phase_5k_zone_3_defect_trend_direct_labels_specifications(): void
+    {
+        $defectKasar = \App\Models\DefectType::firstOrCreate(['name' => 'Kasar / Erosi'], ['department' => 'COR', 'is_active' => true]);
+
+        $threeDaysAgo = now()->subDays(3)->toDateString();
+        $fiveDaysAgo = now()->subDays(5)->toDateString();
+        $tenDaysAgo = now()->subDays(10)->toDateString();
+
+        // 1. Day with confirmed defects and known weight (e.g. 5 days ago: 27 pcs defect, 4.0 kg/pcs => 108.0 kg)
+        [$planWithWeight, $lineWithWeight] = $this->createPlanWithKtrLine(['qty_good' => 100, 'unit_weight_kg' => 4.0], ['weight' => 4.0]);
+        $execWithWeight = $lineWithWeight->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 27,
+            'good_qty' => 73,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $fiveDaysAgo,
+            'qc_verified_at' => now()->subDays(5),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(5),
+            'physical_done_at' => now()->subDays(5),
+        ]);
+        $execWithWeight->defects()->create(['defect_type_id' => $defectKasar->id, 'qty' => 27]);
+
+        // 2. Day with confirmed defects but unavailable weight (e.g. 10 days ago: 5 pcs defect, 0.0 kg/pcs => null kg)
+        [$planUnweighted, $lineUnweighted] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 0.0], ['weight' => 0.0]);
+        $execUnweighted = $lineUnweighted->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $tenDaysAgo,
+            'qc_verified_at' => now()->subDays(10),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(10),
+            'physical_done_at' => now()->subDays(10),
+        ]);
+        $execUnweighted->defects()->create(['defect_type_id' => $defectKasar->id, 'qty' => 5]);
+
+        // 3. Day with zero defect confirmed (3 days ago: 0 defect)
+        [$planZero, $lineZero] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 2.0], ['weight' => 2.0]);
+        $lineZero->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $threeDaysAgo,
+            'qc_verified_at' => now()->subDays(3),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now()->subDays(3),
+            'physical_done_at' => now()->subDays(3),
+        ]);
+
+        // Fetch payload from Zone 3
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3&fresh=1');
+        $res->assertStatus(200);
+
+        $trend30 = $res->json('zone_3.defect_trend_30_days');
+        $this->assertCount(30, $trend30);
+        $trendMap = collect($trend30)->keyBy('date');
+
+        // Verification 1: Five days ago has 27 pcs and 108.0 kg from payload
+        $this->assertSame(27, $trendMap[$fiveDaysAgo]['defect_pcs']);
+        $this->assertEquals(108.0, (float) $trendMap[$fiveDaysAgo]['estimated_defect_kg']);
+        $this->assertTrue($trendMap[$fiveDaysAgo]['is_weight_available']);
+        $this->assertSame('has_defect', $trendMap[$fiveDaysAgo]['status']);
+
+        // Verification 2: Ten days ago has 5 pcs defect, but estimated_defect_kg is null (not 0.0 false zero)
+        $this->assertSame(5, $trendMap[$tenDaysAgo]['defect_pcs']);
+        $this->assertNull($trendMap[$tenDaysAgo]['estimated_defect_kg']);
+        $this->assertFalse($trendMap[$tenDaysAgo]['is_weight_available']);
+        $this->assertSame('has_defect', $trendMap[$tenDaysAgo]['status']);
+
+        // Verification 3: Three days ago has confirmed zero_defect (0 pcs, 0.0 kg)
+        $this->assertSame(0, $trendMap[$threeDaysAgo]['defect_pcs']);
+        $this->assertEquals(0.0, (float) $trendMap[$threeDaysAgo]['estimated_defect_kg']);
+        $this->assertSame('zero_defect', $trendMap[$threeDaysAgo]['status']);
+
+        // Verification 4: Twenty days ago has no inspections at all (no_data, null pcs, null kg)
+        $twentyDaysAgo = now()->subDays(20)->toDateString();
+        $this->assertNull($trendMap[$twentyDaysAgo]['defect_pcs']);
+        $this->assertNull($trendMap[$twentyDaysAgo]['estimated_defect_kg']);
+        $this->assertSame('no_data', $trendMap[$twentyDaysAgo]['status']);
+
+        // Blade view verification
+        $viewRes = $this->actingAs($this->adminUser)->get('/sand-casting/dashboard');
+        $viewRes->assertStatus(200);
+        $viewContent = $viewRes->getContent();
+
+        // 5. Plugin definition and registration
+        $this->assertStringContainsString('const defectTrendDirectLabelsPlugin = {', $viewContent);
+        $this->assertStringContainsString("id: 'defectTrendDirectLabels',", $viewContent);
+        $this->assertStringContainsString('plugins: [defectTrendDirectLabelsPlugin],', $viewContent);
+
+        // 6. Data binding in initCharts and updateChartsInPlace
+        $this->assertStringContainsString('trendData: trend,', $viewContent);
+        $this->assertStringContainsString('dashboardCharts.defectTrend30.data.datasets[0].trendData = trend;', $viewContent);
+
+        // 7. Null weight and zero suppression logic
+        $this->assertStringContainsString('item.defect_pcs === null || item.defect_pcs === undefined || Number(item.defect_pcs) <= 0', $viewContent);
+        $this->assertStringContainsString("kgText = 'n/a';", $viewContent);
+
+        // 8. Headroom and padding to prevent clipping
+        $this->assertStringContainsString('top: 28,', $viewContent);
+
+        // 9. Zone 1 and Zone 2 specifications remain intact
+        $this->assertStringContainsString('directDataLabelsPlugin', $viewContent);
         $this->assertStringContainsString("filter(s => s.stage !== 'cor')", $viewContent);
     }
 }

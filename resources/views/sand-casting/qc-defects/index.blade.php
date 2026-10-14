@@ -63,13 +63,6 @@
         <!-- 2. STAGE FILTER BAR -->
         <div class="bg-white border-b border-slate-200 px-2 rounded-t-lg shadow-xs flex items-center justify-between gap-2">
             <nav class="flex space-x-1 overflow-x-auto py-1.5" aria-label="Stage Tabs">
-                <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => 'all', 'page' => 1])) }}"
-                    class="whitespace-nowrap py-1.5 px-3 border-b-2 font-bold text-xs flex items-center gap-1.5 transition-all {{ empty($selectedStage) ? 'border-blue-600 text-blue-700 bg-blue-50/70 rounded-t' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300' }}">
-                    <span>SEMUA TAHAP</span>
-                    <span class="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-black rounded-full {{ empty($selectedStage) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700' }}">
-                        {{ $summary['waiting_qc_count'] ?? 0 }}
-                    </span>
-                </a>
                 @foreach($stages as $stageKey)
                     @php
                         $isStgActive = ($selectedStage === $stageKey);
@@ -109,7 +102,7 @@
                 </button>
 
                 @if($search || $selectedStage)
-                    <a href="{{ route('sand-casting.qc-defects.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
+                    <a href="{{ $selectedStage ? route('sand-casting.qc-defects.index', ['stage' => $selectedStage]) : route('sand-casting.qc-defects.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
                         Reset
                     </a>
                 @endif
@@ -118,14 +111,68 @@
 
         <!-- 4. MAIN EXCEL-LIKE WORK QUEUE TABLE -->
         <div class="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden flex flex-col">
-            @if($executions->isEmpty())
+            @if(! empty($invalidStage))
+                <div class="p-12 text-center">
+                    <div class="w-14 h-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-red-200 shadow-xs">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800">
+                        Tahap '{{ $invalidStage }}' Tidak Valid
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                        Tahap yang Anda pilih tidak termasuk dalam 6 tahap resmi workflow Sand Casting. Silakan pilih salah satu tahap resmi di bawah ini.
+                    </p>
+                    <div class="mt-4 flex flex-wrap justify-center gap-2">
+                        @foreach($stages as $stageKey)
+                            @php
+                                $count = $summary['stage_counts'][$stageKey] ?? 0;
+                                $stageLabel = $stageLabels[$stageKey] ?? strtoupper(str_replace('_', ' ', $stageKey));
+                            @endphp
+                            <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => $stageKey, 'page' => 1])) }}"
+                                class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-700 font-bold text-xs transition flex items-center gap-1.5 shadow-xs">
+                                <span>{{ $stageLabel }}</span>
+                                @if($count > 0)
+                                    <span class="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-800 font-black rounded-full">{{ $count }}</span>
+                                @endif
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @elseif(empty($selectedStage))
+                <div class="p-12 text-center">
+                    <div class="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl border border-blue-200 shadow-xs">
+                        <i class="fas fa-hand-pointer"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800">
+                        Pilih Tahap Produksi Terlebih Dahulu
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                        Pilih salah satu tahap produksi di atas untuk menampilkan antrean verifikasi QC. Verifikasi defect wajib dilakukan dalam konteks tahap yang eksplisit.
+                    </p>
+                    <div class="mt-4 flex flex-wrap justify-center gap-2">
+                        @foreach($stages as $stageKey)
+                            @php
+                                $count = $summary['stage_counts'][$stageKey] ?? 0;
+                                $stageLabel = $stageLabels[$stageKey] ?? strtoupper(str_replace('_', ' ', $stageKey));
+                            @endphp
+                            <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => $stageKey, 'page' => 1])) }}"
+                                class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-700 font-bold text-xs transition flex items-center gap-1.5 shadow-xs">
+                                <span>{{ $stageLabel }}</span>
+                                @if($count > 0)
+                                    <span class="text-[10px] px-1.5 py-0.2 bg-blue-100 text-blue-800 font-black rounded-full">{{ $count }}</span>
+                                @endif
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            @elseif($executions->isEmpty())
                 <div class="p-12 text-center">
                     <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
                         <i class="fas fa-clipboard-check text-blue-500"></i>
                     </div>
                     <h3 class="text-sm font-bold text-slate-700">Semua Kerusakan Terverifikasi</h3>
                     <p class="text-xs text-slate-400 mt-0.5">
-                        Tidak ada KTR yang sedang menunggu verifikasi detail defect oleh Admin QC.
+                        Tidak ada KTR pada tahap {{ $stageLabels[$selectedStage] ?? strtoupper($selectedStage) }} yang sedang menunggu verifikasi detail defect oleh Admin QC.
                     </p>
                 </div>
             @else
@@ -293,6 +340,7 @@
                 <!-- Modal Form -->
                 <form id="qcForm" method="POST" action="">
                     @csrf
+                    <input type="hidden" name="stage" id="qc_modal_stage" value="{{ $selectedStage ?? '' }}">
                     <div class="p-4 space-y-3 text-xs">
                         
                         <!-- Re-Verification Alert Banner -->
@@ -457,6 +505,10 @@
 
             // Update action route URL
             form.action = "{{ route('sand-casting.qc-defects.verify', ':id') }}".replace(':id', card.id);
+            const modalStageInput = document.getElementById('qc_modal_stage');
+            if (modalStageInput) {
+                modalStageInput.value = card.stage || '';
+            }
 
             // Re-verification alert
             const alertBanner = document.getElementById('reverificationAlertBanner');
