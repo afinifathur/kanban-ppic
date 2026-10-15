@@ -45,6 +45,11 @@ class QcDefectVerificationController extends Controller
             abort(403, $e->getMessage());
         }
 
+        $mode = $request->query('mode', 'unrecorded');
+        if (! in_array($mode, ['unrecorded', 'recorded'], true)) {
+            $mode = 'unrecorded';
+        }
+
         $filters = [
             'search' => $request->query('search'),
         ];
@@ -67,7 +72,7 @@ class QcDefectVerificationController extends Controller
         }
 
         $summary = $this->queryService->getQcVerificationSummary();
-        $paginatedExecutions = $this->queryService->getQcVerificationPaginated($selectedStage, $filters, 25);
+        $paginatedExecutions = $this->queryService->getQcVerificationPaginated($mode, $selectedStage, $filters, 25);
         $paginatedExecutions->appends($request->query());
 
         // Backward compatibility queue data
@@ -87,6 +92,7 @@ class QcDefectVerificationController extends Controller
         return view('sand-casting.qc-defects.index', [
             'summary' => $summary,
             'executions' => $paginatedExecutions,
+            'mode' => $mode,
             'selectedStage' => $selectedStage,
             'invalidStage' => $invalidStage,
             'queues' => $queues,

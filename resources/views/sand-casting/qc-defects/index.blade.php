@@ -44,11 +44,15 @@
             <div class="flex items-center gap-2 flex-wrap">
                 <span class="inline-flex items-center gap-1 text-slate-800">
                     <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                    <strong class="font-black text-slate-900">{{ number_format($summary['waiting_qc_count'] ?? 0) }} KTR</strong> menunggu verifikasi
+                    <strong class="font-black text-slate-900">{{ number_format($summary['unrecorded_count'] ?? $summary['waiting_qc_count'] ?? 0) }} KTR</strong> belum dicatat
                 </span>
                 <span class="text-slate-300">·</span>
                 <span class="inline-flex items-center gap-1 text-slate-800">
                     <strong class="font-black text-blue-700">{{ number_format($summary['waiting_qc_defect_pcs'] ?? 0) }} PCS</strong> defect
+                </span>
+                <span class="text-slate-300">·</span>
+                <span class="inline-flex items-center gap-1 text-emerald-700">
+                    <strong class="font-black">{{ number_format($summary['recorded_count'] ?? 0) }} KTR</strong> sudah dicatat ({{ number_format($summary['recorded_defect_pcs'] ?? 0) }} pcs defect)
                 </span>
                 <span class="text-slate-300">·</span>
                 <span class="text-slate-500">
@@ -56,33 +60,62 @@
                 </span>
             </div>
             <div class="text-[11px] text-slate-400 font-medium">
-                <i class="fas fa-sort-amount-down-alt mr-1 text-blue-600"></i>FIFO Antrian · Terlama &rarr; Terbaru
+                @if($mode === 'recorded')
+                    <i class="fas fa-history mr-1 text-emerald-600"></i>Monitoring · Defect Terbaru &rarr; Terlama
+                @else
+                    <i class="fas fa-sort-amount-down-alt mr-1 text-blue-600"></i>FIFO Antrian · Terlama &rarr; Terbaru
+                @endif
             </div>
         </div>
 
-        <!-- 2. STAGE FILTER BAR -->
-        <div class="bg-white border-b border-slate-200 px-2 rounded-t-lg shadow-xs flex items-center justify-between gap-2">
-            <nav class="flex space-x-1 overflow-x-auto py-1.5" aria-label="Stage Tabs">
-                @foreach($stages as $stageKey)
+        <!-- 2. MAIN 2-TAB BAR (BELUM CATAT VS SUDAH CATAT) -->
+        <div class="bg-white border-b border-slate-200 px-2 rounded-t-lg shadow-xs flex flex-wrap items-center justify-between gap-2">
+            <nav class="flex space-x-2 overflow-x-auto py-1.5" aria-label="Main Tabs">
+                <!-- Tab 1: Belum Catat -->
+                <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['mode' => 'unrecorded', 'page' => 1])) }}"
+                    class="whitespace-nowrap py-1.5 px-3.5 border-b-2 font-bold text-xs flex items-center gap-2 transition-all {{ $mode === 'unrecorded' ? 'border-blue-600 text-blue-700 bg-blue-50/70 rounded-t' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300' }}">
+                    <i class="fas fa-clock text-blue-600"></i>
+                    <span>BELUM CATAT</span>
+                    <span class="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-black rounded-full {{ $mode === 'unrecorded' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700' }}">
+                        {{ $summary['unrecorded_count'] ?? $summary['waiting_qc_count'] ?? 0 }}
+                    </span>
+                </a>
+
+                <!-- Tab 2: Sudah Catat -->
+                <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['mode' => 'recorded', 'page' => 1])) }}"
+                    class="whitespace-nowrap py-1.5 px-3.5 border-b-2 font-bold text-xs flex items-center gap-2 transition-all {{ $mode === 'recorded' ? 'border-emerald-600 text-emerald-700 bg-emerald-50/70 rounded-t' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300' }}">
+                    <i class="fas fa-clipboard-check text-emerald-600"></i>
+                    <span>SUDAH CATAT</span>
+                    <span class="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-black rounded-full {{ $mode === 'recorded' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700' }}">
+                        {{ $summary['recorded_count'] ?? 0 }}
+                    </span>
+                </a>
+            </nav>
+
+            <!-- Stage Filter Pills -->
+            <div class="flex items-center gap-1 text-[11px] overflow-x-auto py-1">
+                <span class="text-slate-400 font-bold mr-1">Tahap:</span>
+                @foreach($stages as $stgKey)
                     @php
-                        $isStgActive = ($selectedStage === $stageKey);
-                        $count = $summary['stage_counts'][$stageKey] ?? 0;
-                        $stageLabel = $stageLabels[$stageKey] ?? strtoupper(str_replace('_', ' ', $stageKey));
+                        $stgLabel = $stageLabels[$stgKey] ?? strtoupper(str_replace('_', ' ', $stgKey));
+                        $isStgActive = ($selectedStage === $stgKey);
+                        $stageCounter = ($mode === 'recorded') ? ($summary['stage_recorded_counts'][$stgKey] ?? 0) : ($summary['stage_counts'][$stgKey] ?? 0);
                     @endphp
-                    <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => $stageKey, 'page' => 1])) }}"
-                        class="whitespace-nowrap py-1.5 px-3 border-b-2 font-bold text-xs flex items-center gap-1.5 transition-all {{ $isStgActive ? 'border-blue-600 text-blue-700 bg-blue-50/70 rounded-t' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300' }}">
-                        <span>{{ $stageLabel }}</span>
-                        <span class="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-black rounded-full {{ $isStgActive ? 'bg-blue-600 text-white' : ($count > 0 ? 'bg-blue-100 text-blue-800 font-bold' : 'bg-slate-100 text-slate-400 font-normal') }}">
-                            {{ $count }}
-                        </span>
+                    <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => $stgKey, 'page' => 1])) }}"
+                        class="px-2.5 py-1 rounded-md font-bold text-xs transition flex items-center gap-1.5 {{ $isStgActive ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                        <span>{{ $stgLabel }}</span>
+                        @if($stageCounter > 0)
+                            <span class="text-[9px] px-1.5 py-0.2 rounded-full font-black {{ $isStgActive ? 'bg-white text-blue-700' : 'bg-slate-200 text-slate-700' }}">{{ $stageCounter }}</span>
+                        @endif
                     </a>
                 @endforeach
-            </nav>
+            </div>
         </div>
 
         <!-- 3. COMPACT SEARCH / FILTER BAR -->
         <div class="bg-white px-3 py-2 rounded-b-lg border border-t-0 border-slate-200 shadow-xs flex items-center justify-between gap-2">
             <form method="GET" action="{{ route('sand-casting.qc-defects.index') }}" class="w-full flex items-center gap-2">
+                <input type="hidden" name="mode" value="{{ $mode }}">
                 @if($selectedStage)
                     <input type="hidden" name="stage" value="{{ $selectedStage }}">
                 @endif
@@ -102,7 +135,7 @@
                 </button>
 
                 @if($search || $selectedStage)
-                    <a href="{{ $selectedStage ? route('sand-casting.qc-defects.index', ['stage' => $selectedStage]) : route('sand-casting.qc-defects.index') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
+                    <a href="{{ $selectedStage ? route('sand-casting.qc-defects.index', ['mode' => $mode, 'stage' => $selectedStage]) : route('sand-casting.qc-defects.index', ['mode' => $mode]) }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
                         Reset
                     </a>
                 @endif
@@ -125,7 +158,7 @@
                     <div class="mt-4 flex flex-wrap justify-center gap-2">
                         @foreach($stages as $stageKey)
                             @php
-                                $count = $summary['stage_counts'][$stageKey] ?? 0;
+                                $count = ($mode === 'recorded') ? ($summary['stage_recorded_counts'][$stageKey] ?? 0) : ($summary['stage_counts'][$stageKey] ?? 0);
                                 $stageLabel = $stageLabels[$stageKey] ?? strtoupper(str_replace('_', ' ', $stageKey));
                             @endphp
                             <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => $stageKey, 'page' => 1])) }}"
@@ -152,7 +185,7 @@
                     <div class="mt-4 flex flex-wrap justify-center gap-2">
                         @foreach($stages as $stageKey)
                             @php
-                                $count = $summary['stage_counts'][$stageKey] ?? 0;
+                                $count = ($mode === 'recorded') ? ($summary['stage_recorded_counts'][$stageKey] ?? 0) : ($summary['stage_counts'][$stageKey] ?? 0);
                                 $stageLabel = $stageLabels[$stageKey] ?? strtoupper(str_replace('_', ' ', $stageKey));
                             @endphp
                             <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['stage' => $stageKey, 'page' => 1])) }}"
@@ -168,11 +201,19 @@
             @elseif($executions->isEmpty())
                 <div class="p-12 text-center">
                     <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
-                        <i class="fas fa-clipboard-check text-blue-500"></i>
+                        @if($mode === 'recorded')
+                            <i class="fas fa-clipboard-list text-emerald-500"></i>
+                        @else
+                            <i class="fas fa-clipboard-check text-blue-500"></i>
+                        @endif
                     </div>
-                    <h3 class="text-sm font-bold text-slate-700">Semua Kerusakan Terverifikasi</h3>
+                    <h3 class="text-sm font-bold text-slate-700">
+                        {{ $mode === 'recorded' ? 'Belum Ada Riwayat Verifikasi QC' : 'Semua Kerusakan Terverifikasi' }}
+                    </h3>
                     <p class="text-xs text-slate-400 mt-0.5">
-                        Tidak ada KTR pada tahap {{ $stageLabels[$selectedStage] ?? strtoupper($selectedStage) }} yang sedang menunggu verifikasi detail defect oleh Admin QC.
+                        {{ $mode === 'recorded'
+                            ? 'Data breakdown defect yang sudah diverifikasi dan terkonfirmasi QC pada tahap ' . ($stageLabels[$selectedStage] ?? strtoupper($selectedStage)) . ' akan tampil di tab ini.'
+                            : 'Tidak ada KTR pada tahap ' . ($stageLabels[$selectedStage] ?? strtoupper($selectedStage)) . ' yang sedang menunggu verifikasi detail defect oleh Admin QC.' }}
                     </p>
                 </div>
             @else
@@ -187,10 +228,18 @@
                                 <th class="py-2.5 px-3 bg-slate-100">Heat</th>
                                 <th class="py-2.5 px-3 bg-slate-100">Tahap / Checkpoint</th>
                                 <th class="py-2.5 px-3 text-right bg-slate-100">Hasil (Input)</th>
-                                <th class="py-2.5 px-3 text-right bg-slate-100">Total Defect</th>
-                                <th class="py-2.5 px-3 text-right bg-slate-100">Good</th>
-                                <th class="py-2.5 px-3 text-center bg-slate-100">Status Re-Verifikasi</th>
-                                <th class="py-2.5 px-3 text-center bg-slate-100 w-32">Aksi</th>
+                                @if($mode === 'recorded')
+                                    <th class="py-2.5 px-3 text-right bg-slate-100">Defect Terkonfirmasi</th>
+                                    <th class="py-2.5 px-3 text-right bg-slate-100">Good</th>
+                                    <th class="py-2.5 px-3 bg-slate-100">Rincian Defect QC</th>
+                                    <th class="py-2.5 px-3 bg-slate-100">Diverifikasi Oleh</th>
+                                    <th class="py-2.5 px-3 text-center bg-slate-100 w-32">Status</th>
+                                @else
+                                    <th class="py-2.5 px-3 text-right bg-slate-100">Total Defect</th>
+                                    <th class="py-2.5 px-3 text-right bg-slate-100">Good</th>
+                                    <th class="py-2.5 px-3 text-center bg-slate-100">Status Re-Verifikasi</th>
+                                    <th class="py-2.5 px-3 text-center bg-slate-100 w-32">Aksi</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -261,39 +310,81 @@
                                         {{ number_format($card['input_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
                                     </td>
 
-                                    <!-- Total Defect PPIC -->
-                                    <td class="py-2 px-3 text-right whitespace-nowrap font-black {{ $card['defect_qty'] > 0 ? 'text-red-600' : 'text-slate-500' }}">
-                                        {{ number_format($card['defect_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
-                                    </td>
+                                    @if($mode === 'recorded')
+                                        <!-- Defect Terkonfirmasi -->
+                                        <td class="py-2 px-3 text-right whitespace-nowrap font-black {{ $card['defect_qty'] > 0 ? 'text-rose-600' : 'text-slate-500' }}">
+                                            {{ number_format($card['defect_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
+                                        </td>
 
-                                    <!-- Good Qty -->
-                                    <td class="py-2 px-3 text-right font-black text-emerald-600 whitespace-nowrap">
-                                        {{ number_format($card['good_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
-                                    </td>
+                                        <!-- Good Qty -->
+                                        <td class="py-2 px-3 text-right font-black text-emerald-600 whitespace-nowrap">
+                                            {{ number_format($card['good_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
+                                        </td>
 
-                                    <!-- Status Re-Verifikasi Indicator -->
-                                    <td class="py-2 px-3 text-center whitespace-nowrap">
-                                        @if($card['is_reverification'])
-                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1" title="Defect bertambah dari {{ $card['previous_defect_qty'] }} pcs menjadi {{ $card['defect_qty'] }} pcs (+{{ $card['added_defect_qty'] }} pcs)">
-                                                <i class="fas fa-exclamation-triangle text-amber-600"></i>
-                                                DEFECT BERTAMBAH (+{{ $card['added_defect_qty'] }})
+                                        <!-- Rincian Defect QC -->
+                                        <td class="py-2 px-3">
+                                            @if(!empty($card['defects']))
+                                                <div class="flex flex-wrap gap-1 max-w-[260px]">
+                                                    @foreach($card['defects'] as $def)
+                                                        <span class="inline-flex items-center gap-1 bg-rose-50 text-rose-800 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                                            <span class="font-bold">{{ $def['defect_name'] }}:</span>
+                                                            <span class="font-black text-rose-600">{{ number_format($def['qty']) }}</span>
+                                                        </span>
+                                                    @endforeach
+                                                </div>
+                                            @else
+                                                <span class="text-slate-400 text-xs italic">Nihil / 0 pcs</span>
+                                            @endif
+                                        </td>
+
+                                        <!-- Diverifikasi Oleh -->
+                                        <td class="py-2 px-3 whitespace-nowrap">
+                                            <div class="font-bold text-slate-800 text-xs">{{ $card['qc_verified_by_name'] }}</div>
+                                            <div class="text-[10px] text-slate-400 font-mono">{{ $card['qc_verified_at'] ? \Carbon\Carbon::parse($card['qc_verified_at'])->format('d/m/Y H:i') : '-' }}</div>
+                                        </td>
+
+                                        <!-- Status -->
+                                        <td class="py-2 px-3 text-center whitespace-nowrap">
+                                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1">
+                                                <i class="fas fa-check-double text-emerald-600"></i>
+                                                TERKONFIRMASI
                                             </span>
-                                        @else
-                                            <span class="bg-blue-50 text-blue-700 border border-blue-200 font-semibold px-1.5 py-0.5 rounded text-[10px]">
-                                                Verifikasi Baru
-                                            </span>
-                                        @endif
-                                    </td>
+                                        </td>
+                                    @else
+                                        <!-- Total Defect PPIC -->
+                                        <td class="py-2 px-3 text-right whitespace-nowrap font-black {{ $card['defect_qty'] > 0 ? 'text-red-600' : 'text-slate-500' }}">
+                                            {{ number_format($card['defect_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
+                                        </td>
 
-                                    <!-- Aksi Button (Blue QC Action) -->
-                                    <td class="py-2 px-3 text-center whitespace-nowrap">
-                                        <button type="button"
-                                            onclick="openQcModal({{ json_encode($card) }})"
-                                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
-                                            <i class="fas fa-check-double text-[10px]"></i>
-                                            VERIFIKASI
-                                        </button>
-                                    </td>
+                                        <!-- Good Qty -->
+                                        <td class="py-2 px-3 text-right font-black text-emerald-600 whitespace-nowrap">
+                                            {{ number_format($card['good_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
+                                        </td>
+
+                                        <!-- Status Re-Verifikasi Indicator -->
+                                        <td class="py-2 px-3 text-center whitespace-nowrap">
+                                            @if($card['is_reverification'])
+                                                <span class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1" title="Defect bertambah dari {{ $card['previous_defect_qty'] }} pcs menjadi {{ $card['defect_qty'] }} pcs (+{{ $card['added_defect_qty'] }} pcs)">
+                                                    <i class="fas fa-exclamation-triangle text-amber-600"></i>
+                                                    DEFECT BERTAMBAH (+{{ $card['added_defect_qty'] }})
+                                                </span>
+                                            @else
+                                                <span class="bg-blue-50 text-blue-700 border border-blue-200 font-semibold px-1.5 py-0.5 rounded text-[10px]">
+                                                    Verifikasi Baru
+                                                </span>
+                                            @endif
+                                        </td>
+
+                                        <!-- Aksi Button (Blue QC Action) -->
+                                        <td class="py-2 px-3 text-center whitespace-nowrap">
+                                            <button type="button"
+                                                onclick="openQcModal({{ json_encode($card) }})"
+                                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
+                                                <i class="fas fa-check-double text-[10px]"></i>
+                                                VERIFIKASI
+                                            </button>
+                                        </td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </tbody>

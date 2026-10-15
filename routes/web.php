@@ -280,6 +280,13 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportPdf'])->name('export.pdf');
         });
 
+        // QC Defect Detail Report Routes (Sand Casting)
+        Route::prefix('report/qc-defects')->name('report.qc-defects.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'index'])->name('index');
+            Route::get('/export/excel', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'exportExcel'])->name('export.excel');
+            Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'exportPdf'])->name('export.pdf');
+        });
+
         // Production Status (Sand Casting Read Model)
         Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
         Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');

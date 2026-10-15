@@ -77,7 +77,13 @@ class SandCastingProductionStatusService
                 $q->where('code', 'like', "%{$search}%")
                     ->orWhere('po_number', 'like', "%{$search}%")
                     ->orWhere('customer', 'like', "%{$search}%")
-                    ->orWhere('item_name', 'like', "%{$search}%");
+                    ->orWhere('item_name', 'like', "%{$search}%")
+                    ->orWhereHas('sandCastingResultLines', function (Builder $lq) use ($search) {
+                        $lq->where('traveler_number', 'like', "%{$search}%")
+                            ->orWhereHas('castingResult', function (Builder $rq) use ($search) {
+                                $rq->where('heat_number', 'like', "%{$search}%");
+                            });
+                    });
             });
         }
 

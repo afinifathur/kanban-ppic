@@ -1351,43 +1351,66 @@ class SandCastingProductionFloorQueryService
     public function getQcVerificationSummary(): array
     {
         $waitingExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)->get();
+        $confirmedExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_CONFIRMED)
+            ->whereNotNull('qc_verified_at')
+            ->get();
 
-        $todayVerifiedCount = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_CONFIRMED)
-            ->whereDate('qc_verified_at', today())
+        $todayVerifiedCount = $confirmedExecs
+            ->filter(fn ($e) => $e->qc_verified_at && $e->qc_verified_at->isToday())
             ->count();
 
         $stageCounts = [];
+        $stageRecordedCounts = [];
         foreach (SandCastingStageExecutionService::STAGES as $stg) {
             $stageCounts[$stg] = $waitingExecs->where('stage', $stg)->count();
+            $stageRecordedCounts[$stg] = $confirmedExecs->where('stage', $stg)->count();
         }
 
         return [
             'waiting_qc_count' => $waitingExecs->count(),
+            'unrecorded_count' => $waitingExecs->count(),
             'waiting_qc_defect_pcs' => (int) $waitingExecs->sum('defect_qty'),
+            'recorded_count' => $confirmedExecs->count(),
+            'recorded_defect_pcs' => (int) $confirmedExecs->sum('defect_qty'),
             'today_verified_count' => $todayVerifiedCount,
             'stage_counts' => $stageCounts,
+            'stage_recorded_counts' => $stageRecordedCounts,
         ];
     }
 
     /**
-     * Get paginated stage executions for QC Defect Verification dashboard.
+     * Get paginated stage executions for QC Defect Verification dashboard (Belum Catat vs Sudah Catat).
      *
+     * @param  string|null  $modeOrStage  'unrecorded', 'recorded', or canonical stage name (for BC)
      * @param  string|null  $stage  Canonical stage name or null for all stages
      * @param  array{search?: string}  $filters
      */
-    public function getQcVerificationPaginated(?string $stage = null, array $filters = [], int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    public function getQcVerificationPaginated(?string $modeOrStage = 'unrecorded', ?string $stage = null, array $filters = [], int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
+        if (in_array($modeOrStage, ['unrecorded', 'recorded'], true)) {
+            $mode = $modeOrStage;
+            $targetStage = $stage;
+        } else {
+            // Backward compatibility for signature: getQcVerificationPaginated(?string $stage, array $filters = [], int $perPage = 25)
+            $mode = 'unrecorded';
+            $targetStage = $modeOrStage;
+            if (is_array($stage)) {
+                $perPage = ! empty($filters) && is_int($filters) ? $filters : $perPage;
+                $filters = $stage;
+            }
+        }
+
         // Stage must be explicitly selected and valid; never return cross-stage listing
-        if ($stage === null || $stage === '' || $stage === 'all') {
+        if ($targetStage === null || $targetStage === '' || $targetStage === 'all') {
             return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
         }
 
-        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage);
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($targetStage);
         if ($canonicalStage === null || ! in_array($canonicalStage, SandCastingStageExecutionService::STAGES, true)) {
             return new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, 1);
         }
 
-        $query = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+        $query = SandCastingStageExecution::query()
             ->where('stage', $canonicalStage)
             ->with([
                 'castingResultLine.castingResult',
@@ -1398,9 +1421,19 @@ class SandCastingProductionFloorQueryService
                 'qcVerifiedBy',
                 'defects.defectType',
                 'defectLogs.user',
-            ])
-            ->orderBy('defect_entered_at', 'asc')
-            ->orderBy('id', 'asc');
+            ]);
+
+        if ($mode === 'recorded') {
+            $query->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
+                ->whereNotNull('qc_verified_at')
+                ->orderBy('qc_verified_at', 'desc')
+                ->orderBy('id', 'desc');
+        } else {
+            // Default unrecorded: WAITING_QC FIFO queue
+            $query->where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+                ->orderBy('defect_entered_at', 'asc')
+                ->orderBy('id', 'asc');
+        }
 
         if (! empty($filters['search'])) {
             $term = '%'.trim((string) $filters['search']).'%';
@@ -1613,9 +1646,15 @@ class SandCastingProductionFloorQueryService
     public function getStageDefectTypes(string $stage): \Illuminate\Database\Eloquent\Collection
     {
         $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($stage) ?? $stage;
+        $departments = [$canonicalStage];
 
-        return \App\Models\DefectType::where(function ($q) use ($canonicalStage) {
-            $q->where('department', $canonicalStage)
+        // Compatibility mapping: 'qc' operational stage corresponds to 'finish' in defect_types table
+        if ($canonicalStage === 'qc') {
+            $departments[] = 'finish';
+        }
+
+        return \App\Models\DefectType::where(function ($q) use ($departments) {
+            $q->whereIn('department', $departments)
                 ->orWhereNull('department')
                 ->orWhere('department', 'all');
         })

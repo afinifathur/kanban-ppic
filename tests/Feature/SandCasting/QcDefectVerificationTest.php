@@ -10,6 +10,7 @@ use App\Models\SandCastingCastingResultLine;
 use App\Models\SandCastingStageExecution;
 use App\Models\User;
 use App\Services\SandCasting\SandCastingProductionFloorQueryService;
+use App\Services\SandCasting\SandCastingQcDefectReportService;
 use App\Services\SandCasting\SandCastingStageExecutionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -884,5 +885,126 @@ class QcDefectVerificationTest extends TestCase
         $this->assertNotNull($confirmed->qc_verified_at);
         $this->assertSame($this->adminQc->id, $confirmed->qc_verified_by);
         $this->assertCount(1, $confirmed->defects);
+    }
+
+    /**
+     * TEST 15: Phase 6C-1 — QC verification tabs: Belum Catat vs Sudah Catat.
+     * - Tab Belum Catat (mode=unrecorded) only shows executions in STATUS_WAITING_QC
+     * - Tab Sudah Catat (mode=recorded) only shows executions in STATUS_CONFIRMED with qc_verified_at set
+     * - Mutually exclusive: no item appears in both tabs
+     * - Preserves stage filter, search, and pagination
+     */
+    public function test_15_qc_verification_tabs_unrecorded_and_recorded_separation_and_state(): void
+    {
+        // 1. Unrecorded item (WAITING_QC)
+        $lineA = $this->createKtrLine(['current_stage' => 'netto']);
+        $lineA->productionPlan->update(['item_name' => 'VALVE BODY UNRECORDED']);
+        $execA = $this->prepareWaitingQcExecution('netto', 5, $lineA);
+
+        // 2. Recorded item (CONFIRMED with breakdown saved by QC)
+        $lineB = $this->createKtrLine(['current_stage' => 'netto']);
+        $lineB->productionPlan->update(['item_name' => 'VALVE BODY RECORDED']);
+        $execB = $this->prepareWaitingQcExecution('netto', 3, $lineB);
+        $this->executionService->verifyQcBreakdown($execB, [
+            ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+        ], $this->adminQc->id);
+
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_QC, $execA->fresh()->status);
+        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $execB->fresh()->status);
+        $this->assertNotNull($execB->fresh()->qc_verified_at);
+
+        // Tab: Belum Catat (default mode = unrecorded)
+        $resBelum = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto');
+        $resBelum->assertStatus(200);
+        $resBelum->assertViewHas('mode', 'unrecorded');
+        $resBelum->assertSee('VALVE BODY UNRECORDED');
+        $resBelum->assertDontSee('VALVE BODY RECORDED');
+        $itemsBelum = $resBelum->viewData('executions');
+        $this->assertTrue($itemsBelum->contains('id', $execA->id));
+        $this->assertFalse($itemsBelum->contains('id', $execB->id));
+
+        // Tab: Sudah Catat (mode = recorded)
+        $resSudah = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=recorded');
+        $resSudah->assertStatus(200);
+        $resSudah->assertViewHas('mode', 'recorded');
+        $resSudah->assertSee('VALVE BODY RECORDED');
+        $resSudah->assertDontSee('VALVE BODY UNRECORDED');
+        $itemsSudah = $resSudah->viewData('executions');
+        $this->assertTrue($itemsSudah->contains('id', $execB->id));
+        $this->assertFalse($itemsSudah->contains('id', $execA->id));
+
+        // Preserves search & stage
+        $resSearch = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=recorded&search=RECORDED');
+        $resSearch->assertStatus(200);
+        $this->assertTrue($resSearch->viewData('executions')->contains('id', $execB->id));
+
+        // Summary counts
+        $summary = $this->queryService->getQcVerificationSummary();
+        $this->assertSame(1, $summary['unrecorded_count']);
+        $this->assertSame(1, $summary['recorded_count']);
+        $this->assertSame(5, $summary['waiting_qc_defect_pcs']);
+        $this->assertSame(3, $summary['recorded_defect_pcs']);
+    }
+
+    /**
+     * TEST 16: Phase 6C-1 — Defect type synchronization for stage 'qc' with finish master data.
+     * - getStageDefectTypes('qc') maps to department 'finish'
+     * - Dropdown map on stage=qc provides finish defect types
+     * - Defect verification saves defect with proper defect_type_id
+     * - Verified defect is visible in QC Defect Report
+     */
+    public function test_16_stage_qc_defect_types_sync_with_finish_master_data_and_report_readability(): void
+    {
+        $finishDefect = DefectType::create([
+            'name' => 'KEROPOS (FINISH)',
+            'department' => 'finish',
+            'is_active' => true,
+        ]);
+
+        // 1. Query service returns finish defects for stage 'qc'
+        $stageQcDefects = $this->queryService->getStageDefectTypes('qc');
+        $this->assertTrue($stageQcDefects->contains('id', $finishDefect->id));
+        $this->assertFalse($stageQcDefects->contains('id', $this->defectPorosity->id)); // netto defect excluded
+
+        // 2. Controller loads finish defect types for stage=qc
+        $resPage = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=qc');
+        $resPage->assertStatus(200);
+        $defectMap = $resPage->viewData('defectTypesMap');
+        $this->assertArrayHasKey('qc', $defectMap);
+        $this->assertTrue(collect($defectMap['qc'])->contains('id', $finishDefect->id));
+
+        // 3. Execution at stage 'qc' can be verified using this finish defect
+        $lineQc = $this->createKtrLine(['current_stage' => 'qc']);
+        $execQc = $this->createWaitingQcExecutionDirect('qc', 4, $lineQc);
+
+        $resVerify = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$execQc->id}/verify", [
+            'stage' => 'qc',
+            'defects' => [
+                [
+                    'defect_type_id' => $finishDefect->id,
+                    'qty' => 4,
+                    'notes' => 'Keropos halus pada tahap akhir QC',
+                ],
+            ],
+        ]);
+        $resVerify->assertStatus(200);
+        $resVerify->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('sand_casting_stage_execution_defects', [
+            'sand_casting_stage_execution_id' => $execQc->id,
+            'defect_type_id' => $finishDefect->id,
+            'qty' => 4,
+        ]);
+
+        // 4. Verify that SandCastingQcDefectReportService reads this record
+        $reportService = app(SandCastingQcDefectReportService::class);
+        $reportData = $reportService->getReportDataset([
+            'stage' => 'qc',
+            'date_from' => now()->subDay()->toDateString(),
+            'date_to' => now()->toDateString(),
+        ], $this->adminQc);
+
+        $this->assertSame(4, $reportData['summary']['total_defect_pcs']);
+        $this->assertTrue(collect($reportData['all_records'])->contains('defect_name', 'KEROPOS (FINISH)'));
     }
 }

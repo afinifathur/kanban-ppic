@@ -614,4 +614,103 @@ class ProductionStatusServiceTest extends TestCase
         $this->assertSame(950, $details['items'][0]['quantity']);
         $this->assertSame(50, $details['items'][0]['defect_qty']);
     }
+
+    /**
+     * SCENARIO 22: Search - Exact Heat Number returns matching Production Plan
+     */
+    public function test_22_search_exact_heat_number_returns_plan(): void
+    {
+        $plan = $this->createPlan(['code' => 'S220']);
+        $this->createKtr($plan, 100, 0, 'netto', 'HEAT-EXACT-220');
+
+        $otherPlan = $this->createPlan(['code' => 'S221']);
+        $this->createKtr($otherPlan, 100, 0, 'netto', 'HEAT-OTHER-999');
+
+        $rows = $this->service->getAggregatedRows(['search' => 'HEAT-EXACT-220']);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('S220', $rows[0]['code']);
+        $this->assertContains('HEAT-EXACT-220', $rows[0]['heat_numbers']);
+    }
+
+    /**
+     * SCENARIO 23: Search - Partial Heat Number returns matching Production Plan
+     */
+    public function test_23_search_partial_heat_number_returns_plan(): void
+    {
+        $plan = $this->createPlan(['code' => 'S230']);
+        $this->createKtr($plan, 100, 0, 'netto', 'A201102601');
+
+        $rows = $this->service->getAggregatedRows(['search' => '1102601']);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('S230', $rows[0]['code']);
+        $this->assertContains('A201102601', $rows[0]['heat_numbers']);
+    }
+
+    /**
+     * SCENARIO 24: Search - Exact KTR traveler number returns matching Production Plan
+     */
+    public function test_24_search_exact_ktr_traveler_number_returns_plan(): void
+    {
+        $plan = $this->createPlan(['code' => 'S240']);
+        $ktr = $this->createKtr($plan, 100, 0, 'netto', 'HN-240');
+
+        $otherPlan = $this->createPlan(['code' => 'S241']);
+        $this->createKtr($otherPlan, 100, 0, 'netto', 'HN-241');
+
+        $rows = $this->service->getAggregatedRows(['search' => $ktr->traveler_number]);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('S240', $rows[0]['code']);
+    }
+
+    /**
+     * SCENARIO 25: Search - Partial KTR traveler number returns matching Production Plan
+     */
+    public function test_25_search_partial_ktr_traveler_number_returns_plan(): void
+    {
+        $plan = $this->createPlan(['code' => 'S250']);
+        $ktr = $this->createKtr($plan, 100, 0, 'netto', 'HN-250');
+
+        // Extract a partial segment of the traveler number
+        $partial = substr($ktr->traveler_number, -6);
+
+        $rows = $this->service->getAggregatedRows(['search' => $partial]);
+
+        $this->assertNotEmpty($rows);
+        $this->assertTrue(collect($rows)->pluck('code')->contains('S250'));
+    }
+
+    /**
+     * SCENARIO 26: Search - Unknown search term returns no unrelated records
+     */
+    public function test_26_search_unknown_term_returns_empty(): void
+    {
+        $plan = $this->createPlan(['code' => 'S260']);
+        $this->createKtr($plan, 100, 0, 'netto', 'HN-260');
+
+        $rows = $this->service->getAggregatedRows(['search' => 'COMPLETELY_NONEXISTENT_KEYWORD_XYZ']);
+
+        $this->assertCount(0, $rows);
+    }
+
+    /**
+     * SCENARIO 27: Search - Existing fields (code, po_number, customer, item_name) continue working
+     */
+    public function test_27_existing_search_fields_continue_working(): void
+    {
+        $plan = $this->createPlan([
+            'code' => 'S270-ALPHA',
+            'po_number' => 'PO-BETA-777',
+            'customer' => 'PT GAMMA CORP',
+            'item_name' => 'SPECIAL DELTA VALVE',
+        ]);
+        $this->createKtr($plan, 100, 0, 'netto');
+
+        $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'S270-ALPHA']));
+        $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'PO-BETA-777']));
+        $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'GAMMA CORP']));
+        $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'DELTA VALVE']));
+    }
 }

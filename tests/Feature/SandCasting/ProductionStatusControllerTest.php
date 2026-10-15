@@ -489,4 +489,122 @@ class ProductionStatusControllerTest extends TestCase
 
         $response->assertStatus(404);
     }
+
+    /**
+     * TEST 16: Search filter matches Heat Number via HTTP request
+     */
+    public function test_16_search_filter_matches_heat_number(): void
+    {
+        $plan = $this->createPlan(['code' => 'S160-HN']);
+        $this->createKtr($plan, 100, 0, 'netto', 'HN-HEAT-SPECIAL-160');
+
+        $otherPlan = $this->createPlan(['code' => 'S161-OTHER']);
+        $this->createKtr($otherPlan, 100, 0, 'netto', 'HN-OTHER-999');
+
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?search=HEAT-SPECIAL');
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        $this->assertCount(1, $data['rows']);
+        $this->assertSame('S160-HN', $data['rows'][0]['code']);
+    }
+
+    /**
+     * TEST 17: Search filter matches KTR traveler number via HTTP request
+     */
+    public function test_17_search_filter_matches_ktr_traveler_number(): void
+    {
+        $plan = $this->createPlan(['code' => 'S170-KTR']);
+        $ktr = $this->createKtr($plan, 100, 0, 'netto');
+
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?search='.$ktr->traveler_number);
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        $this->assertCount(1, $data['rows']);
+        $this->assertSame('S170-KTR', $data['rows'][0]['code']);
+    }
+
+    /**
+     * TEST 18: Heat number search respects status filter (active vs completed)
+     */
+    public function test_18_search_heat_number_respects_status_filter(): void
+    {
+        // Active plan with heat HN-FILTER-STATUS
+        $planActive = $this->createPlan(['code' => 'S180-ACTIVE', 'po_quantity' => 1000]);
+        $this->createKtr($planActive, 500, 0, 'netto', 'HN-FILTER-STATUS-ACTIVE');
+
+        // Completed plan with heat HN-FILTER-STATUS
+        $planCompleted = $this->createPlan(['code' => 'S180-COMPLETED', 'po_quantity' => 100]);
+        $ktrCompleted = $this->createKtr($planCompleted, 100, 0, 'completed', 'HN-FILTER-STATUS-COMP');
+        $ktrCompleted->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->adminUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        // Search with filter=completed
+        $responseCompleted = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?search=HN-FILTER-STATUS&filter=completed');
+        $responseCompleted->assertStatus(200);
+        $dataCompleted = $responseCompleted->json();
+        $this->assertCount(1, $dataCompleted['rows']);
+        $this->assertSame('S180-COMPLETED', $dataCompleted['rows'][0]['code']);
+
+        // Search with filter=active
+        $responseActive = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?search=HN-FILTER-STATUS&filter=active');
+        $responseActive->assertStatus(200);
+        $dataActive = $responseActive->json();
+        $this->assertCount(1, $dataActive['rows']);
+        $this->assertSame('S180-ACTIVE', $dataActive['rows'][0]['code']);
+    }
+
+    /**
+     * TEST 19: Heat number search respects user product_scope authorization
+     */
+    public function test_19_search_heat_number_respects_product_scope(): void
+    {
+        // FLANGE_STAINLESS plan with heat HN-SS-001 (outside ppicUser scope FLANGE_BESI)
+        $planSS = $this->createPlan([
+            'code' => 'S190-SS',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+        ]);
+        $this->createKtr($planSS, 100, 0, 'netto', 'HN-SS-001');
+
+        // PPIC user searches for HN-SS-001 -> should return 0 rows
+        $response = $this->actingAs($this->ppicUser)
+            ->getJson('/sand-casting/production-status?search=HN-SS-001');
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        $this->assertCount(0, $data['rows']);
+
+        // Admin searches for HN-SS-001 -> should return 1 row
+        $responseAdmin = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?search=HN-SS-001');
+
+        $responseAdmin->assertStatus(200);
+        $this->assertCount(1, $responseAdmin->json('rows'));
+    }
+
+    /**
+     * TEST 20: View renders the updated placeholder for Heat Number and KTR
+     */
+    public function test_20_view_displays_updated_search_placeholder(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/production-status');
+
+        $response->assertStatus(200);
+        $response->assertSee('placeholder="Cari Kode / PO / Item / Heat Number / KTR..."', false);
+    }
 }

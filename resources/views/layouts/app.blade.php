@@ -375,6 +375,16 @@
                             </a>
                         </li>
                         @endif
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'qc') || Auth::user()->roles->contains('name', 'admin_qc_fitting') || in_array(strtolower(trim((string) Auth::user()->email)), ['adminppicfl@peroniks.com', 'ppicflange@peroniks.com', 'adminppicpf@peroniks.com', 'adminqcflange@peroniks.com', 'adminqcfitting@peroniks.com'])))
+                        <li>
+                            <a href="{{ route('sand-casting.report.qc-defects.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.qc-defects.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                title="Laporan Defect (QC)">
+                                <i class="fas fa-file-signature w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Laporan Defect (QC)</span>
+                            </a>
+                        </li>
+                        @endif
                     </ul>
                 </li>
 

@@ -278,7 +278,7 @@
                         <i class="fas fa-search text-[10px]"></i>
                     </span>
                     <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
-                           placeholder="Cari Kode / PO / Item..."
+                           placeholder="Cari Kode / PO / Item / Heat Number / KTR..."
                            class="w-full pl-7 pr-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-medium">
                 </div>
 
