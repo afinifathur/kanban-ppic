@@ -237,9 +237,24 @@ class DefectRecordingController extends Controller
             $this->authorizationService->authorizeRecordDefect($user);
 
             // 2. Validate request
+            $hasAdjustmentQty = $request->has('adjustment_qty');
+            $qtyField = $hasAdjustmentQty ? 'adjustment_qty' : 'added_qty';
+
             $validated = $request->validate([
-                'added_qty' => 'required|integer|min:1',
-                'notes' => 'nullable|string|max:500',
+                'added_qty' => 'required_without:adjustment_qty|integer|not_in:0',
+                'adjustment_qty' => 'sometimes|integer|not_in:0',
+                'idempotency_key' => 'nullable|string|max:64',
+                'notes' => [
+                    'nullable',
+                    'string',
+                    'max:500',
+                    function ($attribute, $value, $fail) use ($request, $qtyField) {
+                        $qty = (int) $request->input($qtyField);
+                        if ($qty < 0 && empty(trim((string) $value))) {
+                            $fail('Alasan koreksi (notes/reason) wajib diisi untuk penyesuaian defect negatif.');
+                        }
+                    },
+                ],
                 'stage' => [
                     'nullable',
                     'string',
@@ -256,9 +271,11 @@ class DefectRecordingController extends Controller
                     },
                 ],
             ], [
-                'added_qty.required' => 'Jumlah penambahan defect wajib diisi.',
-                'added_qty.integer' => 'Jumlah penambahan defect harus berupa angka bulat.',
-                'added_qty.min' => 'Jumlah penambahan defect minimal 1 PCS.',
+                'added_qty.required_without' => 'Jumlah penambahan/koreksi defect wajib diisi.',
+                'added_qty.integer' => 'Jumlah penambahan/koreksi defect harus berupa angka bulat.',
+                'added_qty.not_in' => 'Jumlah penambahan/koreksi defect tidak boleh 0.',
+                'adjustment_qty.integer' => 'Jumlah penyesuaian defect harus berupa angka bulat.',
+                'adjustment_qty.not_in' => 'Jumlah penyesuaian defect tidak boleh 0.',
             ]);
 
             // Verify submitted stage matches execution stage
@@ -280,18 +297,21 @@ class DefectRecordingController extends Controller
                 throw new InvalidArgumentException('Tahap operasional pada data eksekusi KTR ini tidak valid.');
             }
 
-            $addedQty = (int) $validated['added_qty'];
+            $qty = (int) ($validated['adjustment_qty'] ?? $validated['added_qty']);
+            $idempotencyKey = $request->header('X-Idempotency-Key') ?? $validated['idempotency_key'] ?? null;
 
-            // 3. State Machine cumulative defect update
-            $updatedExecution = $this->executionService->addDefectQty(
+            // 3. State Machine adjustment defect update
+            $updatedExecution = $this->executionService->adjustDefectQty(
                 executionOrId: $execution,
-                addedQty: $addedQty,
+                adjustmentQty: $qty,
                 adminId: (int) $user->id,
-                notes: $validated['notes'] ?? null
+                notes: $validated['notes'] ?? null,
+                idempotencyKey: $idempotencyKey
             );
 
             $travelerNumber = $updatedExecution->castingResultLine?->traveler_number ?? 'KTR';
-            $successMessage = "Penambahan defect +{$addedQty} pcs berhasil disimpan untuk KTR {$travelerNumber}. Total Defect: {$updatedExecution->defect_qty} pcs. Status: Menunggu QC.";
+            $actionLabel = $qty > 0 ? "Penambahan defect +{$qty}" : "Koreksi defect {$qty}";
+            $successMessage = "{$actionLabel} pcs berhasil disimpan untuk KTR {$travelerNumber}. Total Defect: {$updatedExecution->defect_qty} pcs. Status: Menunggu QC.";
 
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
@@ -344,5 +364,13 @@ class DefectRecordingController extends Controller
 
             return back()->withInput()->with('error', 'Terjadi kesalahan sistem: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Alias endpoint for adjusting defect quantity (+/-).
+     */
+    public function adjust(Request $request, SandCastingStageExecution $execution): JsonResponse|RedirectResponse
+    {
+        return $this->add($request, $execution);
     }
 }

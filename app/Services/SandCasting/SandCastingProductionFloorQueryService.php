@@ -1263,13 +1263,14 @@ class SandCastingProductionFloorQueryService
                     ? 'INITIAL_NIHIL'
                     : ($log->previous_total === 0
                         ? 'INITIAL_DEFECT'
-                        : 'ADDITIONAL_DEFECT'));
+                        : ((int) $log->added_qty < 0 ? 'ADJUSTMENT_DEFECT' : 'ADDITIONAL_DEFECT')));
 
             $logTypeLabel = match ($logType) {
                 'AUTO_NIHIL' => 'Nihil Otomatis (Timeout)',
                 'INITIAL_NIHIL' => 'Pencatatan Awal (Nihil)',
                 'INITIAL_DEFECT' => 'Pencatatan Awal',
                 'ADDITIONAL_DEFECT' => 'Tambah Defect',
+                'ADJUSTMENT_DEFECT' => 'Koreksi Defect',
             };
 
             return [
@@ -1568,13 +1569,14 @@ class SandCastingProductionFloorQueryService
                     ? 'INITIAL_NIHIL'
                     : ($log->previous_total === 0
                         ? 'INITIAL_DEFECT'
-                        : 'ADDITIONAL_DEFECT'));
+                        : ((int) $log->added_qty < 0 ? 'ADJUSTMENT_DEFECT' : 'ADDITIONAL_DEFECT')));
 
             $logTypeLabel = match ($logType) {
                 'AUTO_NIHIL' => 'Nihil Otomatis (Timeout)',
                 'INITIAL_NIHIL' => 'Pencatatan Awal (Nihil)',
                 'INITIAL_DEFECT' => 'Pencatatan Awal',
                 'ADDITIONAL_DEFECT' => 'Tambah Defect',
+                'ADJUSTMENT_DEFECT' => 'Koreksi Defect',
             };
 
             return [

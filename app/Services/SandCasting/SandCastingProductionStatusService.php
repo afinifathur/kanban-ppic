@@ -218,8 +218,16 @@ class SandCastingProductionStatusService
         }
 
         // 6. Gudang Jadi (GD) Quantity from physical GUDANG_RECEIVE checkpoint
-        $gdExecutions = $allExecutions->where('checkpoint_code', 'GUDANG_RECEIVE');
-        $gdQty = (int) $gdExecutions->sum('good_qty');
+        $gdQty = 0;
+        foreach ($lines as $line) {
+            $hasGudangReceive = $line->relationLoaded('stageExecutions')
+                ? $line->stageExecutions->contains(fn ($e) => $e->checkpoint_code === 'GUDANG_RECEIVE')
+                : $line->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->exists();
+
+            if ($hasGudangReceive) {
+                $gdQty += $this->quantityResolver->resolveEffectiveGoodQty($line, 'gudang_jadi');
+            }
+        }
 
         // 7. Completion & Remaining PO
         $remainingPo = max(0, $poTarget - $gdQty);
@@ -398,7 +406,7 @@ class SandCastingProductionStatusService
             // Resolve physical quantity currently at this position
             if ($stage === 'completed' || $stage === 'gudang_jadi') {
                 $gdExec = $line->stageExecutions->firstWhere('checkpoint_code', 'GUDANG_RECEIVE');
-                $qty = $gdExec ? (int) $gdExec->good_qty : $this->resolveQcUsable($line, $line->stageExecutions);
+                $qty = $gdExec ? $this->quantityResolver->resolveEffectiveGoodQty($line, 'gudang_jadi') : $this->resolveQcUsable($line, $line->stageExecutions);
             } elseif ($stage === null) {
                 $qty = (int) $line->qty_good;
             } else {

@@ -14,6 +14,7 @@ class SandCastingStageExecutionDefectLog extends Model
         'user_id',
         'is_system_action',
         'notes',
+        'idempotency_key',
     ];
 
     protected $casts = [

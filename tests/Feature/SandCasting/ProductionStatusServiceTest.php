@@ -367,7 +367,7 @@ class ProductionStatusServiceTest extends TestCase
     public function test_11_gd_below_po_is_active(): void
     {
         $plan = $this->createPlan(['po_quantity' => 1000]);
-        $ktr = $this->createKtr($plan, 1000, 0, 'completed');
+        $ktr = $this->createKtr($plan, 999, 0, 'completed');
 
         $this->createExecution($ktr, 'gudang_jadi', 'GUDANG_RECEIVE', 999, 0, 999);
 
@@ -403,7 +403,7 @@ class ProductionStatusServiceTest extends TestCase
     public function test_13_overproduction_gd_1050_is_completed(): void
     {
         $plan = $this->createPlan(['po_quantity' => 1000, 'qty_planned' => 1100]);
-        $ktr = $this->createKtr($plan, 1150, 0, 'completed');
+        $ktr = $this->createKtr($plan, 1050, 0, 'completed');
 
         $this->createExecution($ktr, 'gudang_jadi', 'GUDANG_RECEIVE', 1050, 0, 1050);
 
@@ -712,5 +712,165 @@ class ProductionStatusServiceTest extends TestCase
         $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'PO-BETA-777']));
         $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'GAMMA CORP']));
         $this->assertCount(1, $this->service->getAggregatedRows(['search' => 'DELTA VALVE']));
+    }
+
+    /**
+     * SCENARIO 28: KTR received into GD with baseline 100 and upstream defect 5 contributes 95 effective GD qty,
+     * even if the stored GUDANG_RECEIVE snapshot remains 100.
+     */
+    public function test_28_ktr_with_gudang_receive_and_late_upstream_defect_calculates_effective_gd_qty(): void
+    {
+        $plan = $this->createPlan(['code' => 'S280', 'po_quantity' => 100]);
+        $ktr = $this->createKtr($plan, 100, 0, 'completed');
+
+        // Physical execution at GUDANG_RECEIVE scanned with good_qty = 100 before defect was recorded
+        $gdExec = $this->createExecution($ktr, 'gudang_jadi', 'GUDANG_RECEIVE', 100, 0, 100);
+
+        // Later defect recorded upstream at Netto (5 pcs defect)
+        $this->createExecution($ktr, 'netto', 'NETTO_CUT', 100, 5, 95);
+
+        $plan->load('sandCastingResultLines.stageExecutions');
+        $row = $this->service->calculatePlanStatusRow($plan);
+
+        // Effective GD must be 95 (100 baseline - 5 defect), not the stale snapshot 100
+        $this->assertSame(95, $row['gd']);
+        $this->assertSame(5, $row['remaining_po']);
+        $this->assertSame('ACTIVE', $row['status']);
+
+        // Verify stored snapshot was not mutated in database
+        $this->assertSame(100, $gdExec->fresh()->good_qty);
+    }
+
+    /**
+     * SCENARIO 29: KTR without a physical GUDANG_RECEIVE execution contributes zero GD quantity.
+     */
+    public function test_29_ktr_without_gudang_receive_execution_contributes_zero_gd_qty(): void
+    {
+        $plan = $this->createPlan(['code' => 'S290', 'po_quantity' => 100]);
+        $ktr = $this->createKtr($plan, 100, 0, 'qc');
+
+        // Executions up to QC, but NO GUDANG_RECEIVE
+        $this->createExecution($ktr, 'netto', 'NETTO_CUT', 100, 0, 100);
+        $this->createExecution($ktr, 'qc', 'QC_FINAL_INSPECTION', 100, 0, 100);
+
+        $plan->load('sandCastingResultLines.stageExecutions');
+        $row = $this->service->calculatePlanStatusRow($plan);
+
+        $this->assertSame(0, $row['gd']);
+        $this->assertSame(100, $row['qc']);
+        $this->assertSame(100, $row['remaining_po']);
+        $this->assertSame('ACTIVE', $row['status']);
+    }
+
+    /**
+     * SCENARIO 30: Multiple KTRs within one production plan aggregate effective GD quantity correctly.
+     */
+    public function test_30_multiple_ktrs_within_one_plan_aggregate_effective_gd_qty_correctly(): void
+    {
+        $plan = $this->createPlan(['code' => 'S300', 'po_quantity' => 200]);
+
+        // KTR 1: Baseline 100, 5 Netto defect -> effective GD = 95
+        $ktr1 = $this->createKtr($plan, 100, 0, 'completed', 'HEAT-300-1');
+        $this->createExecution($ktr1, 'netto', 'NETTO_CUT', 100, 5, 95);
+        $this->createExecution($ktr1, 'gudang_jadi', 'GUDANG_RECEIVE', 100, 0, 100); // stale snapshot 100
+
+        // KTR 2: Baseline 100, 10 CNC defect -> effective GD = 90
+        $ktr2 = $this->createKtr($plan, 100, 0, 'completed', 'HEAT-300-2');
+        $this->createExecution($ktr2, 'bubut_cnc', 'CNC_MACHINING', 100, 10, 90);
+        $this->createExecution($ktr2, 'gudang_jadi', 'GUDANG_RECEIVE', 100, 0, 100); // stale snapshot 100
+
+        $plan->load('sandCastingResultLines.stageExecutions');
+        $row = $this->service->calculatePlanStatusRow($plan);
+
+        // 95 + 90 = 185
+        $this->assertSame(185, $row['gd']);
+        $this->assertSame(15, $row['remaining_po']);
+        $this->assertSame('ACTIVE', $row['status']);
+    }
+
+    /**
+     * SCENARIO 31: Partial receipts and remaining PO quantity remain correct.
+     */
+    public function test_31_partial_receipt_and_remaining_po_quantity_calculation(): void
+    {
+        $plan = $this->createPlan(['code' => 'S310', 'po_quantity' => 200]);
+
+        // KTR 1: Baseline 100, 5 Netto defect -> 95 received in GD
+        $ktr1 = $this->createKtr($plan, 100, 0, 'completed', 'HEAT-310-1');
+        $this->createExecution($ktr1, 'netto', 'NETTO_CUT', 100, 5, 95);
+        $this->createExecution($ktr1, 'gudang_jadi', 'GUDANG_RECEIVE', 95, 0, 95);
+
+        // KTR 2: Baseline 100, 0 defects, currently at Bor
+        $ktr2 = $this->createKtr($plan, 100, 0, 'bor', 'HEAT-310-2');
+        $this->createExecution($ktr2, 'netto', 'NETTO_CUT', 100, 0, 100);
+        $this->createExecution($ktr2, 'bubut_od', 'OD_TURNING', 100, 0, 100);
+        $this->createExecution($ktr2, 'bubut_cnc', 'CNC_MACHINING', 100, 0, 100);
+
+        $plan->load('sandCastingResultLines.stageExecutions');
+        $row = $this->service->calculatePlanStatusRow($plan);
+
+        $this->assertSame(95, $row['gd']);
+        $this->assertSame(100, $row['bor']);
+        $this->assertSame(105, $row['remaining_po']); // 200 - 95 = 105
+        $this->assertSame('ACTIVE', $row['status']);
+    }
+
+    /**
+     * SCENARIO 32: PO status becomes COMPLETED only when effective GD meets existing PO target.
+     */
+    public function test_32_po_completion_requires_effective_gd_to_meet_po_target(): void
+    {
+        $plan = $this->createPlan(['code' => 'S320', 'po_quantity' => 100]);
+
+        // KTR 1: Baseline 100, 5 Netto defect -> effective GD = 95. Stale snapshot = 100.
+        $ktr1 = $this->createKtr($plan, 100, 0, 'completed', 'HEAT-320-1');
+        $this->createExecution($ktr1, 'netto', 'NETTO_CUT', 100, 5, 95);
+        $this->createExecution($ktr1, 'gudang_jadi', 'GUDANG_RECEIVE', 100, 0, 100);
+
+        $plan->load('sandCastingResultLines.stageExecutions');
+        $row = $this->service->calculatePlanStatusRow($plan);
+
+        // Effective GD is 95, target is 100 -> Must be ACTIVE, NOT prematurely COMPLETED
+        $this->assertSame(95, $row['gd']);
+        $this->assertSame(5, $row['remaining_po']);
+        $this->assertSame('ACTIVE', $row['status']);
+
+        // Add KTR 2 with 10 pcs completed into GD
+        $ktr2 = $this->createKtr($plan, 10, 0, 'completed', 'HEAT-320-2');
+        $this->createExecution($ktr2, 'gudang_jadi', 'GUDANG_RECEIVE', 10, 0, 10);
+
+        $plan->load('sandCastingResultLines.stageExecutions');
+        $updatedRow = $this->service->calculatePlanStatusRow($plan);
+
+        // Total effective GD is 95 + 10 = 105 >= 100 -> Now COMPLETED
+        $this->assertSame(105, $updatedRow['gd']);
+        $this->assertSame(0, $updatedRow['remaining_po']);
+        $this->assertSame('COMPLETED', $updatedRow['status']);
+    }
+
+    /**
+     * SCENARIO 33: The fix does not mutate stored scan snapshots or physical history in the database.
+     */
+    public function test_33_effective_gd_fix_does_not_mutate_stored_snapshots_or_history(): void
+    {
+        $plan = $this->createPlan(['code' => 'S330', 'po_quantity' => 100]);
+        $ktr = $this->createKtr($plan, 100, 0, 'completed');
+
+        $gdExec = $this->createExecution($ktr, 'gudang_jadi', 'GUDANG_RECEIVE', 100, 0, 100);
+        $nettoExec = $this->createExecution($ktr, 'netto', 'NETTO_CUT', 100, 5, 95);
+
+        $originalGdExec = $gdExec->fresh()->toArray();
+        $originalNettoExec = $nettoExec->fresh()->toArray();
+        $originalKtr = $ktr->fresh()->toArray();
+
+        // Calculate plan status and query aggregated rows
+        $this->service->calculatePlanStatusRow($plan->load('sandCastingResultLines.stageExecutions'));
+        $this->service->getAggregatedRows(['search' => 'S330']);
+        $this->service->getProductionCodeDetails('S330');
+
+        // Confirm database records are identical
+        $this->assertEquals($originalGdExec, $gdExec->fresh()->toArray());
+        $this->assertEquals($originalNettoExec, $nettoExec->fresh()->toArray());
+        $this->assertEquals($originalKtr, $ktr->fresh()->toArray());
     }
 }

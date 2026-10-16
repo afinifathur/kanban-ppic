@@ -265,6 +265,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\DefectRecordingController::class, 'index'])->name('index');
             Route::post('/{execution}/record', [\App\Http\Controllers\SandCasting\DefectRecordingController::class, 'record'])->name('record');
             Route::post('/{execution}/add', [\App\Http\Controllers\SandCasting\DefectRecordingController::class, 'add'])->name('add');
+            Route::post('/{execution}/adjust', [\App\Http\Controllers\SandCasting\DefectRecordingController::class, 'adjust'])->name('adjust');
         });
 
         // QC Defect Verification Routes (Admin QC)

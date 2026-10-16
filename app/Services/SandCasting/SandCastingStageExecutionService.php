@@ -338,8 +338,9 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException('Jumlah defect tidak boleh negatif.');
             }
 
-            if ($defectQty > $execution->input_qty) {
-                throw new InvalidArgumentException("Jumlah defect ({$defectQty}) tidak boleh melebihi jumlah input ({$execution->input_qty}).");
+            $effectiveInput = $this->quantityResolver->resolveEffectiveInputQty($line, $execution->stage);
+            if ($defectQty > $effectiveInput) {
+                throw new InvalidArgumentException("Jumlah defect ({$defectQty}) tidak boleh melebihi jumlah input ({$effectiveInput}).");
             }
 
             $goodQty = $execution->input_qty - $defectQty;
@@ -376,15 +377,20 @@ class SandCastingStageExecutionService
     }
 
     /**
-     * Step 2B: Admin PPIC adds cumulative defect quantity (Tambah Defect Susulan).
-     * Transitions status from CONFIRMED -> WAITING_QC (requiring QC re-verification) or maintains WAITING_QC.
-     * Guaranteed strictly atomic and logs immutable audit trail. Physical flow remains untouched.
+     * Step 2B: Admin PPIC adjusts defect quantity with signed delta (+/-).
+     * Transitions status:
+     * - From CONFIRMED -> WAITING_QC (requiring QC re-verification).
+     * - Maintains WAITING_QC.
+     * - Rejects adjustments if still in WAITING_DEFECT (must use initial recording first).
+     * Strictly atomic with row locks, dynamic boundary validation, and idempotency protection.
+     * Physical flow and past scan snapshots remain untouched.
      */
-    public function addDefectQty(
+    public function adjustDefectQty(
         int|SandCastingStageExecution $executionOrId,
-        int $addedQty,
+        int $adjustmentQty,
         ?int $adminId = null,
-        ?string $notes = null
+        ?string $notes = null,
+        ?string $idempotencyKey = null
     ): SandCastingStageExecution {
         $resolvedAdminId = $adminId ?? auth()->id();
         if (! $resolvedAdminId) {
@@ -395,11 +401,18 @@ class SandCastingStageExecutionService
             throw new InvalidArgumentException("User Admin dengan ID {$resolvedAdminId} tidak ditemukan.");
         }
 
-        if ($addedQty <= 0) {
-            throw new InvalidArgumentException('Jumlah penambahan defect harus lebih dari 0.');
+        if ($adjustmentQty === 0) {
+            throw new InvalidArgumentException('Jumlah penyesuaian defect tidak boleh 0.');
         }
 
-        return DB::transaction(function () use ($executionOrId, $addedQty, $resolvedAdminId, $notes) {
+        $trimmedNotes = $notes !== null && trim($notes) !== '' ? trim($notes) : null;
+        if ($adjustmentQty < 0 && $trimmedNotes === null) {
+            throw new InvalidArgumentException('Alasan koreksi (notes/reason) wajib diisi untuk penyesuaian defect negatif.');
+        }
+
+        $trimmedKey = $idempotencyKey !== null && trim($idempotencyKey) !== '' ? trim($idempotencyKey) : null;
+
+        return DB::transaction(function () use ($executionOrId, $adjustmentQty, $resolvedAdminId, $trimmedNotes, $trimmedKey) {
             $executionId = $executionOrId instanceof SandCastingStageExecution ? $executionOrId->id : (int) $executionOrId;
 
             $execution = SandCastingStageExecution::where('id', $executionId)
@@ -416,23 +429,50 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
 
+            // Idempotency check: verify against both this execution and global log table
+            if ($trimmedKey !== null) {
+                $existingLog = \App\Models\SandCastingStageExecutionDefectLog::where('idempotency_key', $trimmedKey)
+                    ->first();
+
+                if ($existingLog) {
+                    // Scenario 2: Key was used on a different execution
+                    if ((int) $existingLog->sand_casting_stage_execution_id !== (int) $execution->id) {
+                        throw new InvalidArgumentException("Idempotency key '{$trimmedKey}' telah digunakan pada eksekusi KTR lain.");
+                    }
+
+                    // Scenario 1: Key was used on this execution with a different payload
+                    if ((int) $existingLog->added_qty !== $adjustmentQty) {
+                        throw new InvalidArgumentException("Idempotency key '{$trimmedKey}' telah digunakan sebelumnya dengan kuantitas yang berbeda ({$existingLog->added_qty} PCS).");
+                    }
+
+                    // Identical retry: return existing execution without re-applying delta
+                    return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'defectLogs.user', 'defects.defectType']);
+                }
+            }
+
             if ($execution->status === SandCastingStageExecution::STATUS_WAITING_DEFECT) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} belum pernah dicatat defect. Gunakan form pencatatan awal.");
             }
 
             if (! in_array($execution->status, [SandCastingStageExecution::STATUS_WAITING_QC, SandCastingStageExecution::STATUS_CONFIRMED], true)) {
-                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} berada dalam status tidak valid ({$execution->status}) untuk penambahan defect.");
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} berada dalam status tidak valid ({$execution->status}) untuk penyesuaian defect.");
             }
 
             $currentDefectQty = (int) $execution->defect_qty;
-            $newTotalDefect = $currentDefectQty + $addedQty;
-            $inputQty = (int) $execution->input_qty;
+            $newTotalDefect = $currentDefectQty + $adjustmentQty;
 
-            if ($newTotalDefect > $inputQty) {
-                throw new InvalidArgumentException("Total defect baru ({$newTotalDefect} PCS) melebihi input ({$inputQty} PCS). Penambahan {$addedQty} PCS ditolak.");
+            if ($newTotalDefect < 0) {
+                throw new InvalidArgumentException("Total defect baru tidak boleh negatif ({$newTotalDefect} PCS). Koreksi {$adjustmentQty} PCS ditolak.");
             }
 
-            $newGoodQty = $inputQty - $newTotalDefect;
+            // Dynamic boundary validation: defect on this stage cannot exceed effective input entering this stage
+            $effectiveInput = $this->quantityResolver->resolveEffectiveInputQty($line, $execution->stage);
+            if ($newTotalDefect > $effectiveInput) {
+                throw new InvalidArgumentException("Total defect baru ({$newTotalDefect} PCS) melebihi batas kuantitas input efektif ({$effectiveInput} PCS). Penyesuaian {$adjustmentQty} PCS ditolak.");
+            }
+
+            $inputQty = (int) $execution->input_qty;
+            $newGoodQty = max(0, $inputQty - $newTotalDefect);
 
             $execution->defect_qty = $newTotalDefect;
             $execution->good_qty = $newGoodQty;
@@ -442,25 +482,55 @@ class SandCastingStageExecutionService
             // If previously CONFIRMED, revert status to WAITING_QC so QC re-verifies the new total
             if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
                 $execution->status = SandCastingStageExecution::STATUS_WAITING_QC;
+                $execution->qc_verified_at = null;
+                $execution->qc_verified_by = null;
             }
 
-            if ($notes !== null && trim($notes) !== '') {
-                $execution->notes = trim($notes);
+            if ($trimmedNotes !== null) {
+                $execution->notes = $trimmedNotes;
             }
             $execution->save();
 
-            // Create cumulative audit log record
-            $execution->defectLogs()->create([
-                'added_qty' => $addedQty,
-                'previous_total' => $currentDefectQty,
-                'new_total' => $newTotalDefect,
-                'user_id' => $resolvedAdminId,
-                'is_system_action' => false,
-                'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
-            ]);
+            // Create cumulative audit log record with concurrency duplicate-key protection
+            try {
+                $execution->defectLogs()->create([
+                    'added_qty' => $adjustmentQty,
+                    'previous_total' => $currentDefectQty,
+                    'new_total' => $newTotalDefect,
+                    'user_id' => $resolvedAdminId,
+                    'is_system_action' => false,
+                    'notes' => $trimmedNotes,
+                    'idempotency_key' => $trimmedKey,
+                ]);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+                if ($trimmedKey !== null) {
+                    $racedLog = \App\Models\SandCastingStageExecutionDefectLog::where('idempotency_key', $trimmedKey)->first();
+                    if ($racedLog && (int) $racedLog->sand_casting_stage_execution_id === (int) $execution->id && (int) $racedLog->added_qty === $adjustmentQty) {
+                        return $execution->fresh(['castingResultLine', 'operator', 'defectEnteredBy', 'defectLogs.user', 'defects.defectType']);
+                    }
+                    if ($racedLog && (int) $racedLog->sand_casting_stage_execution_id !== (int) $execution->id) {
+                        throw new InvalidArgumentException("Idempotency key '{$trimmedKey}' telah digunakan pada eksekusi KTR lain.");
+                    }
+                }
+                throw new InvalidArgumentException('Konflik idempotency key: request penyesuaian telah diproses secara bersamaan.');
+            }
 
             return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'defectLogs.user', 'defects.defectType']);
         });
+    }
+
+    /**
+     * Step 2B: Admin PPIC adds cumulative defect quantity (Tambah Defect Susulan).
+     * Backward-compatible alias for adjustDefectQty.
+     */
+    public function addDefectQty(
+        int|SandCastingStageExecution $executionOrId,
+        int $addedQty,
+        ?int $adminId = null,
+        ?string $notes = null,
+        ?string $idempotencyKey = null
+    ): SandCastingStageExecution {
+        return $this->adjustDefectQty($executionOrId, $addedQty, $adminId, $notes, $idempotencyKey);
     }
 
     /**
@@ -574,6 +644,7 @@ class SandCastingStageExecutionService
                         throw new InvalidArgumentException('Klasifikasi cacat tidak valid karena total defect adalah 0.');
                     }
                 }
+                $execution->defects()->delete();
             } else {
                 $totalBreakdown = 0;
                 $validatedDefects = [];
