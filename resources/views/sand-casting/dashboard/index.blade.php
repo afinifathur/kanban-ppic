@@ -30,6 +30,10 @@
                 class="px-3 py-1 rounded-md font-bold transition-all {{ $activeZone === '3' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
                 Zona 3
             </a>
+            <a href="{{ route('sand-casting.dashboard', ['zone' => '4']) }}"
+                class="px-3 py-1 rounded-md font-bold transition-all {{ $activeZone === '4' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900' }}">
+                Zona 4
+            </a>
         </div>
 
         <!-- Right: Status Badge & Live Clock -->
@@ -83,6 +87,11 @@
         @if($activeZone === 'all' || $activeZone === '3')
             @include('sand-casting.dashboard.partials.zone-3')
         @endif
+
+        {{-- Zone 4: Daily Production Tonnage Trend --}}
+        @if($activeZone === 'all' || $activeZone === '4')
+            @include('sand-casting.dashboard.partials.zone-4')
+        @endif
     </div>
 </div>
 
@@ -112,6 +121,8 @@
         overallDefects: null,
         defectTrend30: null,
         stageDonuts: {},
+        zone4Throughput: null,
+        currentZone4Stage: 'qc',
     };
 
     // Light industrial Chart.js defaults
@@ -128,74 +139,129 @@
         });
     }
 
-    // Custom Chart.js Plugin for Direct Data Labels on Throughput Bars (SCADA style, no hover needed)
+    // Custom Chart.js Plugin for Direct Data Labels on Throughput Bars (Zona 1 & Zona 4 - Weight in KG & PCS)
     const directDataLabelsPlugin = {
         id: 'directDataLabels',
         afterDatasetsDraw(chart) {
             const { ctx, data } = chart;
-            const meta = chart.getDatasetMeta(0); // Bar dataset (Good Output TON)
+            const meta = chart.getDatasetMeta(0); // Bar dataset (Good Output KG)
             if (!meta || meta.hidden) return;
 
             const barDataset = data.datasets[0];
-            const stages = barDataset.stagesData || [];
+            const items = barDataset.dailyData || barDataset.stagesData || [];
+            if (!items.length) return;
+
+            const barCount = meta.data.length;
+            const chartWidth = chart.chartArea.right - chart.chartArea.left;
+            const slotWidth = barCount > 0 ? (chartWidth / barCount) : 40;
+            const isDense = barCount > 8; // Zona 4 has 30 bars; Zona 1 has 5-6 bars
 
             ctx.save();
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
 
             meta.data.forEach((bar, index) => {
-                const tonVal = Number(barDataset.data[index] || 0);
-                const stage = stages[index] || {};
-                const pcsVal = Number(stage.good_pcs || 0);
-                const isZero = (tonVal === 0 && pcsVal === 0);
+                const item = items[index] || {};
+                const kgVal = Number(item.good_kg ?? barDataset.data[index] ?? 0);
+                const pcsVal = Number(item.good_pcs || 0);
+
+                // For 30-day dense mode (Zona 4), omit labels for days without production (0 kg & 0 pcs)
+                if (isDense && kgVal === 0 && pcsVal === 0) {
+                    return;
+                }
+
+                const isZero = (kgVal === 0 && pcsVal === 0);
 
                 const x = bar.x;
                 const topY = bar.y;
 
-                // Format values
-                const tonText = `${formatNumber(tonVal, 2)} TON`;
+                // Format values in Indonesian locale with 4 decimal places for kg
+                const kgText = `${formatNumber(kgVal, 4)} kg`;
                 const pcsText = `${formatNumber(pcsVal, 0)} PCS`;
 
-                // Safe clearance from chartArea top to guarantee no clipping
-                const safeTopLimit = chart.chartArea.top + 36;
-                const pcsY = Math.max(topY - 6, safeTopLimit);
-                const tonY = pcsY - 16;
+                if (isDense) {
+                    // Zona 4: Compact adaptive pill for 30 calendar days
+                    const fontSizeKg = slotWidth < 26 ? 7.5 : (slotWidth < 34 ? 8.5 : 9);
+                    const fontSizePcs = slotWidth < 26 ? 7 : (slotWidth < 34 ? 8 : 8.5);
 
-                // Subtle semi-transparent rounded pill for background contrast
-                ctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
-                const textWidth = Math.max(ctx.measureText(tonText).width, ctx.measureText(pcsText).width);
-                const pillW = textWidth + 16;
-                const pillH = 34;
-                const pillX = x - pillW / 2;
-                const pillY = tonY - 16;
+                    ctx.font = `bold ${fontSizeKg}px ui-sans-serif, system-ui, sans-serif`;
+                    const kgWidth = ctx.measureText(kgText).width;
+                    ctx.font = `bold ${fontSizePcs}px ui-sans-serif, system-ui, sans-serif`;
+                    const pcsWidth = ctx.measureText(pcsText).width;
+                    const maxTextW = Math.max(kgWidth, pcsWidth);
 
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
-                ctx.beginPath();
-                if (typeof ctx.roundRect === 'function') {
-                    ctx.roundRect(pillX, pillY, pillW, pillH, 5);
+                    const pillW = Math.min(maxTextW + 6, Math.max(slotWidth - 2, maxTextW));
+                    const pillH = fontSizeKg + fontSizePcs + 6;
+
+                    // Safe headroom clearance from chartArea top to guarantee no clipping
+                    const safeTopLimit = chart.chartArea.top + pillH + 2;
+                    const pcsY = Math.max(topY - 3, safeTopLimit);
+                    const kgY = pcsY - fontSizePcs - 2;
+                    const pillX = x - (pillW / 2);
+                    const pillY = kgY - fontSizeKg - 1;
+
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                    ctx.beginPath();
+                    if (typeof ctx.roundRect === 'function') {
+                        ctx.roundRect(pillX, pillY, pillW, pillH, 3);
+                    } else {
+                        ctx.rect(pillX, pillY, pillW, pillH);
+                    }
+                    ctx.fill();
+
+                    ctx.strokeStyle = '#bfdbfe';
+                    ctx.lineWidth = 0.75;
+                    ctx.stroke();
+
+                    // Baris 1: Berat aktual (KG dengan 4 angka desimal)
+                    ctx.font = `bold ${fontSizeKg}px ui-sans-serif, system-ui, sans-serif`;
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillText(kgText, x, kgY);
+
+                    // Baris 2: PCS aktual
+                    ctx.font = `bold ${fontSizePcs}px ui-sans-serif, system-ui, sans-serif`;
+                    ctx.fillStyle = '#1e3a8a';
+                    ctx.fillText(pcsText, x, pcsY);
                 } else {
-                    ctx.rect(pillX, pillY, pillW, pillH);
+                    // Zona 1: Spacious SCADA pill for wide stage bars
+                    const safeTopLimit = chart.chartArea.top + 36;
+                    const pcsY = Math.max(topY - 6, safeTopLimit);
+                    const tonY = pcsY - 16;
+
+                    ctx.font = 'bold 13px ui-sans-serif, system-ui, sans-serif';
+                    const textWidth = Math.max(ctx.measureText(kgText).width, ctx.measureText(pcsText).width);
+                    const pillW = textWidth + 16;
+                    const pillH = 34;
+                    const pillX = x - pillW / 2;
+                    const pillY = tonY - 16;
+
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+                    ctx.beginPath();
+                    if (typeof ctx.roundRect === 'function') {
+                        ctx.roundRect(pillX, pillY, pillW, pillH, 5);
+                    } else {
+                        ctx.rect(pillX, pillY, pillW, pillH);
+                    }
+                    ctx.fill();
+
+                    ctx.strokeStyle = isZero ? '#cbd5e1' : '#bfdbfe';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    // Baris 1: Berat aktual (KG dengan 4 angka desimal)
+                    ctx.font = isZero
+                        ? 'bold 11px ui-sans-serif, system-ui, sans-serif'
+                        : 'bold 13px ui-sans-serif, system-ui, sans-serif';
+                    ctx.fillStyle = isZero ? '#64748b' : '#0f172a';
+                    ctx.fillText(kgText, x, tonY);
+
+                    // Baris 2: PCS aktual (PCS)
+                    ctx.font = isZero
+                        ? 'bold 11px ui-sans-serif, system-ui, sans-serif'
+                        : 'bold 12px ui-sans-serif, system-ui, sans-serif';
+                    ctx.fillStyle = isZero ? '#64748b' : '#1e3a8a';
+                    ctx.fillText(pcsText, x, pcsY);
                 }
-                ctx.fill();
-
-                // Subtle border on pill
-                ctx.strokeStyle = isZero ? '#cbd5e1' : '#bfdbfe';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                // Baris 1: Tonase aktual (TON)
-                ctx.font = isZero
-                    ? 'bold 12px ui-sans-serif, system-ui, sans-serif'
-                    : 'bold 14px ui-sans-serif, system-ui, sans-serif';
-                ctx.fillStyle = isZero ? '#64748b' : '#0f172a';
-                ctx.fillText(tonText, x, tonY);
-
-                // Baris 2: PCS aktual (PCS)
-                ctx.font = isZero
-                    ? 'bold 11px ui-sans-serif, system-ui, sans-serif'
-                    : 'bold 12px ui-sans-serif, system-ui, sans-serif';
-                ctx.fillStyle = isZero ? '#64748b' : '#1e3a8a';
-                ctx.fillText(pcsText, x, pcsY);
             });
 
             ctx.restore();
@@ -311,9 +377,9 @@
             const rawStages = (data.zone_1 && data.zone_1.daily_throughput_stages) ? data.zone_1.daily_throughput_stages : [];
             const stages = rawStages.filter(s => s.stage !== 'cor');
             const labels = stages.map(s => s.label);
-            const tonnageData = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
+            const kgData = stages.map(s => Number(s.good_kg ?? ((s.good_tonnage ?? s.good_ton ?? 0) * 1000)));
             const defectRateData = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
-            const maxTon = Math.max(...tonnageData, 1);
+            const maxKg = Math.max(...kgData, 1);
 
             const ctx = throughputCanvas.getContext('2d');
             dashboardCharts.throughput = new Chart(ctx, {
@@ -324,14 +390,14 @@
                     datasets: [
                         {
                             type: 'bar',
-                            label: 'Good Output (TON)',
-                            data: tonnageData,
+                            label: 'Good Output (kg)',
+                            data: kgData,
                             stagesData: stages,
                             backgroundColor: '#2563eb',
                             borderColor: '#1d4ed8',
                             borderWidth: 1,
                             borderRadius: 4,
-                            yAxisID: 'yTon',
+                            yAxisID: 'yKg',
                         },
                         {
                             type: 'line',
@@ -368,7 +434,7 @@
                                 label: function(context) {
                                     const stage = stages[context.dataIndex] || {};
                                     if (context.datasetIndex === 0) {
-                                        return ` Good: ${formatNumber(context.raw, 2)} TON (${formatNumber(stage.good_pcs || 0)} PCS)`;
+                                        return ` Good: ${formatNumber(stage.good_kg ?? context.raw, 4)} kg (${formatNumber(stage.good_pcs || 0)} PCS)`;
                                     } else {
                                         return ` Defect Rate: ${formatNumber(context.raw, 2)}% (${formatNumber(stage.defect_pcs || 0)} PCS defect)`;
                                     }
@@ -381,14 +447,18 @@
                             grid: { color: '#f1f5f9' },
                             ticks: { color: '#4B5563', font: { weight: 'bold', size: 12 } }
                         },
-                        yTon: {
+                        yKg: {
                             type: 'linear',
                             position: 'left',
                             beginAtZero: true,
-                            suggestedMax: maxTon > 0 ? maxTon * 1.45 : 5,
+                            suggestedMax: maxKg > 0 ? maxKg * 1.45 : 5000,
                             grid: { color: '#e2e8f0' },
-                            title: { display: true, text: 'TON', color: '#1d4ed8', font: { size: 11, weight: 'bold' } },
-                            ticks: { color: '#475569', font: { weight: 'bold' } }
+                            title: { display: true, text: 'KG', color: '#1d4ed8', font: { size: 11, weight: 'bold' } },
+                            ticks: {
+                                callback: v => formatNumber(v, 4) + ' kg',
+                                color: '#475569',
+                                font: { weight: 'bold' }
+                            }
                         },
                         yPct: {
                             type: 'linear',
@@ -612,22 +682,254 @@
                 }
             }
         });
+
+        // 6. Zone 4: Daily Production Throughput (30 Calendar Days, 6 Stages, Weight in KG)
+        const z4Canvas = document.getElementById('chartZone4Throughput');
+        if (z4Canvas && (data.zone_4 || DASHBOARD_CONFIG.zone === '4' || DASHBOARD_CONFIG.zone === 'all')) {
+            const z4Data = data.zone_4 || {};
+            const stagesMap = z4Data.stages || {};
+            const selectEl = document.getElementById('zone4-stage-select');
+            const activeStageKey = selectEl?.value || dashboardCharts.currentZone4Stage || z4Data.default_stage || 'qc';
+            dashboardCharts.currentZone4Stage = activeStageKey;
+
+            const stageData = stagesMap[activeStageKey] || {};
+            const daily = stageData.daily || [];
+            const labels = daily.map(d => d.day_label);
+            const kgSeries = daily.map(d => Number(d.good_kg || 0));
+            const maxKg = Math.max(...kgSeries, 0);
+
+            const ctx = z4Canvas.getContext('2d');
+            dashboardCharts.zone4Throughput = new Chart(ctx, {
+                type: 'bar',
+                plugins: [directDataLabelsPlugin],
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Output Baik (kg)',
+                        data: kgSeries,
+                        dailyData: daily,
+                        backgroundColor: '#0284c7',
+                        hoverBackgroundColor: '#0369a1',
+                        borderColor: '#0369a1',
+                        borderWidth: 1,
+                        borderRadius: 3,
+                        maxBarThickness: 24,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: { top: 32, left: 4, right: 4, bottom: 2 }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const idx = context[0]?.dataIndex ?? 0;
+                                    const currentDaily = context[0]?.chart?.data?.datasets[0]?.dailyData || daily;
+                                    const d = currentDaily[idx] || {};
+                                    return d.date ? `${d.day_label} (${d.date})` : context[0]?.label;
+                                },
+                                label: function(context) {
+                                    const currentDaily = context.chart.data.datasets[0].dailyData || daily;
+                                    const d = currentDaily[context.dataIndex] || {};
+                                    const kgVal = Number(d.good_kg || 0);
+                                    const pcsVal = Number(d.good_pcs || 0);
+                                    const ktrVal = Number(d.ktr_count || 0);
+
+                                    if (kgVal === 0 && pcsVal === 0) {
+                                        return ' Nihil Produksi (0,0000 kg · 0 PCS)';
+                                    }
+
+                                    return [
+                                        ` Output Baik: ${formatNumber(kgVal, 4)} kg`,
+                                        ` Kuantitas: ${formatNumber(pcsVal)} PCS`,
+                                        ` KTR Selesai: ${formatNumber(ktrVal)} KTR`,
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#f8fafc' },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 9 },
+                                autoSkip: true,
+                                maxTicksLimit: 15,
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: maxKg > 0 ? maxKg * 1.35 : 100,
+                            grid: { color: '#f1f5f9' },
+                            title: { display: true, text: 'BERAT (KG)', color: '#0369a1', font: { size: 10, weight: 'bold' } },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 10 },
+                                callback: function(value) { return formatNumber(value, 0) + ' kg'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 7. Zone 4: Daily Production Output Distribution Per Line (Line 1 - 4)
+        const z4LinesCanvas = document.getElementById('chartZone4LineDistribution');
+        if (z4LinesCanvas && (data.zone_4 || DASHBOARD_CONFIG.zone === '4' || DASHBOARD_CONFIG.zone === 'all')) {
+            const z4Data = data.zone_4 || {};
+            const stagesMap = z4Data.stages || {};
+            const selectEl = document.getElementById('zone4-stage-select');
+            const activeStageKey = selectEl?.value || dashboardCharts.currentZone4Stage || z4Data.default_stage || 'qc';
+
+            const stageData = stagesMap[activeStageKey] || {};
+            const daily = stageData.daily || [];
+            const labels = daily.map(d => d.day_label);
+            const seriesByLine = stageData.series_by_line || {};
+
+            const line1Data = (seriesByLine[1] && seriesByLine[1].data) ? seriesByLine[1].data : daily.map(d => Number(d.lines?.[1]?.good_kg || 0));
+            const line2Data = (seriesByLine[2] && seriesByLine[2].data) ? seriesByLine[2].data : daily.map(d => Number(d.lines?.[2]?.good_kg || 0));
+            const line3Data = (seriesByLine[3] && seriesByLine[3].data) ? seriesByLine[3].data : daily.map(d => Number(d.lines?.[3]?.good_kg || 0));
+            const line4Data = (seriesByLine[4] && seriesByLine[4].data) ? seriesByLine[4].data : daily.map(d => Number(d.lines?.[4]?.good_kg || 0));
+
+            const allKgValues = [...line1Data, ...line2Data, ...line3Data, ...line4Data];
+            const maxLineKg = Math.max(...allKgValues, 0);
+
+            const ctxLines = z4LinesCanvas.getContext('2d');
+            dashboardCharts.zone4Lines = new Chart(ctxLines, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Line 1',
+                            data: line1Data,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.25,
+                            pointRadius: 2.5,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#2563eb',
+                        },
+                        {
+                            label: 'Line 2',
+                            data: line2Data,
+                            borderColor: '#059669',
+                            backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.25,
+                            pointRadius: 2.5,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#059669',
+                        },
+                        {
+                            label: 'Line 3',
+                            data: line3Data,
+                            borderColor: '#d97706',
+                            backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.25,
+                            pointRadius: 2.5,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#d97706',
+                        },
+                        {
+                            label: 'Line 4',
+                            data: line4Data,
+                            borderColor: '#7c3aed',
+                            backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.25,
+                            pointRadius: 2.5,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#7c3aed',
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    layout: {
+                        padding: { top: 12, left: 4, right: 4, bottom: 2 }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                boxWidth: 12,
+                                boxHeight: 12,
+                                usePointStyle: true,
+                                font: { weight: 'bold', size: 10 },
+                                color: '#334155',
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const idx = context[0]?.dataIndex ?? 0;
+                                    const d = daily[idx] || {};
+                                    return d.date ? `${d.day_label} (${d.date})` : context[0]?.label;
+                                },
+                                label: function(context) {
+                                    const val = Number(context.raw || 0);
+                                    return ` ${context.dataset.label}: ${formatNumber(val, 4)} kg`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#f8fafc' },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 9 },
+                                autoSkip: true,
+                                maxTicksLimit: 15,
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: maxLineKg > 0 ? maxLineKg * 1.25 : 50,
+                            grid: { color: '#f1f5f9' },
+                            title: { display: true, text: 'BERAT (KG)', color: '#4338ca', font: { size: 10, weight: 'bold' } },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 10 },
+                                callback: function(value) { return formatNumber(value, 0) + ' kg'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     // In-place Chart update
     function updateChartsInPlace(data) {
-        // Update Throughput
+        // Update Throughput (Zone 1 - 4-decimal KG & PCS)
         if (dashboardCharts.throughput && data.zone_1 && data.zone_1.daily_throughput_stages) {
             const rawStages = data.zone_1.daily_throughput_stages || [];
             const stages = rawStages.filter(s => s.stage !== 'cor');
-            const newTonnage = stages.map(s => Number(s.good_tonnage ?? s.good_ton ?? 0));
+            const newKg = stages.map(s => Number(s.good_kg ?? ((s.good_tonnage ?? s.good_ton ?? 0) * 1000)));
             const newDefectRate = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
-            const maxT = Math.max(...newTonnage, 1);
+            const maxK = Math.max(...newKg, 1);
             dashboardCharts.throughput.data.labels = stages.map(s => s.label);
-            dashboardCharts.throughput.data.datasets[0].data = newTonnage;
+            dashboardCharts.throughput.data.datasets[0].data = newKg;
             dashboardCharts.throughput.data.datasets[0].stagesData = stages;
             dashboardCharts.throughput.data.datasets[1].data = newDefectRate;
-            dashboardCharts.throughput.options.scales.yTon.suggestedMax = maxT * 1.45;
+            if (dashboardCharts.throughput.options.scales.yKg) {
+                dashboardCharts.throughput.options.scales.yKg.suggestedMax = maxK * 1.45;
+            }
             dashboardCharts.throughput.options.scales.yPct.suggestedMax = Math.max(...newDefectRate, 5) * 1.25;
             if (dashboardCharts.throughput.options.scales.x && dashboardCharts.throughput.options.scales.x.ticks) {
                 dashboardCharts.throughput.options.scales.x.ticks.color = '#4B5563';
@@ -681,6 +983,48 @@
                 }
             });
         }
+
+        // Update Zone 4 Throughput (30 Days, 6 Stages, 4-decimal KG)
+        if (dashboardCharts.zone4Throughput && data.zone_4 && data.zone_4.stages) {
+            const selectEl = document.getElementById('zone4-stage-select');
+            const activeStage = selectEl?.value || dashboardCharts.currentZone4Stage || 'qc';
+            const stageData = data.zone_4.stages[activeStage] || {};
+            const daily = stageData.daily || [];
+            const kgSeries = daily.map(d => Number(d.good_kg || 0));
+            const maxKg = Math.max(...kgSeries, 0);
+
+            dashboardCharts.zone4Throughput.data.labels = daily.map(d => d.day_label);
+            dashboardCharts.zone4Throughput.data.datasets[0].data = kgSeries;
+            dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
+            dashboardCharts.zone4Throughput.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
+            dashboardCharts.zone4Throughput.update();
+        }
+
+        // Update Zone 4 Line Distribution (Line 1 - 4)
+        if (dashboardCharts.zone4Lines && data.zone_4 && data.zone_4.stages) {
+            const selectEl = document.getElementById('zone4-stage-select');
+            const activeStage = selectEl?.value || dashboardCharts.currentZone4Stage || 'qc';
+            const stageData = data.zone_4.stages[activeStage] || {};
+            const daily = stageData.daily || [];
+            const labels = daily.map(d => d.day_label);
+            const seriesByLine = stageData.series_by_line || {};
+
+            const line1Data = (seriesByLine[1] && seriesByLine[1].data) ? seriesByLine[1].data : daily.map(d => Number(d.lines?.[1]?.good_kg || 0));
+            const line2Data = (seriesByLine[2] && seriesByLine[2].data) ? seriesByLine[2].data : daily.map(d => Number(d.lines?.[2]?.good_kg || 0));
+            const line3Data = (seriesByLine[3] && seriesByLine[3].data) ? seriesByLine[3].data : daily.map(d => Number(d.lines?.[3]?.good_kg || 0));
+            const line4Data = (seriesByLine[4] && seriesByLine[4].data) ? seriesByLine[4].data : daily.map(d => Number(d.lines?.[4]?.good_kg || 0));
+
+            const allKgValues = [...line1Data, ...line2Data, ...line3Data, ...line4Data];
+            const maxLineKg = Math.max(...allKgValues, 0);
+
+            dashboardCharts.zone4Lines.data.labels = labels;
+            dashboardCharts.zone4Lines.data.datasets[0].data = line1Data;
+            dashboardCharts.zone4Lines.data.datasets[1].data = line2Data;
+            dashboardCharts.zone4Lines.data.datasets[2].data = line3Data;
+            dashboardCharts.zone4Lines.data.datasets[3].data = line4Data;
+            dashboardCharts.zone4Lines.options.scales.y.suggestedMax = maxLineKg > 0 ? maxLineKg * 1.25 : 50;
+            dashboardCharts.zone4Lines.update();
+        }
     }
 
     // In-place DOM update
@@ -730,7 +1074,7 @@
                 const yd = z1.yesterday_verified_defect;
                 let html = `<span class="text-base sm:text-lg font-black text-rose-700 leading-tight">${formatNumber(yd.pcs)} PCS</span>`;
                 if (yd.weight_kg !== undefined) {
-                    html += ` <span class="text-slate-300">/</span> <span class="text-xs sm:text-sm font-bold text-slate-700">${formatNumber(yd.weight_kg, 1)} kg</span>`;
+                    html += ` <span class="text-slate-300">/</span> <span class="text-xs sm:text-sm font-bold text-slate-700">${formatNumber(yd.weight_kg, 4)} kg</span>`;
                 }
                 elYDef.innerHTML = html;
             }
@@ -789,6 +1133,124 @@
                 const pEnd = z3.quality_analytics_summary.period_end || '-';
                 elTrendPeriod.textContent = `Periode: ${pStart} s/d ${pEnd}`;
             }
+        }
+
+        // Zone 4 DOM (Daily Production Throughput)
+        if (data.zone_4) {
+            const z4 = data.zone_4;
+            const selectEl = document.getElementById('zone4-stage-select');
+            const activeStage = selectEl?.value || dashboardCharts.currentZone4Stage || 'qc';
+            const stageData = (z4.stages && z4.stages[activeStage]) ? z4.stages[activeStage] : {};
+
+            const elTotalKg = document.getElementById('z4-total-kg');
+            if (elTotalKg && stageData.total_weight_kg !== undefined) {
+                elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 4);
+            }
+
+            const elTotalPcs = document.getElementById('z4-total-pcs');
+            if (elTotalPcs && stageData.total_good_pcs !== undefined) {
+                elTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+            }
+
+            const elTotalKtr = document.getElementById('z4-total-ktr');
+            if (elTotalKtr && stageData.total_ktr_count !== undefined) {
+                elTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+            }
+
+            const elStageLabel = document.getElementById('z4-stage-label');
+            if (elStageLabel && stageData.stage_label) {
+                elStageLabel.textContent = stageData.stage_label;
+            }
+
+            const elSummaryStage = document.getElementById('z4-summary-stage-name');
+            if (elSummaryStage && stageData.stage_label) {
+                elSummaryStage.textContent = stageData.stage_label;
+            }
+
+            const elLinesStageLabel = document.getElementById('z4-lines-stage-label');
+            if (elLinesStageLabel && stageData.stage_label) {
+                elLinesStageLabel.textContent = stageData.stage_label;
+            }
+
+            const elPeriod = document.getElementById('z4-period-label');
+            if (elPeriod && z4.period_start && z4.period_end) {
+                elPeriod.textContent = `Periode: ${z4.period_start} s/d ${z4.period_end}`;
+            }
+
+            const elLinesPeriod = document.getElementById('z4-lines-period-label');
+            if (elLinesPeriod && z4.period_start && z4.period_end) {
+                elLinesPeriod.textContent = `Periode: ${z4.period_start} s/d ${z4.period_end}`;
+            }
+        }
+    }
+
+    // Switch active stage for Zone 4 (Seamless update without full page reload)
+    function switchZone4Stage(stageKey) {
+        dashboardCharts.currentZone4Stage = stageKey;
+        const latestData = window.latestDashboardData || DASHBOARD_CONFIG.initialData || {};
+        const z4Data = latestData.zone_4 || {};
+        const stagesMap = z4Data.stages || {};
+        const stageData = stagesMap[stageKey] || {};
+        const daily = stageData.daily || [];
+
+        // Update Summary KPI
+        const elTotalKg = document.getElementById('z4-total-kg');
+        if (elTotalKg && stageData.total_weight_kg !== undefined) {
+            elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 4);
+        }
+        const elTotalPcs = document.getElementById('z4-total-pcs');
+        if (elTotalPcs && stageData.total_good_pcs !== undefined) {
+            elTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+        }
+        const elTotalKtr = document.getElementById('z4-total-ktr');
+        if (elTotalKtr && stageData.total_ktr_count !== undefined) {
+            elTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+        }
+        const elStageLabel = document.getElementById('z4-stage-label');
+        if (elStageLabel && stageData.stage_label) {
+            elStageLabel.textContent = stageData.stage_label;
+        }
+
+        const elSummaryStage = document.getElementById('z4-summary-stage-name');
+        if (elSummaryStage && stageData.stage_label) {
+            elSummaryStage.textContent = stageData.stage_label;
+        }
+
+        const elLinesStageLabel = document.getElementById('z4-lines-stage-label');
+        if (elLinesStageLabel && stageData.stage_label) {
+            elLinesStageLabel.textContent = stageData.stage_label;
+        }
+
+        // Update Bar Chart in place
+        if (dashboardCharts.zone4Throughput) {
+            const kgSeries = daily.map(d => Number(d.good_kg || 0));
+            const maxKg = Math.max(...kgSeries, 0);
+
+            dashboardCharts.zone4Throughput.data.labels = daily.map(d => d.day_label);
+            dashboardCharts.zone4Throughput.data.datasets[0].data = kgSeries;
+            dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
+            dashboardCharts.zone4Throughput.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
+            dashboardCharts.zone4Throughput.update();
+        }
+
+        // Update Line Chart in place
+        if (dashboardCharts.zone4Lines) {
+            const seriesByLine = stageData.series_by_line || {};
+            const line1Data = (seriesByLine[1] && seriesByLine[1].data) ? seriesByLine[1].data : daily.map(d => Number(d.lines?.[1]?.good_kg || 0));
+            const line2Data = (seriesByLine[2] && seriesByLine[2].data) ? seriesByLine[2].data : daily.map(d => Number(d.lines?.[2]?.good_kg || 0));
+            const line3Data = (seriesByLine[3] && seriesByLine[3].data) ? seriesByLine[3].data : daily.map(d => Number(d.lines?.[3]?.good_kg || 0));
+            const line4Data = (seriesByLine[4] && seriesByLine[4].data) ? seriesByLine[4].data : daily.map(d => Number(d.lines?.[4]?.good_kg || 0));
+
+            const allKgValues = [...line1Data, ...line2Data, ...line3Data, ...line4Data];
+            const maxLineKg = Math.max(...allKgValues, 0);
+
+            dashboardCharts.zone4Lines.data.labels = daily.map(d => d.day_label);
+            dashboardCharts.zone4Lines.data.datasets[0].data = line1Data;
+            dashboardCharts.zone4Lines.data.datasets[1].data = line2Data;
+            dashboardCharts.zone4Lines.data.datasets[2].data = line3Data;
+            dashboardCharts.zone4Lines.data.datasets[3].data = line4Data;
+            dashboardCharts.zone4Lines.options.scales.y.suggestedMax = maxLineKg > 0 ? maxLineKg * 1.25 : 50;
+            dashboardCharts.zone4Lines.update();
         }
     }
 
@@ -883,6 +1345,9 @@
 
             const data = await response.json();
 
+            // Store latest received data for dropdown stage switching
+            window.latestDashboardData = data;
+
             // Success: update timestamp & reset failures
             lastSuccessfulRefresh = new Date();
             consecutiveFailures = 0;
@@ -906,6 +1371,9 @@
 
     // Lifecycle setup
     document.addEventListener('DOMContentLoaded', function() {
+        // Store preloaded initial payload
+        window.latestDashboardData = DASHBOARD_CONFIG.initialData;
+
         // Initialize charts using preloaded initial payload
         initCharts(DASHBOARD_CONFIG.initialData);
 

@@ -118,6 +118,79 @@ class ProductionFloorKanbanController extends Controller
     }
 
     /**
+     * Render the Print / PDF preview for Operational Kanban (A4 Landscape, 4-Line columns).
+     */
+    public function print(Request $request, string $stage): View
+    {
+        $normalizedSlug = strtolower(trim($stage));
+        $targetStage = SandCastingStageAuthorizationService::normalizeStage($normalizedSlug);
+
+        if (! $targetStage) {
+            abort(404, "Tahap operasional '{$stage}' tidak valid.");
+        }
+
+        $user = auth()->user();
+        if (! $this->authorizationService->canAccessStage($user, $targetStage)) {
+            $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
+            abort(403, "Anda tidak memiliki hak akses untuk mencetak Kanban tahap {$stageLabel}.");
+        }
+
+        $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
+
+        // Extract and clean filters (exactly matching show())
+        $filters = [];
+        if ($request->filled('search')) {
+            $filters['search'] = trim((string) $request->input('search'));
+        }
+        if ($request->filled('line_number') && is_numeric($request->input('line_number'))) {
+            $filters['line_number'] = (int) $request->input('line_number');
+        }
+        if ($request->filled('customer')) {
+            $filters['customer'] = trim((string) $request->input('customer'));
+        }
+        if ($request->filled('is_urgent')) {
+            $filters['is_urgent'] = filter_var($request->input('is_urgent'), FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $kanbanData = $this->queryService->getStageKanbanData($targetStage, $filters);
+        $readyCards = $kanbanData['ready'];
+
+        // Group cards strictly by production Line (1 to 4) preserving exact comparator order
+        $readyByLine = [1 => [], 2 => [], 3 => [], 4 => []];
+        foreach ($readyCards as $c) {
+            $lNum = (int) ($c['line_number'] ?? 1);
+            if ($lNum < 1 || $lNum > 4) {
+                $lNum = 1;
+            }
+            $readyByLine[$lNum][] = $c;
+        }
+
+        $selectedLine = isset($filters['line_number']) ? (int) $filters['line_number'] : null;
+
+        // Exact aggregates from printed ready cards ONLY
+        $totalCards = count($readyCards);
+        $totalPcs = (int) array_sum(array_column($readyCards, 'qty'));
+        $totalWeightKg = (float) array_sum(array_column($readyCards, 'total_weight_kg'));
+
+        // Generated timestamp in WIB (UTC+7)
+        $printedAtWib = now()->setTimezone('Asia/Jakarta')->translatedFormat('d/m/Y H:i:s').' WIB';
+
+        return view('sand-casting.kanban.print', [
+            'stage' => $targetStage,
+            'stageSlug' => str_replace('_', '-', $targetStage),
+            'stageLabel' => $stageLabel,
+            'readyCards' => $readyCards,
+            'readyByLine' => $readyByLine,
+            'selectedLine' => $selectedLine,
+            'filters' => $filters,
+            'totalCards' => $totalCards,
+            'totalPcs' => $totalPcs,
+            'totalWeightKg' => $totalWeightKg,
+            'printedAtWib' => $printedAtWib,
+        ]);
+    }
+
+    /**
      * Reorder active ready queue items for a stage and line number.
      */
     public function reorder(Request $request, string $stage): JsonResponse|\Illuminate\Http\RedirectResponse

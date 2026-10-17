@@ -179,17 +179,17 @@ class DashboardEndpointTest extends TestCase
                 ->assertStatus(200)
                 ->assertJsonStructure(['status', 'active_zone', 'data_endpoint']);
 
-            // Data endpoint returns structured 3-zone payload
+            // Data endpoint returns structured 4-zone payload
             $this->actingAs($user)
                 ->get('/sand-casting/dashboard/data')
                 ->assertStatus(200)
-                ->assertJsonStructure(['meta', 'zone_1', 'zone_2', 'zone_3']);
+                ->assertJsonStructure(['meta', 'zone_1', 'zone_2', 'zone_3', 'zone_4']);
         }
     }
 
     public function test_dashboard_blade_view_respects_zone_query_parameters(): void
     {
-        foreach (['1', '2', '3'] as $z) {
+        foreach (['1', '2', '3', '4'] as $z) {
             $this->actingAs($this->adminUser)
                 ->get("/sand-casting/dashboard?zone={$z}")
                 ->assertStatus(200)
@@ -206,7 +206,7 @@ class DashboardEndpointTest extends TestCase
             ->assertJsonValidationErrors(['zone']);
 
         $this->actingAs($this->adminUser)
-            ->getJson('/sand-casting/dashboard/data?zone=4')
+            ->getJson('/sand-casting/dashboard/data?zone=5')
             ->assertStatus(422)
             ->assertJsonValidationErrors(['zone']);
     }
@@ -216,7 +216,7 @@ class DashboardEndpointTest extends TestCase
         // Zone = all
         $resAll = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=all');
         $resAll->assertStatus(200);
-        $resAll->assertJsonStructure(['meta', 'zone_1', 'zone_2', 'zone_3']);
+        $resAll->assertJsonStructure(['meta', 'zone_1', 'zone_2', 'zone_3', 'zone_4']);
         $this->assertSame('all', $resAll->json('meta.requested_zone'));
 
         // Zone = 1
@@ -225,6 +225,7 @@ class DashboardEndpointTest extends TestCase
         $res1->assertJsonStructure(['meta', 'zone_1']);
         $this->assertArrayNotHasKey('zone_2', $res1->json());
         $this->assertArrayNotHasKey('zone_3', $res1->json());
+        $this->assertArrayNotHasKey('zone_4', $res1->json());
         $this->assertSame('1', $res1->json('meta.requested_zone'));
 
         // Zone = 2
@@ -233,6 +234,7 @@ class DashboardEndpointTest extends TestCase
         $res2->assertJsonStructure(['meta', 'zone_2']);
         $this->assertArrayNotHasKey('zone_1', $res2->json());
         $this->assertArrayNotHasKey('zone_3', $res2->json());
+        $this->assertArrayNotHasKey('zone_4', $res2->json());
         $this->assertSame('2', $res2->json('meta.requested_zone'));
 
         // Zone = 3
@@ -241,7 +243,17 @@ class DashboardEndpointTest extends TestCase
         $res3->assertJsonStructure(['meta', 'zone_3']);
         $this->assertArrayNotHasKey('zone_1', $res3->json());
         $this->assertArrayNotHasKey('zone_2', $res3->json());
+        $this->assertArrayNotHasKey('zone_4', $res3->json());
         $this->assertSame('3', $res3->json('meta.requested_zone'));
+
+        // Zone = 4
+        $res4 = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=4');
+        $res4->assertStatus(200);
+        $res4->assertJsonStructure(['meta', 'zone_4']);
+        $this->assertArrayNotHasKey('zone_1', $res4->json());
+        $this->assertArrayNotHasKey('zone_2', $res4->json());
+        $this->assertArrayNotHasKey('zone_3', $res4->json());
+        $this->assertSame('4', $res4->json('meta.requested_zone'));
     }
 
     public function test_empty_state_returns_predictable_zero_structures(): void

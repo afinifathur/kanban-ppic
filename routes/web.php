@@ -246,6 +246,8 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('kanban')->name('kanban.')->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'index'])->name('index');
             Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'reorder'])->name('reorder');
+            Route::get('/stage/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print'])->name('print');
+            Route::get('/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print']);
             Route::get('/stage/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'show'])->name('stage');
             Route::get('/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'show'])->name('show');
         });

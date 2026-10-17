@@ -16,7 +16,7 @@ class SandCastingDashboardService
 {
     public const TIMEZONE = 'Asia/Jakarta';
 
-    public const VALID_ZONES = ['all', '1', '2', '3'];
+    public const VALID_ZONES = ['all', '1', '2', '3', '4'];
 
     public const CACHE_TTL_SECONDS = 45;
 
@@ -36,7 +36,7 @@ class SandCastingDashboardService
      * Get aggregated Sand Casting dashboard payload for specified zone or all zones.
      * Uses RBAC/scope-aware caching by default.
      *
-     * @param  string  $zone  'all', '1', '2', or '3'
+     * @param  string  $zone  'all', '1', '2', '3', or '4'
      * @param  User|null  $user  Authenticated user context
      * @param  bool  $bypassCache  If true, forces fresh calculation
      * @return array<string, mixed>
@@ -47,7 +47,7 @@ class SandCastingDashboardService
     {
         $zoneNormalized = strtolower(trim($zone));
         if (! in_array($zoneNormalized, self::VALID_ZONES, true)) {
-            throw new InvalidArgumentException("Zone '{$zone}' tidak valid. Pilihan: all, 1, 2, 3.");
+            throw new InvalidArgumentException("Zone '{$zone}' tidak valid. Pilihan: all, 1, 2, 3, 4.");
         }
 
         $currentUser = $user ?? auth()->user();
@@ -98,6 +98,10 @@ class SandCastingDashboardService
             $payload['zone_3'] = $this->buildZone3QualityAndAction($todayStr, $user, $scope);
         }
 
+        if ($zone === 'all' || $zone === '4') {
+            $payload['zone_4'] = $this->buildZone4DailyThroughputTonnage($todayStr, $user, $scope);
+        }
+
         return $payload;
     }
 
@@ -129,15 +133,15 @@ class SandCastingDashboardService
         $goodCorPcs = (int) $corLines->sum('qty_good');
         $rejectCorPcs = (int) $corLines->sum('qty_reject');
 
-        $goodCorTon = 0.0;
-        $rejectCorTon = 0.0;
+        $goodCorKg = 0.0;
+        $rejectCorKg = 0.0;
         foreach ($corLines as $line) {
             $w = $this->resolveEffectiveUnitWeight($line);
-            $goodCorTon += ((int) $line->qty_good * $w);
-            $rejectCorTon += ((int) $line->qty_reject * $w);
+            $goodCorKg += ((int) $line->qty_good * $w);
+            $rejectCorKg += ((int) $line->qty_reject * $w);
         }
-        $goodCorTon = round($goodCorTon / 1000, 2);
-        $rejectCorTon = round($rejectCorTon / 1000, 2);
+        $goodCorTon = round($goodCorKg / 1000, 2);
+        $rejectCorTon = round($rejectCorKg / 1000, 2);
 
         $distinctHeatCount = $corLines->pluck('sand_casting_casting_result_id')->unique()->count();
 
@@ -164,6 +168,7 @@ class SandCastingDashboardService
             if ($stgKey === 'cor') {
                 continue; // Phase 5G: Exclude Cor stage from Zone 1 throughput chart
             }
+            $weightKg = (float) $stg['weight_kg'];
             $throughputStages[] = [
                 'stage' => $stgKey,
                 'label' => (string) $stg['stage_label'],
@@ -171,8 +176,10 @@ class SandCastingDashboardService
                 'ktr_count' => (int) $stg['ktr_count'],
                 'input_pcs' => (int) ($stg['input_pcs'] ?? 0),
                 'good_pcs' => (int) $stg['good_pcs'],
-                'good_ton' => round(((float) $stg['weight_kg']) / 1000, 2),
-                'good_tonnage' => round(((float) $stg['weight_kg']) / 1000, 2),
+                'good_kg' => round($weightKg, 4),
+                'weight_kg' => round($weightKg, 4),
+                'good_ton' => round($weightKg / 1000, 2),
+                'good_tonnage' => round($weightKg / 1000, 2),
                 'defect_pcs' => (int) $stg['defect_pcs'],
                 'defect_rate' => (float) $stg['defect_rate'],
                 'defect_rate_pct' => (float) $stg['defect_rate'],
@@ -181,14 +188,17 @@ class SandCastingDashboardService
 
         // 3. Warehouse Receipt Today (Gudang Jadi terminal output)
         $gdSummary = $stageSummaries->firstWhere('stage', 'gudang_jadi');
+        $gdWeightKg = (float) ($gdSummary['weight_kg'] ?? 0.0);
         $warehouseReceiptToday = [
             'checkpoint_code' => 'GUDANG_RECEIVE',
             'is_terminal' => true,
             'ktr_count' => (int) ($gdSummary['ktr_count'] ?? 0),
             'ktr_received_today' => (int) ($gdSummary['ktr_count'] ?? 0),
             'good_pcs' => (int) ($gdSummary['good_pcs'] ?? 0),
-            'good_ton' => round(((float) ($gdSummary['weight_kg'] ?? 0.0)) / 1000, 2),
-            'good_tonnage' => round(((float) ($gdSummary['weight_kg'] ?? 0.0)) / 1000, 2),
+            'good_kg' => round($gdWeightKg, 4),
+            'weight_kg' => round($gdWeightKg, 4),
+            'good_ton' => round($gdWeightKg / 1000, 2),
+            'good_tonnage' => round($gdWeightKg / 1000, 2),
         ];
 
         // 4. Production Code Health & Plan (PO) Health Summary
@@ -237,9 +247,11 @@ class SandCastingDashboardService
             'date' => $todayStr,
             'casting_today' => [
                 'good_pcs' => $goodCorPcs,
+                'good_kg' => round($goodCorKg, 4),
                 'good_ton' => $goodCorTon,
                 'good_tonnage' => $goodCorTon,
                 'reject_pcs' => $rejectCorPcs,
+                'reject_kg' => round($rejectCorKg, 4),
                 'reject_ton' => $rejectCorTon,
                 'reject_tonnage' => $rejectCorTon,
                 'heat_count' => $distinctHeatCount,
@@ -984,6 +996,191 @@ class SandCastingDashboardService
             'weight_coverage_pct' => $coveragePct,
             'unweighted_records_count' => $unweightedRecordsCount,
             'is_weight_fully_available' => ($totalAllStagesUnavailablePcs === 0),
+        ];
+    }
+
+    // =========================================================================
+    // ZONE 4: DAILY PRODUCTION THROUGHPUT TONNAGE (30 DAYS, 6 STAGES, DEFAULT QC)
+    // =========================================================================
+
+    /**
+     * Build Zone 4: Daily Throughput (Weight in KG with 4 decimals & PCS) for 30 calendar days across 6 stages.
+     * Default stage is 'qc'.
+     *
+     * @return array<string, mixed>
+     */
+    protected function buildZone4DailyThroughputTonnage(string $todayStr, ?User $user, ?string $scope): array
+    {
+        $today = Carbon::parse($todayStr, self::TIMEZONE);
+        $startDate = $today->copy()->subDays(29);
+        $startDateStr = $startDate->toDateString();
+        $endDateStr = $todayStr;
+
+        $targetStages = [
+            'netto' => 'NETTO',
+            'bubut_od' => 'Bubut OD',
+            'bubut_cnc' => 'Bubut CNC',
+            'bor' => 'BOR',
+            'qc' => 'QC',
+            'gudang_jadi' => 'Gudang Jadi',
+        ];
+
+        // Query all completed stage executions in the 30-day window
+        $execQuery = SandCastingStageExecution::query()
+            ->with(['castingResultLine.castingResult', 'castingResultLine.productionPlan'])
+            ->whereIn('stage', array_keys($targetStages))
+            ->whereNotNull('physical_done_at')
+            ->whereDate('physical_done_at', '>=', $startDateStr)
+            ->whereDate('physical_done_at', '<=', $endDateStr);
+
+        if ($scope) {
+            $execQuery->whereHas('castingResultLine.productionPlan', function ($p) use ($scope) {
+                $p->where('product_scope', $scope);
+            });
+        }
+
+        $executions = $execQuery->orderBy('physical_done_at', 'asc')->get();
+
+        // Generate 30 consecutive calendar days
+        $calendarDays = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $date = $today->copy()->subDays($i);
+            $calendarDays[] = [
+                'date' => $date->toDateString(),
+                'day_label' => $date->format('d M'),
+            ];
+        }
+
+        $stagesData = [];
+
+        foreach ($targetStages as $stageKey => $stageLabel) {
+            $stgExecs = $executions->where('stage', $stageKey);
+
+            $daily = [];
+            $totalStageKg = 0.0;
+            $totalStagePcs = 0;
+            $totalStageKtr = 0;
+
+            $stageLineTotals = [
+                1 => ['line_number' => 1, 'label' => 'Line 1', 'total_weight_kg' => 0.0, 'total_good_pcs' => 0, 'total_ktr_count' => 0],
+                2 => ['line_number' => 2, 'label' => 'Line 2', 'total_weight_kg' => 0.0, 'total_good_pcs' => 0, 'total_ktr_count' => 0],
+                3 => ['line_number' => 3, 'label' => 'Line 3', 'total_weight_kg' => 0.0, 'total_good_pcs' => 0, 'total_ktr_count' => 0],
+                4 => ['line_number' => 4, 'label' => 'Line 4', 'total_weight_kg' => 0.0, 'total_good_pcs' => 0, 'total_ktr_count' => 0],
+            ];
+            $stageUnallocatedKg = 0.0;
+            $stageUnallocatedPcs = 0;
+            $stageUnallocatedKtr = 0;
+
+            $seriesByLine = [
+                1 => ['line_number' => 1, 'label' => 'Line 1', 'data' => []],
+                2 => ['line_number' => 2, 'label' => 'Line 2', 'data' => []],
+                3 => ['line_number' => 3, 'label' => 'Line 3', 'data' => []],
+                4 => ['line_number' => 4, 'label' => 'Line 4', 'data' => []],
+            ];
+
+            foreach ($calendarDays as $dayInfo) {
+                $dStr = $dayInfo['date'];
+                $dayExecs = $stgExecs->filter(function ($e) use ($dStr) {
+                    return $e->physical_done_at && $e->physical_done_at->toDateString() === $dStr;
+                });
+
+                // Anti double-count rule: group by sand_casting_casting_result_line_id
+                $groupedByLine = $dayExecs->groupBy('sand_casting_casting_result_line_id');
+                $dayKtrCount = $groupedByLine->count();
+
+                $dayGoodPcs = 0;
+                $dayGoodKg = 0.0;
+
+                $dayLines = [
+                    1 => ['line_number' => 1, 'label' => 'Line 1', 'good_kg' => 0.0, 'good_pcs' => 0, 'ktr_count' => 0],
+                    2 => ['line_number' => 2, 'label' => 'Line 2', 'good_kg' => 0.0, 'good_pcs' => 0, 'ktr_count' => 0],
+                    3 => ['line_number' => 3, 'label' => 'Line 3', 'good_kg' => 0.0, 'good_pcs' => 0, 'ktr_count' => 0],
+                    4 => ['line_number' => 4, 'label' => 'Line 4', 'good_kg' => 0.0, 'good_pcs' => 0, 'ktr_count' => 0],
+                ];
+                $dayUnallocatedKg = 0.0;
+                $dayUnallocatedPcs = 0;
+                $dayUnallocatedKtr = 0;
+
+                foreach ($groupedByLine as $lineId => $lineExecs) {
+                    $lineModel = $lineExecs->first()?->castingResultLine;
+                    $w = $lineModel ? $this->resolveEffectiveUnitWeight($lineModel) : 0.0;
+
+                    $effectiveGood = $lineModel
+                        ? $this->quantityResolver->resolveEffectiveGoodQty($lineModel, $stageKey)
+                        : (int) ($lineExecs->last()?->good_qty ?? 0);
+
+                    $itemKg = ($effectiveGood * $w);
+                    $dayGoodPcs += $effectiveGood;
+                    $dayGoodKg += $itemKg;
+
+                    $planLine = $lineModel?->productionPlan?->line_number;
+                    if ($planLine !== null && in_array((int) $planLine, [1, 2, 3, 4], true)) {
+                        $ln = (int) $planLine;
+                        $dayLines[$ln]['good_kg'] += $itemKg;
+                        $dayLines[$ln]['good_pcs'] += $effectiveGood;
+                        $dayLines[$ln]['ktr_count'] += 1;
+
+                        $stageLineTotals[$ln]['total_weight_kg'] += $itemKg;
+                        $stageLineTotals[$ln]['total_good_pcs'] += $effectiveGood;
+                        $stageLineTotals[$ln]['total_ktr_count'] += 1;
+                    } else {
+                        $dayUnallocatedKg += $itemKg;
+                        $dayUnallocatedPcs += $effectiveGood;
+                        $dayUnallocatedKtr += 1;
+
+                        $stageUnallocatedKg += $itemKg;
+                        $stageUnallocatedPcs += $effectiveGood;
+                        $stageUnallocatedKtr += 1;
+                    }
+                }
+
+                foreach ([1, 2, 3, 4] as $ln) {
+                    $dayLines[$ln]['good_kg'] = round($dayLines[$ln]['good_kg'], 4);
+                    $seriesByLine[$ln]['data'][] = $dayLines[$ln]['good_kg'];
+                }
+
+                $daily[] = [
+                    'date' => $dStr,
+                    'day_label' => $dayInfo['day_label'],
+                    'good_kg' => round($dayGoodKg, 4),
+                    'weight_kg' => round($dayGoodKg, 4),
+                    'good_pcs' => $dayGoodPcs,
+                    'ktr_count' => $dayKtrCount,
+                    'lines' => $dayLines,
+                    'unallocated_kg' => round($dayUnallocatedKg, 4),
+                    'unallocated_pcs' => $dayUnallocatedPcs,
+                    'is_fully_reconciled' => ($dayUnallocatedKg === 0.0 && $dayUnallocatedPcs === 0),
+                ];
+
+                $totalStageKg += $dayGoodKg;
+                $totalStagePcs += $dayGoodPcs;
+                $totalStageKtr += $dayKtrCount;
+            }
+
+            foreach ([1, 2, 3, 4] as $ln) {
+                $stageLineTotals[$ln]['total_weight_kg'] = round($stageLineTotals[$ln]['total_weight_kg'], 4);
+            }
+
+            $stagesData[$stageKey] = [
+                'stage' => $stageKey,
+                'stage_label' => $stageLabel,
+                'total_weight_kg' => round($totalStageKg, 4),
+                'total_good_pcs' => $totalStagePcs,
+                'total_ktr_count' => $totalStageKtr,
+                'line_totals' => $stageLineTotals,
+                'total_unallocated_kg' => round($stageUnallocatedKg, 4),
+                'total_unallocated_pcs' => $stageUnallocatedPcs,
+                'is_fully_reconciled' => ($stageUnallocatedKg === 0.0 && $stageUnallocatedPcs === 0),
+                'series_by_line' => $seriesByLine,
+                'daily' => $daily,
+            ];
+        }
+
+        return [
+            'default_stage' => 'qc',
+            'period_start' => $startDateStr,
+            'period_end' => $endDateStr,
+            'stages' => $stagesData,
         ];
     }
 

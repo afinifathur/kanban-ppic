@@ -19,6 +19,15 @@
                 <i class="fas fa-qrcode text-xs"></i>
                 <span>SCAN</span>
             </a>
+            {{-- Tombol Cetak PDF (Hanya Desktop) --}}
+            <button type="button"
+                id="btnKanbanPrintPdf"
+                onclick="openKanbanPrintPdf()"
+                class="hidden md:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white shadow-sm transition-all min-h-[36px] touch-manipulation"
+                title="Cetak PDF Antrean Kanban {{ $stageLabel }} (A4 Landscape)">
+                <i class="fas fa-print text-xs"></i>
+                <span>CETAK PDF</span>
+            </button>
             {{-- Auto-Refresh Indicator Badge (Desktop / TV) --}}
             <span id="autoRefreshBadge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-100 border border-slate-200 text-slate-600 min-h-[36px]" title="Auto-Refresh Aktif (Desktop / TV)">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -530,6 +539,30 @@
 @endif
 
 <script>
+    function openKanbanPrintPdf() {
+        const baseUrl = @json(route('sand-casting.kanban.print', $stageSlug));
+        const url = new URL(baseUrl, window.location.origin);
+
+        // Copy active URL query parameters (e.g. line_number, customer, is_urgent)
+        const currentParams = new URLSearchParams(window.location.search);
+        currentParams.forEach((val, key) => {
+            if (key !== 'search') {
+                url.searchParams.set(key, val);
+            }
+        });
+
+        // Always capture the latest search input value directly from DOM (even if Enter was not pressed)
+        const searchInput = document.getElementById('kanbanSearchInput');
+        const currentSearchVal = searchInput ? searchInput.value.trim() : '';
+        if (currentSearchVal !== '') {
+            url.searchParams.set('search', currentSearchVal);
+        } else {
+            url.searchParams.delete('search');
+        }
+
+        window.open(url.toString(), '_blank');
+    }
+
     function applyKanbanSearch(rawQuery) {
         const query = (rawQuery || '').trim().toLowerCase();
         const cards = document.querySelectorAll('.kanban-card');

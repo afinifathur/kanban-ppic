@@ -40,7 +40,7 @@
                         @if(isset($yesterdayDefect['weight_kg']))
                             <span class="text-slate-300">/</span>
                             <span class="text-xs sm:text-sm font-bold text-slate-700">
-                                {{ number_format($yesterdayDefect['weight_kg'], 1) }} kg
+                                {{ number_format($yesterdayDefect['weight_kg'], 4, ',', '.') }} kg
                             </span>
                         @endif
                     @else
@@ -63,11 +63,11 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
             <h3 class="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <i class="fas fa-chart-bar text-blue-600"></i>
-                THROUGHPUT 6 TAHAP PROSES (TON & PCS)
+                THROUGHPUT 6 TAHAP PROSES (KG & PCS)
             </h3>
             <div class="flex items-center gap-2 text-xs font-bold">
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px]">
-                    <span class="w-2.5 h-2.5 rounded bg-blue-600"></span> Output Baik (TON & PCS langsung di atas batang)
+                    <span class="w-2.5 h-2.5 rounded bg-blue-600"></span> Output Baik (KG & PCS langsung di atas batang)
                 </span>
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-50 text-rose-800 border border-rose-200 text-[11px]">
                     <span class="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Defect Rate (%)

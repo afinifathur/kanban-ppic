@@ -66,7 +66,7 @@ class SandCastingDashboardController extends Controller
         $this->authorizeDashboardAccess($request);
 
         $zone = (string) $request->query('zone', 'all');
-        if (! in_array($zone, ['all', '1', '2', '3'], true)) {
+        if (! in_array($zone, ['all', '1', '2', '3', '4'], true)) {
             $zone = 'all';
         }
 
@@ -87,7 +87,7 @@ class SandCastingDashboardController extends Controller
     }
 
     /**
-     * Fetch aggregated JSON dashboard data for specified zone (all, 1, 2, 3).
+     * Fetch aggregated JSON dashboard data for specified zone (all, 1, 2, 3, 4).
      *
      * @throws ValidationException
      */
@@ -96,10 +96,10 @@ class SandCastingDashboardController extends Controller
         $this->authorizeDashboardAccess($request);
 
         $validator = Validator::make($request->all(), [
-            'zone' => 'nullable|string|in:all,1,2,3',
+            'zone' => 'nullable|string|in:all,1,2,3,4',
             'fresh' => 'nullable|boolean',
         ], [
-            'zone.in' => 'Parameter zone tidak valid. Pilihan: all, 1, 2, 3.',
+            'zone.in' => 'Parameter zone tidak valid. Pilihan: all, 1, 2, 3, 4.',
         ]);
 
         if ($validator->fails()) {
