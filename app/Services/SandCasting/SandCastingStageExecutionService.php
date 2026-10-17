@@ -591,14 +591,17 @@ class SandCastingStageExecutionService
     }
 
     /**
-     * Step 3: QC Inspector verifies defect classification breakdown.
-     * Transitions checkpoint from WAITING_QC to CONFIRMED.
+     * Step 3A: QC Inspector saves draft defect classification breakdown.
+     * Maintains status WAITING_QC and does NOT confirm the execution.
+     * Total draft breakdown must be > 0 and <= execution.defect_qty.
+     * Strictly atomic with lockForUpdate().
      */
-    public function verifyQcBreakdown(
+    public function saveQcBreakdownDraft(
         int|SandCastingStageExecution $executionOrId,
         array $defects = [],
         ?int $qcUserId = null,
-        ?string $notes = null
+        ?string $notes = null,
+        ?string $inspectionDate = null
     ): SandCastingStageExecution {
         $resolvedQcUserId = $qcUserId ?? auth()->id();
         if (! $resolvedQcUserId) {
@@ -609,7 +612,113 @@ class SandCastingStageExecutionService
             throw new InvalidArgumentException("User QC dengan ID {$resolvedQcUserId} tidak ditemukan.");
         }
 
-        return DB::transaction(function () use ($executionOrId, $defects, $resolvedQcUserId, $notes) {
+        return DB::transaction(function () use ($executionOrId, $defects, $notes, $inspectionDate) {
+            $executionId = $executionOrId instanceof SandCastingStageExecution ? $executionOrId->id : (int) $executionOrId;
+
+            $execution = SandCastingStageExecution::where('id', $executionId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $execution) {
+                throw new InvalidArgumentException("Eksekusi dengan ID {$executionId} tidak ditemukan.");
+            }
+
+            $line = $execution->castingResultLine()->lockForUpdate()->first();
+            if (! $line) {
+                throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
+            }
+
+            if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED. Draft tidak dapat disimpan.");
+            }
+
+            if ($execution->status !== SandCastingStageExecution::STATUS_WAITING_QC) {
+                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} belum dalam status verifikasi QC (Status: {$execution->status}).");
+            }
+
+            if ((int) $execution->defect_qty <= 0) {
+                throw new InvalidArgumentException('Tidak dapat menyimpan draft rincian cacat karena total defect PPIC adalah 0 PCS.');
+            }
+
+            if (empty($defects)) {
+                throw new InvalidArgumentException('Rincian cacat (defects) tidak boleh kosong untuk menyimpan draft.');
+            }
+
+            $totalBreakdown = 0;
+            $validatedDefects = [];
+
+            foreach ($defects as $d) {
+                $qty = (int) ($d['qty'] ?? 0);
+                if ($qty <= 0) {
+                    throw new InvalidArgumentException('Kuantitas setiap jenis cacat harus lebih dari 0.');
+                }
+
+                $typeId = (int) ($d['defect_type_id'] ?? 0);
+                if (! DefectType::where('id', $typeId)->exists()) {
+                    throw new InvalidArgumentException("Jenis cacat dengan ID {$typeId} tidak ditemukan.");
+                }
+
+                $validatedDefects[] = [
+                    'defect_type_id' => $typeId,
+                    'qty' => $qty,
+                    'notes' => isset($d['notes']) && trim($d['notes']) !== '' ? trim($d['notes']) : null,
+                ];
+
+                $totalBreakdown += $qty;
+            }
+
+            if ($totalBreakdown <= 0) {
+                throw new InvalidArgumentException('Total kuantitas draft cacat harus lebih dari 0 PCS.');
+            }
+
+            if ($totalBreakdown > (int) $execution->defect_qty) {
+                throw new InvalidArgumentException("Total rincian draft cacat ({$totalBreakdown} PCS) melebihi total defect PPIC ({$execution->defect_qty} PCS).");
+            }
+
+            // Replace defects with validated draft rows
+            $execution->defects()->delete();
+            foreach ($validatedDefects as $vd) {
+                $execution->defects()->create($vd);
+            }
+
+            // Crucial: status remains STATUS_WAITING_QC, qc_verified_at and qc_verified_by remain untouched
+            if ($inspectionDate !== null && trim($inspectionDate) !== '') {
+                $parsedDate = \Carbon\Carbon::parse($inspectionDate)->startOfDay();
+                if ($parsedDate->isFuture()) {
+                    throw new InvalidArgumentException('Tanggal pemeriksaan fisik / defect tidak boleh di masa depan.');
+                }
+                $execution->inspection_date = $parsedDate->toDateString();
+            }
+            if ($notes !== null && trim($notes) !== '') {
+                $execution->notes = trim($notes);
+            }
+            $execution->save();
+
+            return $execution->load(['castingResultLine', 'operator', 'defectEnteredBy', 'defects.defectType']);
+        });
+    }
+
+    /**
+     * Step 3: QC Inspector verifies defect classification breakdown.
+     * Transitions checkpoint from WAITING_QC to CONFIRMED.
+     */
+    public function verifyQcBreakdown(
+        int|SandCastingStageExecution $executionOrId,
+        array $defects = [],
+        ?int $qcUserId = null,
+        ?string $notes = null,
+        ?string $inspectionDate = null
+    ): SandCastingStageExecution {
+        $resolvedQcUserId = $qcUserId ?? auth()->id();
+        if (! $resolvedQcUserId) {
+            throw new InvalidArgumentException('QC User ID wajib diisi atau user harus terautentikasi.');
+        }
+
+        if (! User::where('id', $resolvedQcUserId)->exists()) {
+            throw new InvalidArgumentException("User QC dengan ID {$resolvedQcUserId} tidak ditemukan.");
+        }
+
+        return DB::transaction(function () use ($executionOrId, $defects, $resolvedQcUserId, $notes, $inspectionDate) {
             $executionId = $executionOrId instanceof SandCastingStageExecution ? $executionOrId->id : (int) $executionOrId;
 
             $execution = SandCastingStageExecution::where('id', $executionId)
@@ -684,6 +793,13 @@ class SandCastingStageExecutionService
             $execution->status = SandCastingStageExecution::STATUS_CONFIRMED;
             $execution->qc_verified_at = now();
             $execution->qc_verified_by = $resolvedQcUserId;
+            if ($inspectionDate !== null && trim($inspectionDate) !== '') {
+                $parsedDate = \Carbon\Carbon::parse($inspectionDate)->startOfDay();
+                if ($parsedDate->isFuture()) {
+                    throw new InvalidArgumentException('Tanggal pemeriksaan fisik / defect tidak boleh di masa depan.');
+                }
+                $execution->inspection_date = $parsedDate->toDateString();
+            }
             if ($notes !== null && trim($notes) !== '') {
                 $execution->notes = trim($notes);
             }

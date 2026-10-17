@@ -681,6 +681,23 @@
                 }
             });
         }
+    function renderBreakdownTable(tbodyId, items, emptyText) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="py-3 text-center text-slate-400 font-sans text-[11px]">${emptyText}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = items.map(item => `
+            <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-1 px-2 font-sans font-bold text-slate-900 truncate max-w-[120px]" title="${item.name || ''}">${item.name || '-'}</td>
+                <td class="py-1 px-2 font-sans text-slate-500 text-[10px]">${item.department || '-'}</td>
+                <td class="py-1 px-2 text-right font-bold text-slate-800">${formatNumber(item.qty_pcs)}</td>
+                <td class="py-1 px-2 text-right text-slate-500 font-semibold">${formatNumber(item.percentage, 1)}%</td>
+            </tr>
+        `).join('');
     }
 
     // In-place DOM update
@@ -800,14 +817,33 @@
             const elPpicPcs = document.getElementById('z3-ppicdefect-pcs');
             if (elPpicPcs) elPpicPcs.textContent = formatNumber(cards.ppic_defect_waiting_qc?.pcs_defect ?? 0);
 
+            const elPpicDraft = document.getElementById('z3-ppicdefect-draft');
+            if (elPpicDraft) elPpicDraft.textContent = formatNumber(cards.ppic_defect_waiting_qc?.draft_pcs ?? defToday.draft_breakdown_pcs ?? 0);
+
+            const elPpicUnalloc = document.getElementById('z3-ppicdefect-unallocated');
+            if (elPpicUnalloc) elPpicUnalloc.textContent = formatNumber(cards.ppic_defect_waiting_qc?.unallocated_pcs ?? defToday.unallocated_defect_pcs ?? 0);
+
             const elDefPcs = document.getElementById('z3-today-defect-pcs');
             if (elDefPcs) elDefPcs.textContent = formatNumber(defToday.total_defect_pcs ?? 0);
 
             const elDefTon = document.getElementById('z3-today-defect-ton');
             if (elDefTon) elDefTon.textContent = formatNumber(defToday.total_defect_tonnage ?? defToday.total_defect_ton ?? 0, 2);
 
+            const elConfirmedPcs = document.getElementById('z3-confirmed-pcs');
+            if (elConfirmedPcs) elConfirmedPcs.textContent = formatNumber(defToday.confirmed_defect_pcs ?? 0);
+
+            const elDraftPcs = document.getElementById('z3-draft-pcs');
+            if (elDraftPcs) elDraftPcs.textContent = formatNumber(defToday.draft_breakdown_pcs ?? 0);
+
+            const elUnallocPcs = document.getElementById('z3-unallocated-pcs');
+            if (elUnallocPcs) elUnallocPcs.textContent = formatNumber(defToday.unallocated_defect_pcs ?? 0);
+
             const elUnverPcs = document.getElementById('z3-unverified-pcs');
-            if (elUnverPcs) elUnverPcs.textContent = formatNumber(defToday.unverified_breakdown_pcs ?? 0);
+            if (elUnverPcs) elUnverPcs.textContent = formatNumber(defToday.unverified_breakdown_pcs ?? defToday.unallocated_defect_pcs ?? 0);
+
+            // Re-render breakdown tables reactively
+            renderBreakdownTable('z3-confirmed-breakdown-tbody', defToday.confirmed_breakdown || defToday.verified_breakdown || [], 'Belum ada defect terkonfirmasi hari ini.');
+            renderBreakdownTable('z3-draft-breakdown-tbody', defToday.draft_breakdown || [], 'Belum ada draft breakdown tersimpan.');
         }
     }
 
@@ -885,7 +921,8 @@
         const refreshIcon = document.getElementById('refresh-icon');
         if (refreshIcon) refreshIcon.classList.add('fa-spin');
 
-        const url = `${DASHBOARD_CONFIG.dataEndpoint}?zone=${encodeURIComponent(DASHBOARD_CONFIG.zone)}&_t=${Date.now()}`;
+        const freshParam = isManual ? '&fresh=1' : '';
+        const url = `${DASHBOARD_CONFIG.dataEndpoint}?zone=${encodeURIComponent(DASHBOARD_CONFIG.zone)}${freshParam}&_t=${Date.now()}`;
 
         try {
             const response = await fetch(url, {

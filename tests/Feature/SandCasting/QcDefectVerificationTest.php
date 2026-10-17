@@ -1007,4 +1007,564 @@ class QcDefectVerificationTest extends TestCase
         $this->assertSame(4, $reportData['summary']['total_defect_pcs']);
         $this->assertTrue(collect($reportData['all_records'])->contains('defect_name', 'KEROPOS (FINISH)'));
     }
+
+    /**
+     * TEST 17: Draft parsial 3 dari 7 PCS berhasil disimpan, status tetap WAITING_QC,
+     * qc_verified_at dan qc_verified_by tetap null, defect_qty dan good_qty PPIC utuh.
+     */
+    public function test_17_qc_draft_partial_breakdown_successfully_saved_and_maintains_waiting_qc_status(): void
+    {
+        $exec = $this->prepareWaitingQcExecution('netto', 7);
+        $freshBefore = $exec->fresh();
+        $this->assertSame(7, (int) $freshBefore->defect_qty);
+        $this->assertSame(93, (int) $freshBefore->good_qty);
+        $this->assertNull($freshBefore->qc_verified_at);
+        $this->assertNull($freshBefore->qc_verified_by);
+
+        // QC saves draft 3 of 7 pcs
+        $resDraft = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                [
+                    'defect_type_id' => $this->defectPorosity->id,
+                    'qty' => 3,
+                    'notes' => 'Draft parsial temuan awal',
+                ],
+            ],
+            'notes' => 'Catatan draft sementara QC',
+        ]);
+
+        $resDraft->assertStatus(200);
+        $resDraft->assertJsonPath('success', true);
+        $resDraft->assertJsonPath('data.draft_qty', 3);
+        $resDraft->assertJsonPath('data.defect_qty', 7);
+        $resDraft->assertJsonPath('data.status', SandCastingStageExecution::STATUS_WAITING_QC);
+
+        // Verify Database
+        $this->assertDatabaseHas('sand_casting_stage_execution_defects', [
+            'sand_casting_stage_execution_id' => $exec->id,
+            'defect_type_id' => $this->defectPorosity->id,
+            'qty' => 3,
+            'notes' => 'Draft parsial temuan awal',
+        ]);
+
+        // Verify Stage Execution state is completely preserved
+        $freshAfter = $exec->fresh();
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_QC, $freshAfter->status);
+        $this->assertSame(7, (int) $freshAfter->defect_qty);
+        $this->assertSame(93, (int) $freshAfter->good_qty);
+        $this->assertNull($freshAfter->qc_verified_at);
+        $this->assertNull($freshAfter->qc_verified_by);
+        $this->assertSame('Catatan draft sementara QC', $freshAfter->notes);
+    }
+
+    /**
+     * TEST 18: Draft dengan total melebihi angka PPIC, kuantitas nol/negatif, atau payload kosong ditolak.
+     */
+    public function test_18_qc_draft_exceeding_ppic_total_or_invalid_quantity_is_rejected(): void
+    {
+        $exec = $this->prepareWaitingQcExecution('netto', 7);
+
+        // 1. Exceeds PPIC defect (8 > 7)
+        $resExceed = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 8],
+            ],
+        ]);
+        $resExceed->assertStatus(422);
+        $resExceed->assertJsonFragment(['success' => false]);
+
+        // 2. Qty is 0
+        $resZero = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 0],
+            ],
+        ]);
+        $resZero->assertStatus(422);
+
+        // 3. Qty is negative
+        $resNegative = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => -3],
+            ],
+        ]);
+        $resNegative->assertStatus(422);
+
+        // 4. Empty defects array
+        $resEmpty = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [],
+        ]);
+        $resEmpty->assertStatus(422);
+
+        // 5. Zero-defect execution rejects draft
+        $execZero = $this->prepareWaitingQcExecution('netto', 0);
+        $resZeroExec = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$execZero->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 1],
+            ],
+        ]);
+        $resZeroExec->assertStatus(422);
+    }
+
+    /**
+     * TEST 19: User tanpa otorisasi QC ditolak saat menyimpan draft.
+     */
+    public function test_19_qc_draft_unauthorized_user_is_forbidden(): void
+    {
+        $exec = $this->prepareWaitingQcExecution('netto', 7);
+
+        // 1. Unauthenticated -> Redirects to login
+        $resUnauth = $this->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+        ]);
+        $resUnauth->assertStatus(401);
+
+        // 2. Regular user without role -> 403 Forbidden
+        $resRegular = $this->actingAs($this->unauthorizedUser)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+        ]);
+        $resRegular->assertStatus(403);
+
+        // 3. PPIC user cannot act as QC -> 403 Forbidden
+        $resPpic = $this->actingAs($this->adminPpic)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+        ]);
+        $resPpic->assertStatus(403);
+
+        // 4. SPV user cannot act as QC -> 403 Forbidden
+        $resSpv = $this->actingAs($this->spvUser)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+        ]);
+        $resSpv->assertStatus(403);
+    }
+
+    /**
+     * TEST 20: Draft tetap tersimpan dan terbaca pada request berikutnya via query service dan controller.
+     */
+    public function test_20_qc_draft_persists_across_subsequent_requests_and_reads_in_query_service(): void
+    {
+        $exec = $this->prepareWaitingQcExecution('netto', 7);
+
+        // Save draft 3 pcs (Porosity: 2, Retak: 1)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 2],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 1],
+            ],
+        ])->assertStatus(200);
+
+        // Query service card format
+        $card = $this->queryService->formatQcVerificationCard($exec->fresh());
+        $this->assertNotNull($card);
+        $this->assertSame(3, $card['draft_defect_qty']);
+        $this->assertTrue($card['has_draft']);
+        $this->assertCount(2, $card['defects']);
+        $this->assertSame(7, $card['defect_qty']);
+
+        // Controller index page loads card with defects
+        $resIndex = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto');
+        $resIndex->assertStatus(200);
+        $executions = $resIndex->viewData('executions');
+        $matching = collect($executions->items())->firstWhere('id', $exec->id);
+        $this->assertNotNull($matching);
+        $this->assertSame(3, $matching['draft_defect_qty']);
+        $this->assertTrue($matching['has_draft']);
+    }
+
+    /**
+     * TEST 21: Draft 5 PCS tetap tersedia setelah PPIC menambah total defect menjadi 7 PCS (Phase 6D-2 integration).
+     */
+    public function test_21_qc_draft_5_pcs_remains_available_after_ppic_increases_defect_to_7_pcs(): void
+    {
+        // 1. Initial PPIC defect = 5 pcs
+        $exec = $this->prepareWaitingQcExecution('netto', 5);
+
+        // 2. QC saves draft 5 pcs (Porosity: 3, Retak: 2)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 2],
+            ],
+        ])->assertStatus(200);
+
+        // 3. PPIC adds defect +2 via adjustDefectQty (total becomes 7 pcs)
+        $adjusted = $this->executionService->adjustDefectQty($exec->id, 2, $this->adminPpic->id, 'Penambahan reject susulan Netto');
+        $this->assertSame(7, (int) $adjusted->defect_qty);
+
+        // 4. Draft rows (5 pcs) must still exist and be intact
+        $this->assertDatabaseHas('sand_casting_stage_execution_defects', [
+            'sand_casting_stage_execution_id' => $exec->id,
+            'defect_type_id' => $this->defectPorosity->id,
+            'qty' => 3,
+        ]);
+        $this->assertDatabaseHas('sand_casting_stage_execution_defects', [
+            'sand_casting_stage_execution_id' => $exec->id,
+            'defect_type_id' => $this->defectRetak->id,
+            'qty' => 2,
+        ]);
+
+        // 5. Card reflects 5 pcs draft out of 7 pcs defect
+        $card = $this->queryService->formatQcVerificationCard($adjusted->fresh());
+        $this->assertSame(7, $card['defect_qty']);
+        $this->assertSame(5, $card['draft_defect_qty']);
+        $this->assertTrue($card['has_draft']);
+        $this->assertTrue($card['is_reverification']);
+
+        // 6. QC now updates draft to full 7 pcs (Porosity: 5, Retak: 2)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 2],
+            ],
+        ])->assertStatus(200);
+
+        $cardUpdated = $this->queryService->formatQcVerificationCard($adjusted->fresh());
+        $this->assertSame(7, $cardUpdated['draft_defect_qty']);
+        $this->assertSame(7, $cardUpdated['defect_qty']);
+    }
+
+    /**
+     * TEST 22: Draft tidak menyebabkan stage berikutnya bergerak dan konfirmasi final tetap menolak mismatch.
+     */
+    public function test_22_draft_does_not_advance_stage_and_final_confirmation_still_rejects_mismatch(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $exec = $this->prepareWaitingQcExecution('netto', 7, $line);
+
+        // Line is at bubut_od because netto physical done was completed, but QC is WAITING_QC
+        $this->assertSame('bubut_od', $line->fresh()->current_stage);
+
+        // QC saves draft 3 pcs
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+        ])->assertStatus(200);
+
+        // Stage remains bubut_od (does not skip to bor/qc)
+        $this->assertSame('bubut_od', $line->fresh()->current_stage);
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_QC, $exec->fresh()->status);
+
+        // Zone 3 defect report does not include this unconfirmed draft
+        $reportService = app(SandCastingQcDefectReportService::class);
+        $reportBefore = $reportService->getReportDataset([
+            'stage' => 'netto',
+            'date_from' => now()->subDay()->toDateString(),
+            'date_to' => now()->toDateString(),
+        ], $this->adminQc);
+        $this->assertFalse(collect($reportBefore['all_records'])->contains('traveler_number', $line->traveler_number));
+
+        // Existing verify endpoint REJECTS mismatch (3 !== 7)
+        $resVerifyMismatch = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+        ]);
+        $resVerifyMismatch->assertStatus(422);
+        $resVerifyMismatch->assertJsonFragment(['success' => false]);
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_QC, $exec->fresh()->status);
+
+        // Existing verify endpoint SUCCEEDS with full 7 pcs (3 + 4)
+        $resVerifyMatch = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 4],
+            ],
+        ]);
+        $resVerifyMatch->assertStatus(200);
+        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $exec->fresh()->status);
+        $this->assertNotNull($exec->fresh()->qc_verified_at);
+
+        // Now Zone 3 report includes this verified execution
+        $reportAfter = $reportService->getReportDataset([
+            'stage' => 'netto',
+            'date_from' => now()->subDay()->toDateString(),
+            'date_to' => now()->toDateString(),
+        ], $this->adminQc);
+        $this->assertTrue(collect($reportAfter['all_records'])->contains('traveler_number', $line->traveler_number));
+    }
+
+    /**
+     * TEST 23: Inspection date is saved via save draft.
+     * - inspection_date is persisted to sand_casting_stage_executions.inspection_date
+     * - defect_entered_at and qc_verified_at remain untouched
+     * - defect_qty and good_qty are unchanged
+     */
+    public function test_23_inspection_date_saved_via_save_draft(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $enteredAt = now()->subHours(2);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => $enteredAt,
+            'executed_at' => now()->subHours(3),
+        ]);
+
+        $inspectionDate = now()->subDays(2)->toDateString();
+
+        $response = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'inspection_date' => $inspectionDate,
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+            'notes' => 'Draft catatan inspeksi',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.inspection_date', $inspectionDate);
+
+        $exec->refresh();
+        $this->assertEquals($inspectionDate, $exec->inspection_date?->toDateString());
+        $this->assertSame(SandCastingStageExecution::STATUS_WAITING_QC, $exec->status);
+        $this->assertNull($exec->qc_verified_at);
+        $this->assertNull($exec->qc_verified_by);
+        $this->assertEquals($enteredAt->toDateTimeString(), $exec->defect_entered_at->toDateTimeString());
+        $this->assertEquals(5, $exec->defect_qty);
+        $this->assertEquals(45, $exec->good_qty);
+    }
+
+    /**
+     * TEST 24: Inspection date is saved via verify confirmation.
+     * - inspection_date is persisted to sand_casting_stage_executions.inspection_date
+     * - status transitions to CONFIRMED and qc_verified_at is set
+     * - defect_entered_at is preserved
+     */
+    public function test_24_inspection_date_saved_via_verify(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $enteredAt = now()->subHours(3);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => $enteredAt,
+            'executed_at' => now()->subHours(4),
+        ]);
+
+        $inspectionDate = now()->subDays(1)->toDateString();
+
+        $response = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'inspection_date' => $inspectionDate,
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+            'notes' => 'Konfirmasi inspeksi lengkap',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.inspection_date', $inspectionDate);
+
+        $exec->refresh();
+        $this->assertEquals($inspectionDate, $exec->inspection_date?->toDateString());
+        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $exec->status);
+        $this->assertNotNull($exec->qc_verified_at);
+        $this->assertEquals($this->adminQc->id, $exec->qc_verified_by);
+        $this->assertEquals($enteredAt->toDateTimeString(), $exec->defect_entered_at->toDateTimeString());
+        $this->assertEquals(5, $exec->defect_qty);
+        $this->assertEquals(45, $exec->good_qty);
+    }
+
+    /**
+     * TEST 25: Future inspection date is rejected.
+     */
+    public function test_25_future_inspection_date_is_rejected(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        $futureDate = now()->addDays(2)->toDateString();
+
+        // 1. Rejected on save-draft
+        $resDraft = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'inspection_date' => $futureDate,
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 2],
+            ],
+        ]);
+        $resDraft->assertStatus(422);
+
+        // 2. Rejected on verify
+        $resVerify = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'inspection_date' => $futureDate,
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+        ]);
+        $resVerify->assertStatus(422);
+
+        // 3. Rejected directly in service
+        $this->expectException(\InvalidArgumentException::class);
+        $this->executionService->saveQcBreakdownDraft(
+            executionOrId: $exec,
+            defects: [['defect_type_id' => $this->defectPorosity->id, 'qty' => 2]],
+            qcUserId: $this->adminQc->id,
+            inspectionDate: $futureDate
+        );
+    }
+
+    /**
+     * TEST 26: Inspection date retains value when card is loaded for modal.
+     */
+    public function test_26_inspection_date_retains_value_when_reopened_in_modal(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $inspectionDate = '2026-10-05';
+
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now(),
+            'executed_at' => now(),
+            'inspection_date' => $inspectionDate,
+        ]);
+
+        $card = $this->queryService->formatQcVerificationCard($exec);
+        $this->assertNotNull($card);
+        $this->assertSame($inspectionDate, $card['inspection_date']);
+        $this->assertSame('05/10/2026', $card['inspection_date_formatted']);
+
+        // Test fallback when inspection_date is null
+        $exec->update(['inspection_date' => null, 'physical_done_at' => '2026-10-03 14:00:00']);
+        $cardFallback = $this->queryService->formatQcVerificationCard($exec->fresh());
+        $this->assertNull($cardFallback['inspection_date']);
+        $this->assertStringStartsWith('2026-10-03', $cardFallback['physical_done_at']);
+    }
+
+    /**
+     * TEST 27: Unauthorized user cannot modify inspection date.
+     */
+    public function test_27_unauthorized_user_cannot_save_inspection_date(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        $this->actingAs($this->unauthorizedUser)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'inspection_date' => now()->toDateString(),
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 2],
+            ],
+        ])->assertStatus(403);
+
+        $this->actingAs($this->unauthorizedUser)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'inspection_date' => now()->toDateString(),
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+        ])->assertStatus(403);
+    }
+
+    /**
+     * TEST 28: Confirmed execution cannot be mutated without explicit policy (no bypass).
+     */
+    public function test_28_confirmed_execution_cannot_be_mutated(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->spvUser->id,
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now()->subDay(),
+            'qc_verified_by' => $this->adminQc->id,
+            'qc_verified_at' => now()->subHours(12),
+            'executed_at' => now()->subDay(),
+            'inspection_date' => '2026-10-01',
+        ]);
+
+        // 1. save-draft rejected on CONFIRMED execution
+        $resDraft = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'inspection_date' => '2026-10-02',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 2],
+            ],
+        ]);
+        $resDraft->assertStatus(422);
+
+        // 2. verify rejected on CONFIRMED execution
+        $resVerify = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'inspection_date' => '2026-10-02',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+            ],
+        ]);
+        $resVerify->assertStatus(422);
+
+        // Assert record remained completely untouched
+        $exec->refresh();
+        $this->assertSame('2026-10-01', $exec->inspection_date?->toDateString());
+        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $exec->status);
+    }
 }

@@ -247,7 +247,7 @@
                                 @php
                                     $rowNumber = ($executions->currentPage() - 1) * $executions->perPage() + $index + 1;
                                 @endphp
-                                <tr class="hover:bg-blue-50/40 transition-colors {{ $card['is_reverification'] ? 'bg-amber-50/30' : ($index === 0 ? 'bg-blue-50/20' : '') }}">
+                                <tr id="queue-row-{{ $card['id'] }}" class="hover:bg-blue-50/40 transition-colors {{ $card['is_reverification'] ? 'bg-amber-50/30' : ($index === 0 ? 'bg-blue-50/20' : '') }}">
                                     <!-- Row Number -->
                                     <td class="py-2 px-3 text-center font-bold text-slate-500 bg-slate-50/50">
                                         {{ $rowNumber }}
@@ -361,28 +361,48 @@
                                             {{ number_format($card['good_qty']) }} <span class="text-[10px] font-normal text-slate-400">pcs</span>
                                         </td>
 
-                                        <!-- Status Re-Verifikasi Indicator -->
-                                        <td class="py-2 px-3 text-center whitespace-nowrap">
-                                            @if($card['is_reverification'])
-                                                <span class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1" title="Defect bertambah dari {{ $card['previous_defect_qty'] }} pcs menjadi {{ $card['defect_qty'] }} pcs (+{{ $card['added_defect_qty'] }} pcs)">
-                                                    <i class="fas fa-exclamation-triangle text-amber-600"></i>
-                                                    DEFECT BERTAMBAH (+{{ $card['added_defect_qty'] }})
-                                                </span>
-                                            @else
-                                                <span class="bg-blue-50 text-blue-700 border border-blue-200 font-semibold px-1.5 py-0.5 rounded text-[10px]">
-                                                    Verifikasi Baru
-                                                </span>
-                                            @endif
+                                        <!-- Status Re-Verifikasi / Draft Indicator -->
+                                        <td id="status-cell-{{ $card['id'] }}" class="py-2 px-3 text-center whitespace-nowrap">
+                                            <div class="flex flex-col items-center gap-1">
+                                                @if(!empty($card['has_draft']))
+                                                    <span class="bg-cyan-50 text-cyan-800 border border-cyan-300 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1"
+                                                        title="Draft breakdown tersimpan: {{ $card['draft_defect_qty'] }} dari {{ $card['defect_qty'] }} pcs">
+                                                        <i class="fas fa-file-signature text-cyan-600"></i>
+                                                        DRAFT {{ $card['draft_defect_qty'] }}/{{ $card['defect_qty'] }} PCS
+                                                    </span>
+                                                @endif
+
+                                                @if($card['is_reverification'])
+                                                    <span class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1" title="Defect bertambah dari {{ $card['previous_defect_qty'] }} pcs menjadi {{ $card['defect_qty'] }} pcs (+{{ $card['added_defect_qty'] }} pcs)">
+                                                        <i class="fas fa-exclamation-triangle text-amber-600"></i>
+                                                        DEFECT BERTAMBAH (+{{ $card['added_defect_qty'] }})
+                                                    </span>
+                                                @elseif(empty($card['has_draft']))
+                                                    <span class="bg-blue-50 text-blue-700 border border-blue-200 font-semibold px-1.5 py-0.5 rounded text-[10px]">
+                                                        Verifikasi Baru
+                                                    </span>
+                                                @endif
+                                            </div>
                                         </td>
 
                                         <!-- Aksi Button (Blue QC Action) -->
-                                        <td class="py-2 px-3 text-center whitespace-nowrap">
-                                            <button type="button"
-                                                onclick="openQcModal({{ json_encode($card) }})"
-                                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
-                                                <i class="fas fa-check-double text-[10px]"></i>
-                                                VERIFIKASI
-                                            </button>
+                                        <td id="action-cell-{{ $card['id'] }}" class="py-2 px-3 text-center whitespace-nowrap">
+                                            @if(!empty($card['has_draft']))
+                                                <button type="button"
+                                                    onclick="openQcModal({{ json_encode($card) }})"
+                                                    class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold px-2.5 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
+                                                    title="Lanjutkan pengisian draft ({{ $card['draft_defect_qty'] }}/{{ $card['defect_qty'] }} pcs)">
+                                                    <i class="fas fa-edit text-[10px]"></i>
+                                                    LANJUTKAN DRAFT
+                                                </button>
+                                            @else
+                                                <button type="button"
+                                                    onclick="openQcModal({{ json_encode($card) }})"
+                                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
+                                                    <i class="fas fa-check-double text-[10px]"></i>
+                                                    VERIFIKASI
+                                                </button>
+                                            @endif
                                         </td>
                                     @endif
                                 </tr>
@@ -445,6 +465,17 @@
                             </div>
                         </div>
 
+                        <!-- Draft Active Alert Banner -->
+                        <div id="draftActiveAlertBanner" class="hidden bg-cyan-50 border border-cyan-300 rounded-lg p-2.5 text-cyan-900 text-xs">
+                            <div class="font-bold flex items-center gap-1.5 text-cyan-800">
+                                <i class="fas fa-file-signature text-cyan-600"></i>
+                                DRAFT BREAKDOWN TERSIMPAN
+                            </div>
+                            <div id="draftActiveAlertText" class="text-[11px] text-cyan-700 mt-1">
+                                Tersimpan draft breakdown: <span id="alertDraftQty" class="font-bold text-cyan-900">0</span> dari <span id="alertTargetQty" class="font-bold text-cyan-900">0</span> pcs defect PPIC. Anda dapat menyimpan perubahan draft sementara atau melengkapi rincian untuk konfirmasi final.
+                            </div>
+                        </div>
+
                         <!-- Readonly Info Banner -->
                         <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-1.5">
                             <div class="flex justify-between items-center">
@@ -477,6 +508,23 @@
                                     <div id="modalGoodQty" class="font-black text-emerald-600 text-xs"></div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- TANGGAL PEMERIKSAAN FISIK / DEFECT -->
+                        <div class="bg-blue-50/60 p-2.5 rounded-lg border border-blue-200 text-xs space-y-1">
+                            <label for="modal_inspection_date" class="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                                <span class="flex items-center gap-1.5">
+                                    <i class="fas fa-calendar-day text-blue-600"></i>
+                                    Tanggal Pemeriksaan Fisik / Defect <span class="text-red-500">*</span>
+                                </span>
+                                <span class="text-[10px] text-slate-500 font-normal">Maksimal Hari Ini</span>
+                            </label>
+                            <input type="date" name="inspection_date" id="modal_inspection_date" required
+                                max="{{ date('Y-m-d') }}"
+                                class="w-full text-xs p-2 bg-white border border-slate-300 text-slate-800 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium">
+                            <p class="text-[10px] text-slate-500">
+                                Tanggal aktual pemeriksaan fisik di lantai produksi (Zone 3 & pelaporan defect).
+                            </p>
                         </div>
 
                         <!-- ZERO DEFECT SECTION -->
@@ -559,8 +607,13 @@
                             class="px-3.5 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-100 transition">
                             Batal
                         </button>
+                        <button type="button" id="submitDraftBtn" onclick="submitQcDraft()"
+                            class="px-3.5 py-1.5 text-xs font-bold text-cyan-800 bg-cyan-100 hover:bg-cyan-200 border border-cyan-300 rounded-md shadow-xs transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-save"></i>
+                            <span id="submitDraftBtnText">Simpan Draft Sementara</span>
+                        </button>
                         <button type="submit" id="submitQcBtn"
-                            class="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-xs transition flex items-center gap-1">
+                            class="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-xs transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i class="fas fa-check-double"></i>
                             <span id="submitBtnText">Konfirmasi Verifikasi</span>
                         </button>
@@ -576,13 +629,19 @@
         const defectTypesMap = @json($defectTypesMap);
         let currentTargetDefectQty = 0;
         let currentStageKey = '{{ $selectedStage ?? "netto" }}';
+        let currentCard = null;
+        let currentDraftUrl = '';
+        let currentVerifyUrl = '';
+        let isSubmitting = false;
 
         function openQcModal(card) {
+            currentCard = card;
+            isSubmitting = false;
             const modal = document.getElementById('qcModal');
             const form = document.getElementById('qcForm');
 
             currentTargetDefectQty = parseInt(card.defect_qty) || 0;
-            currentStageKey = card.stage || 'netto';
+            currentStageKey = card.stage || '{{ $selectedStage ?? "netto" }}';
 
             // Populate readonly details
             document.getElementById('modalKtr').textContent = card.traveler_number || '-';
@@ -592,10 +651,29 @@
             document.getElementById('modalInputQty').textContent = (card.input_qty || 0) + ' pcs';
             document.getElementById('modalDefectQty').textContent = currentTargetDefectQty + ' pcs';
             document.getElementById('modalGoodQty').textContent = (card.good_qty || 0) + ' pcs';
-            document.getElementById('qc_notes').value = '';
+            document.getElementById('qc_notes').value = card.notes || '';
 
-            // Update action route URL
-            form.action = "{{ route('sand-casting.qc-defects.verify', ':id') }}".replace(':id', card.id);
+            // Prepopulate Tanggal Pemeriksaan Fisik / Defect
+            let resolvedInspectionDate = card.inspection_date || '';
+            if (!resolvedInspectionDate && card.physical_done_at) {
+                resolvedInspectionDate = card.physical_done_at.substring(0, 10);
+            }
+            if (!resolvedInspectionDate && card.cast_date) {
+                resolvedInspectionDate = card.cast_date;
+            }
+            if (!resolvedInspectionDate) {
+                resolvedInspectionDate = '{{ date('Y-m-d') }}';
+            }
+            const inspectionDateInput = document.getElementById('modal_inspection_date');
+            if (inspectionDateInput) {
+                inspectionDateInput.value = resolvedInspectionDate;
+            }
+
+            // Update action route URLs
+            currentVerifyUrl = "{{ route('sand-casting.qc-defects.verify', ':id') }}".replace(':id', card.id);
+            currentDraftUrl = "{{ route('sand-casting.qc-defects.save-draft', ':id') }}".replace(':id', card.id);
+            form.action = currentVerifyUrl;
+
             const modalStageInput = document.getElementById('qc_modal_stage');
             if (modalStageInput) {
                 modalStageInput.value = card.stage || '';
@@ -610,6 +688,16 @@
                 document.getElementById('alertAddDefect').textContent = '+' + (card.added_defect_qty || 0);
             } else {
                 alertBanner.classList.add('hidden');
+            }
+
+            // Draft alert banner
+            const draftBanner = document.getElementById('draftActiveAlertBanner');
+            if (card.has_draft && card.draft_defect_qty > 0) {
+                draftBanner.classList.remove('hidden');
+                document.getElementById('alertDraftQty').textContent = card.draft_defect_qty;
+                document.getElementById('alertTargetQty').textContent = currentTargetDefectQty;
+            } else {
+                draftBanner.classList.add('hidden');
             }
 
             // Defect logs history for QC
@@ -638,23 +726,31 @@
             const breakdownSection = document.getElementById('breakdownSection');
             const submitBtn = document.getElementById('submitQcBtn');
             const submitBtnText = document.getElementById('submitBtnText');
+            const submitDraftBtn = document.getElementById('submitDraftBtn');
+            const submitDraftBtnText = document.getElementById('submitDraftBtnText');
             const container = document.getElementById('defectRowsContainer');
 
             container.innerHTML = '';
+            if (submitDraftBtnText) {
+                submitDraftBtnText.textContent = 'Simpan Draft Sementara';
+            }
 
             if (currentTargetDefectQty === 0) {
                 // Zero defect flow
                 zeroSection.classList.remove('hidden');
                 breakdownSection.classList.add('hidden');
+                if (submitDraftBtn) submitDraftBtn.classList.add('hidden');
                 submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 submitBtnText.textContent = 'Konfirmasi Verifikasi · 0 Defect';
             } else {
                 // Non-zero defect flow
                 zeroSection.classList.add('hidden');
                 breakdownSection.classList.remove('hidden');
+                if (submitDraftBtn) submitDraftBtn.classList.remove('hidden');
                 submitBtnText.textContent = card.is_reverification ? 'Konfirmasi Re-Verifikasi' : 'Konfirmasi Verifikasi';
 
-                // Prepopulate with existing defect breakdown or add one empty row
+                // Prepopulate with existing defect breakdown (which contains saved draft rows) or add one empty row
                 if (card.defects && card.defects.length > 0) {
                     card.defects.forEach(d => addDefectRow(d));
                 } else {
@@ -670,9 +766,11 @@
         }
 
         function closeQcModal() {
+            if (isSubmitting) return;
             const modal = document.getElementById('qcModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+            currentCard = null;
         }
 
         function addDefectRow(data = null) {
@@ -728,25 +826,389 @@
             const display = document.getElementById('allocatedCountDisplay');
             const badge = document.getElementById('allocatedStatusBadge');
             const submitBtn = document.getElementById('submitQcBtn');
+            const submitDraftBtn = document.getElementById('submitDraftBtn');
 
-            display.textContent = total + ' / ' + currentTargetDefectQty + ' PCS';
+            if (total === 0) {
+                display.textContent = '0 / ' + currentTargetDefectQty + ' PCS';
+                display.className = 'font-black ml-1 text-sm text-slate-500';
+                badge.textContent = 'Belum Diisi · Kurang ' + currentTargetDefectQty + ' pcs';
+                badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700';
 
-            if (total === currentTargetDefectQty) {
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (submitDraftBtn) {
+                    submitDraftBtn.disabled = true;
+                    submitDraftBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            } else if (total === currentTargetDefectQty) {
+                display.textContent = total + ' / ' + currentTargetDefectQty + ' PCS';
                 display.className = 'font-black ml-1 text-sm text-emerald-600';
-                badge.textContent = '✓ Sesuai Target';
+                badge.textContent = '✓ Sesuai Target · Siap Konfirmasi';
                 badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700';
-                submitBtn.disabled = false;
+
+                if (submitBtn) {
+                    submitBtn.disabled = isSubmitting;
+                    if (isSubmitting) {
+                        submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    } else {
+                        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    }
+                }
+                if (submitDraftBtn) {
+                    submitDraftBtn.disabled = isSubmitting;
+                    if (isSubmitting) {
+                        submitDraftBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    } else {
+                        submitDraftBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    }
+                }
             } else if (total > currentTargetDefectQty) {
+                const excess = total - currentTargetDefectQty;
+                display.textContent = total + ' / ' + currentTargetDefectQty + ' PCS';
                 display.className = 'font-black ml-1 text-sm text-red-600';
-                badge.textContent = 'Melebihi Target (' + (total - currentTargetDefectQty) + ' pcs)';
+                badge.textContent = 'Melebihi Target (+' + excess + ' pcs)';
                 badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700';
-                submitBtn.disabled = true;
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (submitDraftBtn) {
+                    submitDraftBtn.disabled = true;
+                    submitDraftBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
             } else {
-                display.className = 'font-black ml-1 text-sm text-amber-600';
-                badge.textContent = 'Kurang ' + (currentTargetDefectQty - total) + ' pcs';
-                badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700';
-                submitBtn.disabled = true;
+                // 0 < total < currentTargetDefectQty (Draft eligible, Confirm disabled)
+                const remaining = currentTargetDefectQty - total;
+                display.textContent = 'Draft ' + total + ' / ' + currentTargetDefectQty + ' PCS';
+                display.className = 'font-black ml-1 text-sm text-cyan-700';
+                badge.textContent = 'Draft Tersedia · Kurang ' + remaining + ' pcs';
+                badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-100 text-cyan-800';
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (submitDraftBtn) {
+                    submitDraftBtn.disabled = isSubmitting;
+                    if (isSubmitting) {
+                        submitDraftBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    } else {
+                        submitDraftBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    }
+                }
             }
+        }
+
+        async function submitQcDraft() {
+            if (isSubmitting) return;
+
+            if (!currentDraftUrl) {
+                alert('URL simpan draft tidak valid.');
+                return;
+            }
+
+            const container = document.getElementById('defectRowsContainer');
+            const rows = container.children;
+            const defects = [];
+            let hasInvalidRow = false;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const select = row.querySelector('select');
+                const qtyInput = row.querySelector('.qc-defect-qty');
+                const notesInput = row.querySelector('input[type="text"]');
+
+                const defectTypeId = select ? select.value : '';
+                const qty = qtyInput ? parseInt(qtyInput.value) || 0 : 0;
+                const notes = notesInput ? notesInput.value.trim() : '';
+
+                if (!defectTypeId && qty === 0) {
+                    continue; // Skip entirely empty row
+                }
+
+                if (!defectTypeId || qty <= 0) {
+                    hasInvalidRow = true;
+                    break;
+                }
+
+                defects.push({
+                    defect_type_id: parseInt(defectTypeId),
+                    qty: qty,
+                    notes: notes
+                });
+            }
+
+            if (hasInvalidRow) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Data Baris Belum Lengkap',
+                        text: 'Pastikan jenis cacat dipilih dan kuantitas minimal 1 PCS untuk setiap baris yang diisi.'
+                    });
+                } else {
+                    alert('Pastikan jenis cacat dipilih dan kuantitas minimal 1 PCS untuk setiap baris yang diisi.');
+                }
+                return;
+            }
+
+            if (defects.length === 0) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Rincian Belum Diisi',
+                        text: 'Minimal 1 baris rincian jenis defect wajib diisi untuk menyimpan draft.'
+                    });
+                } else {
+                    alert('Minimal 1 baris rincian jenis defect wajib diisi untuk menyimpan draft.');
+                }
+                return;
+            }
+
+            const totalAllocated = defects.reduce((sum, d) => sum + d.qty, 0);
+            if (totalAllocated > currentTargetDefectQty) {
+                const excess = totalAllocated - currentTargetDefectQty;
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Melebihi Target Defect',
+                        text: `Total draft (${totalAllocated} PCS) melebihi total defect PPIC (${currentTargetDefectQty} PCS) sebanyak ${excess} PCS.`
+                    });
+                } else {
+                    alert(`Total draft (${totalAllocated} PCS) melebihi total defect PPIC (${currentTargetDefectQty} PCS) sebanyak ${excess} PCS.`);
+                }
+                return;
+            }
+
+            const inspectionDateInput = document.getElementById('modal_inspection_date');
+            const inspectionDateVal = inspectionDateInput ? inspectionDateInput.value : '';
+
+            if (!inspectionDateVal) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Tanggal Pemeriksaan Wajib Diisi',
+                        text: 'Silakan isi Tanggal Pemeriksaan Fisik / Defect sebelum menyimpan draft.'
+                    });
+                } else {
+                    alert('Silakan isi Tanggal Pemeriksaan Fisik / Defect sebelum menyimpan draft.');
+                }
+                return;
+            }
+
+            const notesVal = document.getElementById('qc_notes').value;
+            const stageVal = document.getElementById('qc_modal_stage').value || currentStageKey;
+
+            // Loading state
+            isSubmitting = true;
+            const submitDraftBtn = document.getElementById('submitDraftBtn');
+            const submitDraftBtnText = document.getElementById('submitDraftBtnText');
+            const submitQcBtn = document.getElementById('submitQcBtn');
+
+            if (submitDraftBtn) {
+                submitDraftBtn.disabled = true;
+                submitDraftBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            if (submitDraftBtnText) {
+                submitDraftBtnText.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Menyimpan...';
+            }
+            if (submitQcBtn) {
+                submitQcBtn.disabled = true;
+                submitQcBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                const response = await axios.post(currentDraftUrl, {
+                    stage: stageVal,
+                    inspection_date: inspectionDateVal,
+                    defects: defects,
+                    notes: notesVal
+                }, {
+                    headers: {
+                        'X-CSRF-TOKEN': csrfToken,
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (response.data && response.data.success) {
+                    const data = response.data.data;
+
+                    // Update in-memory currentCard
+                    if (currentCard) {
+                        currentCard.has_draft = true;
+                        currentCard.draft_defect_qty = data.draft_qty;
+                        currentCard.defects = data.defects;
+                        currentCard.notes = notesVal;
+                        currentCard.inspection_date = data.inspection_date || inspectionDateVal;
+                    }
+
+                    // Update draft alert banner in modal
+                    const draftBanner = document.getElementById('draftActiveAlertBanner');
+                    if (draftBanner) {
+                        draftBanner.classList.remove('hidden');
+                        document.getElementById('alertDraftQty').textContent = data.draft_qty;
+                        document.getElementById('alertTargetQty').textContent = data.defect_qty;
+                    }
+
+                    // Update queue table row dynamically
+                    updateQueueTableRow(data);
+
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Draft Tersimpan',
+                            text: response.data.message || `Draft ${data.draft_qty}/${data.defect_qty} PCS berhasil disimpan.`,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        alert(response.data.message || `Draft ${data.draft_qty}/${data.defect_qty} PCS berhasil disimpan.`);
+                    }
+                }
+            } catch (err) {
+                let errorMsg = 'Terjadi kesalahan sistem saat menyimpan draft.';
+                if (err.response && err.response.data) {
+                    if (err.response.data.message) {
+                        errorMsg = err.response.data.message;
+                    }
+                    if (err.response.data.errors) {
+                        const detailErrors = Object.values(err.response.data.errors).flat().join('<br>');
+                        errorMsg += '<div class="mt-2 text-xs text-red-600 text-left bg-red-50 p-2 rounded border border-red-200">' + detailErrors + '</div>';
+                    }
+                } else if (err.message) {
+                    errorMsg = err.message;
+                }
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal Menyimpan Draft',
+                        html: errorMsg
+                    });
+                } else {
+                    alert('Gagal Menyimpan Draft:\n' + errorMsg.replace(/<br>/g, '\n').replace(/<[^>]+>/g, ''));
+                }
+            } finally {
+                isSubmitting = false;
+                if (submitDraftBtnText) {
+                    submitDraftBtnText.textContent = 'Simpan Draft Sementara';
+                }
+                updateTotalAllocated();
+            }
+        }
+
+        function updateQueueTableRow(data) {
+            if (!data || !data.execution_id) return;
+            const executionId = data.execution_id;
+
+            // Update status cell badge
+            const statusCell = document.getElementById(`status-cell-${executionId}`);
+            if (statusCell) {
+                const badgeContainer = statusCell.querySelector('.flex.flex-col');
+                if (badgeContainer) {
+                    // Check if draft badge already exists
+                    let draftBadge = badgeContainer.querySelector('.fa-file-signature')?.closest('span');
+                    if (draftBadge) {
+                        draftBadge.setAttribute('title', `Draft breakdown tersimpan: ${data.draft_qty} dari ${data.defect_qty} pcs`);
+                        draftBadge.innerHTML = `<i class="fas fa-file-signature text-cyan-600"></i> DRAFT ${data.draft_qty}/${data.defect_qty} PCS`;
+                    } else {
+                        const newBadge = document.createElement('span');
+                        newBadge.className = 'bg-cyan-50 text-cyan-800 border border-cyan-300 font-bold px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1';
+                        newBadge.setAttribute('title', `Draft breakdown tersimpan: ${data.draft_qty} dari ${data.defect_qty} pcs`);
+                        newBadge.innerHTML = `<i class="fas fa-file-signature text-cyan-600"></i> DRAFT ${data.draft_qty}/${data.defect_qty} PCS`;
+                        badgeContainer.insertBefore(newBadge, badgeContainer.firstChild);
+
+                        // Remove "Verifikasi Baru" if present
+                        const newVerificationBadge = badgeContainer.querySelector('.bg-blue-50');
+                        if (newVerificationBadge) {
+                            newVerificationBadge.remove();
+                        }
+                    }
+                }
+            }
+
+            // Update action cell button
+            const actionCell = document.getElementById(`action-cell-${executionId}`);
+            if (actionCell && currentCard) {
+                actionCell.innerHTML = `
+                    <button type="button"
+                        onclick='openQcModal(${JSON.stringify(currentCard)})'
+                        class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold px-2.5 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
+                        title="Lanjutkan pengisian draft (${data.draft_qty}/${data.defect_qty} pcs)">
+                        <i class="fas fa-edit text-[10px]"></i>
+                        LANJUTKAN DRAFT
+                    </button>
+                `;
+            }
+        }
+
+        // Final verification form submit handler (double click prevention & validation)
+        const qcForm = document.getElementById('qcForm');
+        if (qcForm) {
+            qcForm.addEventListener('submit', function(e) {
+                if (isSubmitting) {
+                    e.preventDefault();
+                    return false;
+                }
+
+                const inspectionDateInput = document.getElementById('modal_inspection_date');
+                if (inspectionDateInput && !inspectionDateInput.value) {
+                    e.preventDefault();
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Tanggal Pemeriksaan Wajib Diisi',
+                            text: 'Silakan isi Tanggal Pemeriksaan Fisik / Defect sebelum konfirmasi verifikasi.'
+                        });
+                    } else {
+                        alert('Silakan isi Tanggal Pemeriksaan Fisik / Defect sebelum konfirmasi verifikasi.');
+                    }
+                    return false;
+                }
+
+                if (currentTargetDefectQty > 0) {
+                    const inputs = document.querySelectorAll('.qc-defect-qty');
+                    let total = 0;
+                    inputs.forEach(input => {
+                        total += (parseInt(input.value) || 0);
+                    });
+
+                    if (total !== currentTargetDefectQty) {
+                        e.preventDefault();
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Alokasi Belum Sesuai',
+                                text: `Total rincian cacat (${total} PCS) harus sama persis dengan total defect PPIC (${currentTargetDefectQty} PCS).`
+                            });
+                        } else {
+                            alert(`Total rincian cacat (${total} PCS) harus sama persis dengan total defect PPIC (${currentTargetDefectQty} PCS).`);
+                        }
+                        return false;
+                    }
+                }
+
+                isSubmitting = true;
+                const submitBtn = document.getElementById('submitQcBtn');
+                const submitBtnText = document.getElementById('submitBtnText');
+                const submitDraftBtn = document.getElementById('submitDraftBtn');
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (submitDraftBtn) {
+                    submitDraftBtn.disabled = true;
+                    submitDraftBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (submitBtnText) {
+                    submitBtnText.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Mengonfirmasi...';
+                }
+            });
         }
 
         // Close modal on Escape key

@@ -1513,4 +1513,371 @@ class DashboardEndpointTest extends TestCase
         $this->assertStringContainsString('directDataLabelsPlugin', $viewContent);
         $this->assertStringContainsString("filter(s => s.stage !== 'cor')", $viewContent);
     }
+
+    public function test_zone_3_historical_inspection_date_not_shown_as_today_defect(): void
+    {
+        $historicalDate = '2026-09-23';
+        $today = now()->toDateString();
+
+        [$plan, $line, $result] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+
+        $defectType = \App\Models\DefectType::firstOrCreate(
+            ['name' => 'Porosity'],
+            ['department' => 'COR', 'is_active' => true]
+        );
+
+        // Defect with inspection_date 23 Sep 2026, confirmed today 16 Oct 2026
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 8,
+            'good_qty' => 42,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => $historicalDate,
+            'physical_done_at' => Carbon::parse($historicalDate.' 09:00:00'),
+            'defect_entered_at' => Carbon::parse($historicalDate.' 10:00:00'),
+            'qc_verified_at' => now(), // verified today
+            'qc_verified_by' => $this->qcUser->id,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+
+        $exec->defects()->create([
+            'defect_type_id' => $defectType->id,
+            'qty' => 8,
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $res->assertStatus(200);
+
+        // Must NOT appear in today's defect count or breakdown
+        $this->assertSame(0, $res->json('zone_3.defects_today.total_defect_pcs'));
+        $this->assertSame(0, $res->json('zone_3.defects_today.confirmed_defect_pcs'));
+        $this->assertCount(0, $res->json('zone_3.defects_today.verified_breakdown'));
+    }
+
+    public function test_zone_3_fallback_hierarchy_when_inspection_date_null(): void
+    {
+        $twoDaysAgo = now()->subDays(2)->toDateString();
+        $defectType = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+
+        // Exec 1: inspection_date null, physical_done_at is 2 days ago, verified today -> should resolve to 2 days ago, not today
+        [$plan1, $line1, $result1] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $exec1 = $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 5,
+            'good_qty' => 45,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => null,
+            'physical_done_at' => Carbon::parse($twoDaysAgo.' 11:00:00'),
+            'defect_entered_at' => now(),
+            'qc_verified_at' => now(),
+            'qc_verified_by' => $this->qcUser->id,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+        $exec1->defects()->create(['defect_type_id' => $defectType->id, 'qty' => 5]);
+
+        $this->assertSame($twoDaysAgo, $exec1->resolveEffectiveDefectDate());
+
+        $resToday = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $this->assertSame(0, $resToday->json('zone_3.defects_today.total_defect_pcs'));
+
+        // Exec 2: inspection_date null, physical_done_at null, cast_date is 2 days ago -> resolves to cast_date (2 days ago)
+        $result1->update(['cast_date' => $twoDaysAgo]);
+        $exec2 = $line1->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'BUBUT_OD_FACING',
+            'input_qty' => 45,
+            'defect_qty' => 3,
+            'good_qty' => 42,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => null,
+            'physical_done_at' => null,
+            'defect_entered_at' => now(),
+            'qc_verified_at' => now(),
+            'qc_verified_by' => $this->qcUser->id,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+        $exec2->defects()->create(['defect_type_id' => $defectType->id, 'qty' => 3]);
+
+        $this->assertSame($twoDaysAgo, $exec2->resolveEffectiveDefectDate());
+
+        // Exec 3: inspection_date null, physical_done_at is today -> appears today
+        [$plan3, $line3, $result3] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $exec3 = $line3->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 4,
+            'good_qty' => 36,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => null,
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'qc_verified_at' => now(),
+            'qc_verified_by' => $this->qcUser->id,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+        $exec3->defects()->create(['defect_type_id' => $defectType->id, 'qty' => 4]);
+
+        $this->assertSame(now()->toDateString(), $exec3->resolveEffectiveDefectDate());
+
+        Cache::flush();
+        $resTodayAfter = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $this->assertSame(4, $resTodayAfter->json('zone_3.defects_today.total_defect_pcs'));
+    }
+
+    public function test_zone_3_realtime_draft_qc_and_unallocated_calculation(): void
+    {
+        [$plan, $line, $result] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $defectType = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+
+        // PPIC 10 PCS defect recorded, WAITING_QC
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 10,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => now()->toDateString(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+
+        // QC saves draft 4 PCS Porosity
+        $exec->defects()->create([
+            'defect_type_id' => $defectType->id,
+            'qty' => 4,
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $res->assertStatus(200);
+
+        $defToday = $res->json('zone_3.defects_today');
+        // Total defect PPIC = 10
+        $this->assertSame(10, $defToday['total_defect_pcs']);
+        $this->assertSame(10, $defToday['ppic_defect_pcs']);
+
+        // Provisional Draft = 4 PCS
+        $this->assertSame(4, $defToday['draft_breakdown_pcs']);
+        $this->assertCount(1, $defToday['draft_breakdown']);
+        $this->assertSame('Porosity', $defToday['draft_breakdown'][0]['name']);
+        $this->assertSame(4, $defToday['draft_breakdown'][0]['qty_pcs']);
+
+        // Unallocated = max(0, 10 - 4) = 6 PCS
+        $this->assertSame(6, $defToday['unallocated_defect_pcs']);
+        $this->assertSame(6, $defToday['unverified_breakdown_pcs']);
+
+        // Confirmed = 0 PCS
+        $this->assertSame(0, $defToday['confirmed_defect_pcs']);
+        $this->assertCount(0, $defToday['confirmed_breakdown']);
+    }
+
+    public function test_zone_3_draft_does_not_pollute_formal_kpi_and_30_day_analytics(): void
+    {
+        [$plan, $line, $result] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $defectType = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 10,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => now()->toDateString(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+
+        $exec->defects()->create([
+            'defect_type_id' => $defectType->id,
+            'qty' => 4,
+        ]);
+
+        // 1. Dashboard 30-day analytics must remain 0 verified pcs
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $this->assertSame(0, $res->json('zone_3.quality_analytics_summary.total_verified_pcs'));
+
+        // 2. Formal QC Defect Report dataset must be empty
+        $reportService = app(\App\Services\SandCasting\SandCastingQcDefectReportService::class);
+        $dataset = $reportService->getReportDataset([
+            'date_from' => now()->toDateString(),
+            'date_to' => now()->toDateString(),
+        ], $this->adminUser);
+
+        $this->assertSame(0, $dataset['summary']['total_defect_pcs']);
+        $this->assertCount(0, $dataset['all_records']);
+    }
+
+    public function test_zone_3_final_confirmation_clears_draft_and_moves_to_confirmed(): void
+    {
+        [$plan, $line, $result] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $defectPorosity = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+        $defectRetak = \App\Models\DefectType::firstOrCreate(['name' => 'Retak'], ['department' => 'COR', 'is_active' => true]);
+
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 10,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => now()->toDateString(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+
+        // Final confirmation with full 10 PCS
+        $exec->defects()->delete();
+        $exec->defects()->create(['defect_type_id' => $defectPorosity->id, 'qty' => 4]);
+        $exec->defects()->create(['defect_type_id' => $defectRetak->id, 'qty' => 6]);
+        $exec->update([
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'qc_verified_at' => now(),
+            'qc_verified_by' => $this->qcUser->id,
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $defToday = $res->json('zone_3.defects_today');
+
+        // Total PPIC = 10
+        $this->assertSame(10, $defToday['total_defect_pcs']);
+
+        // Draft = 0, Unallocated = 0
+        $this->assertSame(0, $defToday['draft_breakdown_pcs']);
+        $this->assertCount(0, $defToday['draft_breakdown']);
+        $this->assertSame(0, $defToday['unallocated_defect_pcs']);
+
+        // Confirmed = 10, exactly 10 PCS
+        $this->assertSame(10, $defToday['confirmed_defect_pcs']);
+        $this->assertCount(2, $defToday['confirmed_breakdown']);
+
+        // Formal report now sees 10 pcs
+        $reportService = app(\App\Services\SandCasting\SandCastingQcDefectReportService::class);
+        $dataset = $reportService->getReportDataset([
+            'date_from' => now()->toDateString(),
+            'date_to' => now()->toDateString(),
+        ], $this->adminUser);
+        $this->assertSame(10, $dataset['summary']['total_defect_pcs']);
+    }
+
+    public function test_zone_3_multiple_executions_data_isolation(): void
+    {
+        $defectPorosity = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+
+        // Exec A: WAITING_QC, PPIC 10, draft 4
+        [$pA, $lA, $rA] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $execA = $lA->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 10,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => now()->toDateString(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+        $execA->defects()->create(['defect_type_id' => $defectPorosity->id, 'qty' => 4]);
+
+        // Exec B: WAITING_QC, PPIC 5, draft 0
+        [$pB, $lB, $rB] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $lB->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 30,
+            'defect_qty' => 5,
+            'good_qty' => 25,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => now()->toDateString(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+
+        // Exec C: CONFIRMED, PPIC 8, confirmed 8
+        [$pC, $lC, $rC] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $execC = $lC->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'BUBUT_OD_FACING',
+            'input_qty' => 40,
+            'defect_qty' => 8,
+            'good_qty' => 32,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'inspection_date' => now()->toDateString(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+            'qc_verified_at' => now(),
+            'qc_verified_by' => $this->qcUser->id,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+        $execC->defects()->create(['defect_type_id' => $defectPorosity->id, 'qty' => 8]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $defToday = $res->json('zone_3.defects_today');
+
+        // Total PPIC = 10 + 5 + 8 = 23
+        $this->assertSame(23, $defToday['total_defect_pcs']);
+
+        // Draft = 4
+        $this->assertSame(4, $defToday['draft_breakdown_pcs']);
+
+        // Unallocated = (10 - 4) + 5 = 11
+        $this->assertSame(11, $defToday['unallocated_defect_pcs']);
+
+        // Confirmed = 8
+        $this->assertSame(8, $defToday['confirmed_defect_pcs']);
+
+        // Sum invariant: 8 + 4 + 11 = 23
+        $this->assertSame(23, $defToday['confirmed_defect_pcs'] + $defToday['draft_breakdown_pcs'] + $defToday['unallocated_defect_pcs']);
+    }
+
+    public function test_zone_3_draft_from_historical_date_not_grouped_into_today(): void
+    {
+        $yesterday = now()->subDays(1)->toDateString();
+        $defectPorosity = \App\Models\DefectType::firstOrCreate(['name' => 'Porosity'], ['department' => 'COR', 'is_active' => true]);
+
+        // Historical execution from yesterday with draft 3 pcs
+        [$p, $l, $r] = $this->createPlanWithKtrLine(['product_scope' => 'FLANGE_BESI']);
+        $exec = $l->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 6,
+            'good_qty' => 44,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'inspection_date' => $yesterday,
+            'physical_done_at' => Carbon::parse($yesterday.' 08:00:00'),
+            'defect_entered_at' => Carbon::parse($yesterday.' 09:00:00'),
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+        ]);
+        $exec->defects()->create(['defect_type_id' => $defectPorosity->id, 'qty' => 3]);
+
+        // Today's dashboard must have 0 draft
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=3');
+        $defToday = $res->json('zone_3.defects_today');
+
+        $this->assertSame(0, $defToday['total_defect_pcs']);
+        $this->assertSame(0, $defToday['draft_breakdown_pcs']);
+        $this->assertSame(0, $defToday['unallocated_defect_pcs']);
+    }
 }

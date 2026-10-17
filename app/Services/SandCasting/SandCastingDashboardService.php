@@ -5,7 +5,6 @@ namespace App\Services\SandCasting;
 use App\Models\DefectType;
 use App\Models\SandCastingCastingResultLine;
 use App\Models\SandCastingStageExecution;
-use App\Models\SandCastingStageExecutionDefect;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -492,19 +491,14 @@ class SandCastingDashboardService
             'note' => 'Data historis sebelum aktivasi kebijakan dilindungi dari Auto-Nihil.',
         ];
 
-        // 2. Defects Today (Inspection basis with fallback to entry date)
+        // 2. Defects Today (Inspection basis with agreed fallback hierarchy: inspection_date -> physical_done_at -> cast_date -> defect_entered_at -> qc_verified_at)
         $todayDefectExecs = (clone $baseExecQuery)
-            ->where(function ($q) use ($todayStr, $hasInspectionDate) {
-                if ($hasInspectionDate) {
-                    $q->whereDate('inspection_date', $todayStr)
-                        ->orWhere(function ($sq) use ($todayStr) {
-                            $sq->whereNull('inspection_date')
-                                ->whereDate('defect_entered_at', $todayStr);
-                        });
-                } else {
-                    $q->whereDate('defect_entered_at', $todayStr);
-                }
-            })
+            ->with([
+                'castingResultLine.castingResult',
+                'castingResultLine.productionPlan',
+                'defects.defectType',
+            ])
+            ->whereEffectiveDefectDate($todayStr)
             ->where('defect_qty', '>', 0)
             ->get();
 
@@ -517,37 +511,19 @@ class SandCastingDashboardService
         }
         $totalDefectTodayTon = round($totalDefectTodayTon / 1000, 2);
 
-        // Verified breakdown from sand_casting_stage_execution_defects
-        $verifiedDefectQuery = SandCastingStageExecutionDefect::query()
-            ->whereHas('stageExecution', function ($q) use ($todayStr, $scope) {
-                $q->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
-                    ->where(function ($sq) use ($todayStr) {
-                        $sq->whereDate('inspection_date', $todayStr)
-                            ->orWhere(function ($ssq) use ($todayStr) {
-                                $ssq->whereNull('inspection_date')
-                                    ->whereDate('qc_verified_at', $todayStr);
-                            });
-                    });
+        // A. Confirmed breakdown from CONFIRMED executions
+        $confirmedExecsToday = $todayDefectExecs->where('status', SandCastingStageExecution::STATUS_CONFIRMED);
+        $confirmedDefects = $confirmedExecsToday->flatMap->defects;
+        $confirmedTotalPcs = (int) $confirmedDefects->sum('qty');
 
-                if ($scope) {
-                    $q->whereHas('castingResultLine.productionPlan', function ($p) use ($scope) {
-                        $p->where('product_scope', $scope);
-                    });
-                }
-            })
-            ->with('defectType');
-
-        $verifiedDefects = $verifiedDefectQuery->get();
-        $verifiedTotalPcs = (int) $verifiedDefects->sum('qty');
-
-        $groupedBreakdown = $verifiedDefects->groupBy('defect_type_id');
+        $groupedConfirmedBreakdown = $confirmedDefects->groupBy('defect_type_id');
         $verifiedBreakdown = [];
 
-        foreach ($groupedBreakdown as $typeId => $items) {
+        foreach ($groupedConfirmedBreakdown as $typeId => $items) {
             /** @var DefectType|null $typeModel */
             $typeModel = $items->first()?->defectType;
             $qty = (int) $items->sum('qty');
-            $pct = $verifiedTotalPcs > 0 ? round(($qty / $verifiedTotalPcs) * 100, 1) : 0.0;
+            $pct = $confirmedTotalPcs > 0 ? round(($qty / $confirmedTotalPcs) * 100, 1) : 0.0;
 
             $verifiedBreakdown[] = [
                 'defect_type_id' => (int) $typeId,
@@ -560,29 +536,55 @@ class SandCastingDashboardService
 
         usort($verifiedBreakdown, fn ($a, $b) => $b['qty_pcs'] <=> $a['qty_pcs']);
 
-        $unverifiedBreakdownPcs = (int) (clone $baseExecQuery)
-            ->where('status', SandCastingStageExecution::STATUS_WAITING_QC)
-            ->where('defect_qty', '>', 0)
-            ->where(function ($q) use ($todayStr) {
-                $q->whereDate('inspection_date', $todayStr)
-                    ->orWhereDate('defect_entered_at', $todayStr);
-            })
-            ->sum('defect_qty');
+        // B. Provisional Draft breakdown from WAITING_QC executions
+        $waitingQcExecsToday = $todayDefectExecs->where('status', SandCastingStageExecution::STATUS_WAITING_QC);
+        $draftDefects = $waitingQcExecsToday->flatMap->defects;
+        $draftTotalPcs = (int) $draftDefects->sum('qty');
 
-        // 3. 7-Day Defect Trend (Consecutive 7 calendar days)
+        $groupedDraftBreakdown = $draftDefects->groupBy('defect_type_id');
+        $draftBreakdown = [];
+
+        foreach ($groupedDraftBreakdown as $typeId => $items) {
+            /** @var DefectType|null $typeModel */
+            $typeModel = $items->first()?->defectType;
+            $qty = (int) $items->sum('qty');
+            $pct = $draftTotalPcs > 0 ? round(($qty / $draftTotalPcs) * 100, 1) : 0.0;
+
+            $draftBreakdown[] = [
+                'defect_type_id' => (int) $typeId,
+                'name' => (string) ($typeModel?->name ?? 'Lain-lain'),
+                'department' => (string) ($typeModel?->department ?? '-'),
+                'qty_pcs' => $qty,
+                'percentage' => $pct,
+            ];
+        }
+
+        usort($draftBreakdown, fn ($a, $b) => $b['qty_pcs'] <=> $a['qty_pcs']);
+
+        // C. Sisa defect PPIC yang belum diklasifikasikan (unallocated = max(0, defect_qty PPIC - draft breakdown tersimpan))
+        $unallocatedBreakdownPcs = 0;
+        foreach ($todayDefectExecs as $e) {
+            $ppicQty = (int) $e->defect_qty;
+            if ($e->status === SandCastingStageExecution::STATUS_CONFIRMED) {
+                // Confirmed executions are fully categorized
+                continue;
+            } elseif ($e->status === SandCastingStageExecution::STATUS_WAITING_QC) {
+                $savedDraftQty = (int) $e->defects->sum('qty');
+                $unallocatedBreakdownPcs += max(0, $ppicQty - $savedDraftQty);
+            } else {
+                // WAITING_DEFECT, etc.
+                $unallocatedBreakdownPcs += $ppicQty;
+            }
+        }
+
+        // 3. 7-Day Defect Trend (Consecutive 7 calendar days with agreed date hierarchy)
         $trendDays = [];
         for ($i = 6; $i >= 0; $i--) {
             $targetDate = Carbon::parse($todayStr, self::TIMEZONE)->subDays($i)->toDateString();
             $dayLabel = Carbon::parse($targetDate, self::TIMEZONE)->format('d M');
 
             $dayExecs = (clone $baseExecQuery)
-                ->where(function ($q) use ($targetDate) {
-                    $q->whereDate('inspection_date', $targetDate)
-                        ->orWhere(function ($sq) use ($targetDate) {
-                            $sq->whereNull('inspection_date')
-                                ->whereDate('defect_entered_at', $targetDate);
-                        });
-                })
+                ->whereEffectiveDefectDate($targetDate)
                 ->where('defect_qty', '>', 0)
                 ->get();
 
@@ -618,10 +620,16 @@ class SandCastingDashboardService
             ],
             'defects_today' => [
                 'total_defect_pcs' => $totalDefectTodayPcs,
+                'ppic_defect_pcs' => $totalDefectTodayPcs,
                 'total_defect_ton' => $totalDefectTodayTon,
                 'total_defect_tonnage' => $totalDefectTodayTon,
                 'verified_breakdown' => $verifiedBreakdown,
-                'unverified_breakdown_pcs' => $unverifiedBreakdownPcs,
+                'confirmed_breakdown' => $verifiedBreakdown,
+                'confirmed_defect_pcs' => $confirmedTotalPcs,
+                'draft_breakdown' => $draftBreakdown,
+                'draft_breakdown_pcs' => $draftTotalPcs,
+                'unallocated_defect_pcs' => $unallocatedBreakdownPcs,
+                'unverified_breakdown_pcs' => $unallocatedBreakdownPcs,
                 'verified_source_label' => 'Berdasarkan Verifikasi QC (CONFIRMED)',
             ],
             'defect_trend_7_days' => $trendDays,
@@ -673,43 +681,20 @@ class SandCastingDashboardService
         // Fetch all confirmed executions within the 30-day window with their defects & defectType
         $confirmedQuery = (clone $baseExecQuery)
             ->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
-            ->where(function ($q) use ($startDateStr, $endDateStr) {
-                $q->whereBetween('inspection_date', [$startDateStr, $endDateStr])
-                    ->orWhere(function ($sq) use ($startDateStr, $endDateStr) {
-                        $sq->whereNull('inspection_date')
-                            ->where(function ($ssq) use ($startDateStr, $endDateStr) {
-                                $ssq->whereBetween('qc_verified_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
-                                    ->orWhereBetween('defect_entered_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59']);
-                            });
-                    });
-            })
-            ->with(['defects.defectType', 'castingResultLine.productionPlan']);
+            ->whereEffectiveDefectDateBetween($startDateStr, $endDateStr)
+            ->with(['defects.defectType', 'castingResultLine.castingResult', 'castingResultLine.productionPlan']);
 
         $confirmedExecs = $confirmedQuery->get();
 
         // Also query executions (any status) within 30-day window to identify active inspection dates
         $activityDates = (clone $baseExecQuery)
-            ->where(function ($q) use ($startDateStr, $endDateStr) {
-                $q->whereBetween('inspection_date', [$startDateStr, $endDateStr])
-                    ->orWhere(function ($sq) use ($startDateStr, $endDateStr) {
-                        $sq->whereNull('inspection_date')
-                            ->where(function ($ssq) use ($startDateStr, $endDateStr) {
-                                $ssq->whereBetween('qc_verified_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
-                                    ->orWhereBetween('defect_entered_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
-                                    ->orWhereBetween('physical_done_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59'])
-                                    ->orWhereBetween('executed_at', [$startDateStr.' 00:00:00', $endDateStr.' 23:59:59']);
-                            });
-                    });
-            })
-            ->get(['inspection_date', 'qc_verified_at', 'defect_entered_at', 'physical_done_at', 'executed_at']);
+            ->with(['castingResultLine.castingResult'])
+            ->whereEffectiveDefectDateBetween($startDateStr, $endDateStr)
+            ->get();
 
         $activeDatesSet = [];
         foreach ($activityDates as $act) {
-            $d = $act->inspection_date?->toDateString()
-                ?? $act->qc_verified_at?->toDateString()
-                ?? $act->defect_entered_at?->toDateString()
-                ?? $act->physical_done_at?->toDateString()
-                ?? $act->executed_at?->toDateString();
+            $d = $act->resolveEffectiveDefectDate();
             if ($d) {
                 $activeDatesSet[$d] = true;
             }
@@ -718,9 +703,7 @@ class SandCastingDashboardService
         // Map confirmed executions by effective date
         $confirmedByDate = [];
         foreach ($confirmedExecs as $ce) {
-            $d = $ce->inspection_date?->toDateString()
-                ?? $ce->qc_verified_at?->toDateString()
-                ?? $ce->defect_entered_at?->toDateString();
+            $d = $ce->resolveEffectiveDefectDate();
             if ($d) {
                 $confirmedByDate[$d][] = $ce;
             }

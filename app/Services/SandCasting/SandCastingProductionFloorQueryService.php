@@ -1604,6 +1604,7 @@ class SandCastingProductionFloorQueryService
             'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
             'traveler_number' => $line->traveler_number,
             'heat_number' => $line->castingResult?->heat_number,
+            'cast_date' => $line->castingResult?->cast_date?->format('Y-m-d'),
             'production_code' => $line->productionPlan?->code ?? $line->castingOrderLine?->code,
             'item_code' => $line->productionPlan?->item_code,
             'item_name' => $line->productionPlan?->item_name ?? $line->castingOrderLine?->item_name,
@@ -1637,6 +1638,8 @@ class SandCastingProductionFloorQueryService
             'is_reverification' => $isReverification,
             'previous_defect_qty' => $previousDefectQty,
             'added_defect_qty' => $addedDefectQty,
+            'draft_defect_qty' => (int) array_sum(array_column($defects, 'qty')),
+            'has_draft' => ! empty($defects) && $exec->status === SandCastingStageExecution::STATUS_WAITING_QC,
         ];
     }
 

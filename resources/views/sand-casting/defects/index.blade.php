@@ -334,9 +334,9 @@
                                             <button type="button"
                                                 onclick="openAddDefectModal({{ json_encode($card) }})"
                                                 class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
-                                                title="Tambah defect susulan secara kumulatif">
-                                                <i class="fas fa-plus-circle text-[10px]"></i>
-                                                TAMBAH DEFECT
+                                                title="Tambah defect susulan atau koreksi kuantitas defect">
+                                                <i class="fas fa-sliders-h text-[10px]"></i>
+                                                TAMBAH / KOREKSI
                                             </button>
                                         @endif
                                     </td>
@@ -495,11 +495,11 @@
                 <div class="flex items-center justify-between p-3.5 px-4 border-b border-slate-200 bg-emerald-50">
                     <div class="flex items-center gap-2">
                         <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
-                            <i class="fas fa-plus-circle"></i>
+                            <i class="fas fa-sliders-h" id="addModalIcon"></i>
                         </div>
                         <div>
-                            <h3 class="text-xs font-bold text-emerald-900">Tambah Defect (PPIC)</h3>
-                            <p class="text-[10px] text-emerald-700">Penambahan defect susulan bersifat kumulatif</p>
+                            <h3 class="text-xs font-bold text-emerald-900" id="addModalTitle">Penyesuaian Defect (PPIC)</h3>
+                            <p class="text-[10px] text-emerald-700" id="addModalSubtitle">Tambah defect susulan (+) atau koreksi defect (-)</p>
                         </div>
                     </div>
                     <button type="button" onclick="closeAddDefectModal()"
@@ -552,19 +552,21 @@
                         </div>
 
                         <input type="hidden" name="stage" id="addModalStageInput" value="">
+                        <input type="hidden" name="idempotency_key" id="addIdempotencyKey" value="">
                         <input type="hidden" id="addHiddenInputQty" value="0">
                         <input type="hidden" id="addHiddenCurrentDefect" value="0">
 
-                        <!-- Input Added Defect Qty -->
+                        <!-- Input Added/Adjusted Defect Qty -->
                         <div>
-                            <label for="added_qty" class="block text-xs font-bold text-slate-700 mb-1">
-                                Tambah Defect (PCS) <span class="text-red-500">*</span>
+                            <label for="added_qty" class="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                                <span id="addQtyLabel">Kuantitas Penyesuaian Defect (PCS)</span>
+                                <span class="text-red-500 font-bold">*</span>
                             </label>
-                            <input type="number" name="added_qty" id="added_qty" min="1" step="1" required
+                            <input type="number" name="added_qty" id="added_qty" step="1" required
                                 class="w-full text-center text-lg font-black tracking-wider py-1.5 bg-white border border-slate-300 text-slate-800 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                                placeholder="Contoh: 1" oninput="calculateCumulativeDefect()">
-                            <p class="text-[10px] text-slate-400 mt-0.5">
-                                Masukkan jumlah defect tambahan yang baru ditemukan (bukan total akhir).
+                                placeholder="Contoh: 1 atau -1" oninput="calculateCumulativeDefect()">
+                            <p class="text-[10px] text-slate-400 mt-0.5" id="addQtyHelp">
+                                Masukkan angka bulat positif untuk penambahan defect (contoh: 2) atau negatif untuk koreksi (contoh: -1). Tidak boleh 0.
                             </p>
                         </div>
 
@@ -583,14 +585,18 @@
                             </div>
                         </div>
 
-                        <!-- Notes (Optional) -->
+                        <!-- Notes / Correction Reason -->
                         <div>
-                            <label for="add_notes" class="block text-xs font-bold text-slate-700 mb-1">
-                                Catatan Penambahan (Opsional)
+                            <label for="add_notes" class="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                                <span id="addNotesLabel">Catatan Penambahan (Opsional)</span>
+                                <span id="addNotesRequired" class="text-red-500 font-bold hidden">* (Wajib diisi)</span>
                             </label>
-                            <textarea name="notes" id="add_notes" rows="2"
+                            <textarea name="notes" id="add_notes" rows="2" oninput="calculateCumulativeDefect()"
                                 class="w-full text-xs p-2 bg-white border border-slate-300 text-slate-800 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                                placeholder="Alasan penambahan defect..."></textarea>
+                                placeholder="Alasan penambahan atau koreksi defect..."></textarea>
+                            <p id="addNotesHelp" class="text-[10px] text-amber-600 font-medium mt-0.5 hidden">
+                                Alasan koreksi (notes/reason) wajib diisi untuk penyesuaian defect negatif.
+                            </p>
                         </div>
 
                         <!-- Defect History Accordion / List -->
@@ -604,7 +610,7 @@
                                         <tr>
                                             <th class="py-1 px-2">Waktu</th>
                                             <th class="py-1 px-2">Aksi / User</th>
-                                            <th class="py-1 px-2 text-right">Tambah</th>
+                                            <th class="py-1 px-2 text-right">Tambah/Koreksi</th>
                                             <th class="py-1 px-2 text-right">Sebelum</th>
                                             <th class="py-1 px-2 text-right">Sesudah</th>
                                         </tr>
@@ -626,7 +632,7 @@
                         <button type="submit" id="submitAddDefectBtn"
                             class="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md shadow-xs transition flex items-center gap-1">
                             <i class="fas fa-save"></i>
-                            Simpan Penambahan
+                            <span id="submitAddDefectBtnText">Simpan Penyesuaian</span>
                         </button>
                     </div>
                 </form>
@@ -743,6 +749,12 @@
             document.getElementById('addHiddenInputQty').value = inputQty;
             document.getElementById('addHiddenCurrentDefect').value = currentDefect;
             
+            // Generate fresh client idempotency key for this session
+            const idempotencyInput = document.getElementById('addIdempotencyKey');
+            if (idempotencyInput) {
+                idempotencyInput.value = 'adj_' + card.id + '_' + Date.now();
+            }
+
             // Explicitly default added_qty to 1 upon opening
             document.getElementById('added_qty').value = '1';
             document.getElementById('add_notes').value = '';
@@ -771,7 +783,13 @@
                         badgeClass = 'text-emerald-700 bg-emerald-50 border border-emerald-200';
                     } else if (log.log_type === 'INITIAL_DEFECT') {
                         badgeClass = 'text-amber-700 bg-amber-50 border border-amber-200';
+                    } else if (log.log_type === 'ADJUSTMENT_DEFECT') {
+                        badgeClass = 'text-purple-700 bg-purple-50 border border-purple-200';
                     }
+
+                    const rawAdded = parseInt(log.added_qty) || 0;
+                    const displayAdded = rawAdded > 0 ? `+${rawAdded}` : `${rawAdded}`;
+                    const addedColorClass = rawAdded < 0 ? 'text-purple-600' : (rawAdded > 0 ? 'text-amber-600' : 'text-slate-500');
 
                     tr.innerHTML = `
                         <td class="py-1 px-2 whitespace-nowrap text-slate-500">${log.created_at || '-'}</td>
@@ -779,7 +797,7 @@
                             <span class="text-[9px] font-bold px-1 py-0.2 rounded ${badgeClass}">${labelText}</span>
                             <span class="text-[10px] text-slate-600 ml-1 truncate">${log.user_name || 'Admin'}</span>
                         </td>
-                        <td class="py-1 px-2 text-right font-bold text-amber-600">+${log.added_qty}</td>
+                        <td class="py-1 px-2 text-right font-bold ${addedColorClass}">${displayAdded}</td>
                         <td class="py-1 px-2 text-right text-slate-500">${log.previous_total}</td>
                         <td class="py-1 px-2 text-right font-black text-slate-800">${log.new_total}</td>
                     `;
@@ -811,42 +829,87 @@
             const inputQty = parseInt(document.getElementById('addHiddenInputQty').value) || 0;
             const currentDefect = parseInt(document.getElementById('addHiddenCurrentDefect').value) || 0;
             const addedInput = document.getElementById('added_qty');
+            const notesInput = document.getElementById('add_notes');
             const addedVal = addedInput.value.trim();
-            const addedQty = addedVal === '' ? 0 : parseInt(addedVal);
+            const notesVal = notesInput ? notesInput.value.trim() : '';
 
             const newDefectDisplay = document.getElementById('addModalNewDefectDisplay');
             const newGoodDisplay = document.getElementById('addModalNewGoodDisplay');
             const hintDisplay = document.getElementById('addModalCalculationHint');
             const submitBtn = document.getElementById('submitAddDefectBtn');
+            const submitBtnText = document.getElementById('submitAddDefectBtnText');
+            const notesLabel = document.getElementById('addNotesLabel');
+            const notesRequired = document.getElementById('addNotesRequired');
+            const notesHelp = document.getElementById('addNotesHelp');
 
             if (addedVal === '') {
                 newDefectDisplay.textContent = currentDefect + ' PCS';
                 newDefectDisplay.className = 'font-black text-slate-700 text-sm';
                 newGoodDisplay.textContent = Math.max(0, inputQty - currentDefect) + ' PCS';
                 newGoodDisplay.className = 'font-black text-slate-700 text-sm';
-                hintDisplay.textContent = 'Masukkan jumlah penambahan defect (minimal 1 PCS).';
+                hintDisplay.textContent = 'Masukkan kuantitas penyesuaian (angka bulat positif atau negatif, tidak boleh 0).';
                 hintDisplay.className = 'text-[10px] text-slate-500';
+                if (notesLabel) notesLabel.textContent = 'Catatan Penambahan (Opsional)';
+                if (notesRequired) notesRequired.classList.add('hidden');
+                if (notesHelp) notesHelp.classList.add('hidden');
+                if (submitBtnText) submitBtnText.textContent = 'Simpan Penyesuaian';
                 submitBtn.disabled = true;
                 return;
             }
 
-            if (isNaN(addedQty) || addedQty <= 0) {
+            const isInteger = /^-?\d+$/.test(addedVal);
+            const addedQty = parseInt(addedVal, 10);
+
+            if (!isInteger || isNaN(addedQty)) {
                 newDefectDisplay.textContent = 'Invalid';
                 newDefectDisplay.className = 'font-black text-red-600 text-sm';
                 newGoodDisplay.textContent = '-';
-                hintDisplay.textContent = 'Jumlah penambahan harus berupa angka bulat minimal 1 PCS.';
+                hintDisplay.textContent = 'Kuantitas penyesuaian harus berupa angka bulat (tidak boleh desimal atau teks).';
                 hintDisplay.className = 'text-[10px] text-red-500 font-bold';
                 submitBtn.disabled = true;
                 return;
             }
 
+            if (addedQty === 0) {
+                newDefectDisplay.textContent = 'Invalid';
+                newDefectDisplay.className = 'font-black text-red-600 text-sm';
+                newGoodDisplay.textContent = '-';
+                hintDisplay.textContent = 'Kuantitas penyesuaian tidak boleh 0 (nol).';
+                hintDisplay.className = 'text-[10px] text-red-500 font-bold';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            const isNegative = addedQty < 0;
+            if (isNegative) {
+                if (notesLabel) notesLabel.textContent = 'Alasan Koreksi';
+                if (notesRequired) notesRequired.classList.remove('hidden');
+                if (notesHelp) notesHelp.classList.remove('hidden');
+                if (submitBtnText) submitBtnText.textContent = 'Simpan Koreksi (' + addedQty + ')';
+            } else {
+                if (notesLabel) notesLabel.textContent = 'Catatan Penambahan (Opsional)';
+                if (notesRequired) notesRequired.classList.add('hidden');
+                if (notesHelp) notesHelp.classList.add('hidden');
+                if (submitBtnText) submitBtnText.textContent = 'Simpan Penambahan (+' + addedQty + ')';
+            }
+
             const newTotalDefect = currentDefect + addedQty;
+
+            if (newTotalDefect < 0) {
+                newDefectDisplay.textContent = 'Invalid (' + newTotalDefect + ' PCS)';
+                newDefectDisplay.className = 'font-black text-red-600 text-sm';
+                newGoodDisplay.textContent = '-';
+                hintDisplay.textContent = 'Total defect baru tidak boleh kurang dari 0 PCS (Koreksi ' + addedQty + ' melebihi defect saat ini: ' + currentDefect + ' PCS).';
+                hintDisplay.className = 'text-[10px] text-red-500 font-bold';
+                submitBtn.disabled = true;
+                return;
+            }
 
             if (newTotalDefect > inputQty) {
                 newDefectDisplay.textContent = newTotalDefect + ' PCS (Melebihi Input)';
                 newDefectDisplay.className = 'font-black text-red-600 text-sm';
                 newGoodDisplay.textContent = '-';
-                hintDisplay.textContent = 'Total defect baru (' + newTotalDefect + ') melebihi input (' + inputQty + '). Penambahan ditolak.';
+                hintDisplay.textContent = 'Total defect baru (' + newTotalDefect + ' PCS) melebihi input (' + inputQty + ' PCS). Penyesuaian ditolak.';
                 hintDisplay.className = 'text-[10px] text-red-500 font-bold';
                 submitBtn.disabled = true;
                 return;
@@ -854,11 +917,21 @@
 
             const newGoodQty = Math.max(0, inputQty - newTotalDefect);
             newDefectDisplay.textContent = newTotalDefect + ' PCS';
-            newDefectDisplay.className = 'font-black text-red-600 text-sm';
+            newDefectDisplay.className = newTotalDefect > 0 ? 'font-black text-red-600 text-sm' : 'font-black text-slate-700 text-sm';
             newGoodDisplay.textContent = newGoodQty + ' PCS';
             newGoodDisplay.className = 'font-black text-emerald-700 text-sm';
 
-            hintDisplay.textContent = 'Total Defect Baru = ' + currentDefect + ' + ' + addedQty + ' = ' + newTotalDefect + ' PCS (Good: ' + newGoodQty + ' PCS)';
+            const mathSign = addedQty > 0 ? (' + ' + addedQty) : (' - ' + Math.abs(addedQty));
+            let hintMsg = 'Total Defect Baru = ' + currentDefect + mathSign + ' = ' + newTotalDefect + ' PCS (Good: ' + newGoodQty + ' PCS)';
+
+            if (isNegative && notesVal === '') {
+                hintDisplay.textContent = hintMsg + ' — Alasan koreksi wajib diisi.';
+                hintDisplay.className = 'text-[10px] text-amber-600 font-bold';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            hintDisplay.textContent = hintMsg;
             hintDisplay.className = 'text-[10px] text-slate-600';
             submitBtn.disabled = false;
         }

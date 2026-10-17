@@ -132,20 +132,8 @@ class SandCastingQcDefectReportService
                 // Strictly CONFIRMED executions
                 $eq->where('status', SandCastingStageExecution::STATUS_CONFIRMED);
 
-                // Date logic aligned with Zone 3 (inspection_date primary, qc_verified_at / defect_entered_at fallback)
-                $eq->where(function (Builder $dq) use ($dateFrom, $dateTo) {
-                    $dq->where(function (Builder $sub) use ($dateFrom, $dateTo) {
-                        $sub->whereBetween('inspection_date', [$dateFrom, $dateTo])
-                            ->orWhereBetween('inspection_date', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59']);
-                    })
-                        ->orWhere(function (Builder $sq) use ($dateFrom, $dateTo) {
-                            $sq->whereNull('inspection_date')
-                                ->where(function (Builder $ssq) use ($dateFrom, $dateTo) {
-                                    $ssq->whereBetween('qc_verified_at', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59'])
-                                        ->orWhereBetween('defect_entered_at', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59']);
-                                });
-                        });
-                });
+                // Date logic aligned with Zone 3 effective date hierarchy
+                $eq->whereEffectiveDefectDateBetween($dateFrom, $dateTo);
 
                 // Stage filter
                 if ($selectedStage !== 'all') {
@@ -201,10 +189,9 @@ class SandCastingQcDefectReportService
             $qty = (int) $def->qty;
             $estKg = $hasWeight ? round($qty * $unitWeight, 2) : null;
 
-            // Inspection date primary, fallback to qc_verified_at, then defect_entered_at
-            $effectiveDate = $exec?->inspection_date
-                ?? ($exec?->qc_verified_at ? Carbon::parse($exec->qc_verified_at) : null)
-                ?? ($exec?->defect_entered_at ? Carbon::parse($exec->defect_entered_at) : null);
+            // Effective defect date following hierarchy: inspection_date -> physical_done_at -> cast_date -> defect_entered_at -> qc_verified_at
+            $effectiveDateStr = $exec?->resolveEffectiveDefectDate();
+            $effectiveDate = $effectiveDateStr ? Carbon::parse($effectiveDateStr) : null;
 
             $stageKey = (string) ($exec?->stage ?? 'unknown');
             $stageLabel = self::STAGE_LABELS[$stageKey] ?? strtoupper(str_replace('_', ' ', $stageKey));
@@ -254,19 +241,7 @@ class SandCastingQcDefectReportService
         $zeroDefectQuery = SandCastingStageExecution::query()
             ->where('status', SandCastingStageExecution::STATUS_CONFIRMED)
             ->where('defect_qty', 0)
-            ->where(function (Builder $dq) use ($dateFrom, $dateTo) {
-                $dq->where(function (Builder $sub) use ($dateFrom, $dateTo) {
-                    $sub->whereBetween('inspection_date', [$dateFrom, $dateTo])
-                        ->orWhereBetween('inspection_date', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59']);
-                })
-                    ->orWhere(function (Builder $sq) use ($dateFrom, $dateTo) {
-                        $sq->whereNull('inspection_date')
-                            ->where(function (Builder $ssq) use ($dateFrom, $dateTo) {
-                                $ssq->whereBetween('qc_verified_at', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59'])
-                                    ->orWhereBetween('defect_entered_at', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59']);
-                            });
-                    });
-            });
+            ->whereEffectiveDefectDateBetween($dateFrom, $dateTo);
 
         if ($selectedStage !== 'all') {
             $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($selectedStage) ?? $selectedStage;

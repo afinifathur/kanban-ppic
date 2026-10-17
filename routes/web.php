@@ -272,6 +272,7 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('qc-defects')->name('qc-defects.')->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\QcDefectVerificationController::class, 'index'])->name('index');
             Route::post('/{execution}/verify', [\App\Http\Controllers\SandCasting\QcDefectVerificationController::class, 'verify'])->name('verify');
+            Route::post('/{execution}/save-draft', [\App\Http\Controllers\SandCasting\QcDefectVerificationController::class, 'saveDraft'])->name('save-draft');
         });
 
         // Production Report Routes (Sand Casting)

@@ -136,12 +136,15 @@ class QcDefectVerificationController extends Controller
             // 3. Validate request
             $validated = $request->validate([
                 'stage' => 'nullable|string',
+                'inspection_date' => 'nullable|date|before_or_equal:today',
                 'defects' => 'nullable|array',
                 'defects.*.defect_type_id' => 'required_with:defects|integer|exists:defect_types,id',
                 'defects.*.qty' => 'required_with:defects|integer|min:1',
                 'defects.*.notes' => 'nullable|string|max:255',
                 'notes' => 'nullable|string|max:500',
             ], [
+                'inspection_date.date' => 'Format tanggal pemeriksaan fisik / defect tidak valid.',
+                'inspection_date.before_or_equal' => 'Tanggal pemeriksaan fisik / defect tidak boleh di masa depan.',
                 'defects.*.defect_type_id.required_with' => 'Jenis cacat wajib dipilih untuk setiap baris.',
                 'defects.*.defect_type_id.exists' => 'Jenis cacat yang dipilih tidak valid.',
                 'defects.*.qty.required_with' => 'Kuantitas cacat wajib diisi.',
@@ -155,7 +158,8 @@ class QcDefectVerificationController extends Controller
                 executionOrId: $execution,
                 defects: $rawDefects,
                 qcUserId: (int) $user->id,
-                notes: $validated['notes'] ?? null
+                notes: $validated['notes'] ?? null,
+                inspectionDate: $validated['inspection_date'] ?? null
             );
 
             $travelerNumber = $confirmedExecution->castingResultLine?->traveler_number ?? 'KTR';
@@ -174,6 +178,8 @@ class QcDefectVerificationController extends Controller
                         'defect_qty' => (int) $confirmedExecution->defect_qty,
                         'good_qty' => (int) $confirmedExecution->good_qty,
                         'status' => $confirmedExecution->status,
+                        'inspection_date' => $confirmedExecution->inspection_date?->format('Y-m-d'),
+                        'inspection_date_formatted' => $confirmedExecution->inspection_date?->format('d/m/Y'),
                         'qc_verified_at' => $confirmedExecution->qc_verified_at,
                         'qc_verified_by' => $confirmedExecution->qc_verified_by,
                     ],
@@ -208,6 +214,128 @@ class QcDefectVerificationController extends Controller
         } catch (Throwable $e) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem saat memverifikasi defect.'], 500);
+            }
+
+            return back()->withInput()->with('error', 'Terjadi kesalahan sistem: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Save draft defect breakdown for a stage execution (QC Draft Step).
+     */
+    public function saveDraft(Request $request, SandCastingStageExecution $execution): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+
+        try {
+            // 1. Authorization check
+            $this->authorizationService->authorizeVerifyQc($user);
+
+            // 2. Validate cross-stage safety
+            $executionStage = SandCastingStageAuthorizationService::normalizeStage($execution->stage);
+            if (! $executionStage || ! in_array($executionStage, SandCastingStageExecutionService::STAGES, true)) {
+                throw new InvalidArgumentException("Tahap eksekusi '{$execution->stage}' tidak valid dalam alur Sand Casting.");
+            }
+
+            $requestStage = $request->input('stage') ?? $request->query('stage');
+            if ($requestStage !== null && $requestStage !== '') {
+                $normalizedRequestStage = SandCastingStageAuthorizationService::normalizeStage($requestStage);
+                if ($normalizedRequestStage === null || ! in_array($normalizedRequestStage, SandCastingStageExecutionService::STAGES, true)) {
+                    throw new InvalidArgumentException("Tahap '{$requestStage}' tidak valid dalam alur Sand Casting.");
+                }
+
+                if ($normalizedRequestStage !== $executionStage) {
+                    throw new InvalidArgumentException("Tahap yang dipilih ('{$requestStage}') tidak sesuai dengan tahap aktual eksekusi ini ('{$execution->stage}').");
+                }
+            }
+
+            // 3. Validate request
+            $validated = $request->validate([
+                'stage' => 'nullable|string',
+                'inspection_date' => 'nullable|date|before_or_equal:today',
+                'defects' => 'required|array|min:1',
+                'defects.*.defect_type_id' => 'required|integer|exists:defect_types,id',
+                'defects.*.qty' => 'required|integer|min:1',
+                'defects.*.notes' => 'nullable|string|max:255',
+                'notes' => 'nullable|string|max:500',
+            ], [
+                'inspection_date.date' => 'Format tanggal pemeriksaan fisik / defect tidak valid.',
+                'inspection_date.before_or_equal' => 'Tanggal pemeriksaan fisik / defect tidak boleh di masa depan.',
+                'defects.required' => 'Rincian jenis cacat wajib diisi untuk menyimpan draft.',
+                'defects.min' => 'Rincian jenis cacat minimal 1 baris.',
+                'defects.*.defect_type_id.required' => 'Jenis cacat wajib dipilih untuk setiap baris.',
+                'defects.*.defect_type_id.exists' => 'Jenis cacat yang dipilih tidak valid.',
+                'defects.*.qty.required' => 'Kuantitas cacat wajib diisi.',
+                'defects.*.qty.min' => 'Kuantitas cacat minimal 1 PCS.',
+            ]);
+
+            $updatedExecution = $this->executionService->saveQcBreakdownDraft(
+                executionOrId: $execution,
+                defects: $validated['defects'],
+                qcUserId: (int) $user->id,
+                notes: $validated['notes'] ?? null,
+                inspectionDate: $validated['inspection_date'] ?? null
+            );
+
+            $travelerNumber = $updatedExecution->castingResultLine?->traveler_number ?? 'KTR';
+            $draftTotal = $updatedExecution->defects->sum('qty');
+            $successMessage = "Draft rincian defect KTR {$travelerNumber} berhasil disimpan ({$draftTotal}/{$updatedExecution->defect_qty} PCS). Status: Belum Terkonfirmasi.";
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $successMessage,
+                    'data' => [
+                        'execution_id' => $updatedExecution->id,
+                        'traveler_number' => $travelerNumber,
+                        'stage' => $updatedExecution->stage,
+                        'checkpoint_code' => $updatedExecution->checkpoint_code,
+                        'input_qty' => (int) $updatedExecution->input_qty,
+                        'defect_qty' => (int) $updatedExecution->defect_qty,
+                        'good_qty' => (int) $updatedExecution->good_qty,
+                        'draft_qty' => (int) $draftTotal,
+                        'status' => $updatedExecution->status,
+                        'inspection_date' => $updatedExecution->inspection_date?->format('Y-m-d'),
+                        'inspection_date_formatted' => $updatedExecution->inspection_date?->format('d/m/Y'),
+                        'defects' => $updatedExecution->defects->map(fn ($d) => [
+                            'id' => $d->id,
+                            'defect_type_id' => $d->defect_type_id,
+                            'defect_name' => $d->defectType?->name,
+                            'qty' => (int) $d->qty,
+                            'notes' => $d->notes,
+                        ])->values()->all(),
+                    ],
+                ]);
+            }
+
+            return redirect()
+                ->route('sand-casting.qc-defects.index', ['stage' => $updatedExecution->stage])
+                ->with('success', $successMessage);
+
+        } catch (AuthorizationException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 403);
+            }
+            abort(403, $e->getMessage());
+        } catch (InvalidArgumentException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            return back()->withInput()->with('error', $e->getMessage());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi data gagal.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+
+            return back()->withInput()->withErrors($e->validator);
+        } catch (Throwable $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem saat menyimpan draft defect.'], 500);
             }
 
             return back()->withInput()->with('error', 'Terjadi kesalahan sistem: '.$e->getMessage());
