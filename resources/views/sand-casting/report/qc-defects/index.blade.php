@@ -137,7 +137,7 @@
             <div class="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div class="text-[11px] text-slate-500 font-medium">
                     Periode: <strong class="text-slate-700">{{ \Carbon\Carbon::parse($filters['date_from'])->format('d/m/Y') }}</strong> s/d <strong class="text-slate-700">{{ \Carbon\Carbon::parse($filters['date_to'])->format('d/m/Y') }}</strong>
-                    &nbsp;·&nbsp; Basis Tanggal: <span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Inspeksi / QC Verified</span>
+                    &nbsp;·&nbsp; Basis Tanggal: <span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">Tanggal Inspeksi Bisnis</span>
                     &nbsp;·&nbsp; <span class="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[10px] font-semibold"><i class="fas fa-calendar-day mr-0.5"></i> Maks. 45 Hari Inklusif</span>
                 </div>
                 <div class="flex items-center gap-2">
@@ -322,7 +322,8 @@
                 <thead class="bg-slate-800 text-slate-200 text-[10px] uppercase font-bold tracking-wider">
                     <tr>
                         <th class="py-2 px-2.5 text-center w-10 border-b border-slate-700">No</th>
-                        <th class="py-2 px-2.5 border-b border-slate-700">Tanggal QC</th>
+                        <th class="py-2 px-2.5 border-b border-slate-700">Tanggal Inspeksi</th>
+                        <th class="py-2 px-2.5 border-b border-slate-700">Waktu Verifikasi QC</th>
                         <th class="py-2 px-2.5 border-b border-slate-700">KTR (Traveler)</th>
                         <th class="py-2 px-2.5 border-b border-slate-700">Heat Number</th>
                         <th class="py-2 px-2.5 border-b border-slate-700">Kode Produksi</th>
@@ -345,7 +346,8 @@
                         @endphp
                         <tr class="hover:bg-blue-50/40 transition-colors {{ $loop->even ? 'bg-slate-50/40' : 'bg-white' }}">
                             <td class="py-2 px-2.5 text-center font-mono font-bold text-slate-400 text-[11px]">{{ $rowNumber }}</td>
-                            <td class="py-2 px-2.5 font-mono text-slate-600 text-[11px]">{{ $r['verified_at_formatted'] }}</td>
+                            <td class="py-2 px-2.5 font-mono font-bold text-slate-800 text-[11px]">{{ $r['date'] }}</td>
+                            <td class="py-2 px-2.5 font-mono text-slate-500 text-[11px]">{{ $r['verified_at_formatted'] }}</td>
                             <td class="py-2 px-2.5 font-mono font-bold text-slate-900">
                                 <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{{ $r['traveler_number'] }}</span>
                             </td>
@@ -388,7 +390,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="13" class="py-10 text-center text-slate-400 bg-slate-50/50">
+                            <td colspan="14" class="py-10 text-center text-slate-400 bg-slate-50/50">
                                 <i class="fas fa-clipboard-check text-slate-300 text-3xl mb-2 block"></i>
                                 <span class="font-bold text-slate-600">Tidak ada data rincian defect yang memenuhi filter pencarian.</span>
                             </td>

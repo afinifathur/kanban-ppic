@@ -898,4 +898,31 @@ class QcDefectReportTest extends TestCase
         $resToday->assertStatus(200);
         $this->assertSame(0, $resToday->viewData('summary')['total_defect_pcs']);
     }
+
+    // 17. UI displays Tanggal Inspeksi and Waktu Verifikasi QC separately
+    public function test_ui_displays_tanggal_inspeksi_and_waktu_verifikasi_qc_separately(): void
+    {
+        $inspectionDate = '2026-09-23';
+        $verifiedAt = Carbon::create(2026, 10, 17, 7, 59, 0);
+
+        $this->createExecutionWithDefects([
+            'inspection_date' => $inspectionDate,
+            'qc_verified_at' => $verifiedAt,
+            'defect_qty' => 9,
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 9],
+            ],
+        ]);
+
+        $res = $this->actingAs($this->adminUser)
+            ->get('/sand-casting/report/qc-defects?date_from=2026-09-20&date_to=2026-09-25');
+
+        $res->assertStatus(200);
+        // Table headers
+        $res->assertSee('Tanggal Inspeksi');
+        $res->assertSee('Waktu Verifikasi QC');
+        // Table data
+        $res->assertSee('23/09/2026');
+        $res->assertSee('17/10/2026 07:59');
+    }
 }

@@ -1384,7 +1384,7 @@ class SandCastingProductionFloorQueryService
      *
      * @param  string|null  $modeOrStage  'unrecorded', 'recorded', or canonical stage name (for BC)
      * @param  string|null  $stage  Canonical stage name or null for all stages
-     * @param  array{search?: string}  $filters
+     * @param  array{search?: string, draft_status?: string}  $filters
      */
     public function getQcVerificationPaginated(?string $modeOrStage = 'unrecorded', ?string $stage = null, array $filters = [], int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
@@ -1434,6 +1434,14 @@ class SandCastingProductionFloorQueryService
             $query->where('status', SandCastingStageExecution::STATUS_WAITING_QC)
                 ->orderBy('defect_entered_at', 'asc')
                 ->orderBy('id', 'asc');
+
+            if (! empty($filters['draft_status'])) {
+                if ($filters['draft_status'] === 'has_draft' || $filters['draft_status'] === 'draft') {
+                    $query->whereHas('defects', fn ($q) => $q->where('qty', '>', 0));
+                } elseif ($filters['draft_status'] === 'no_draft') {
+                    $query->whereDoesntHave('defects', fn ($q) => $q->where('qty', '>', 0));
+                }
+            }
         }
 
         if (! empty($filters['search'])) {

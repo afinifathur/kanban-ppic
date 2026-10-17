@@ -119,6 +119,9 @@
                 @if($selectedStage)
                     <input type="hidden" name="stage" value="{{ $selectedStage }}">
                 @endif
+                @if(!empty($draftStatus) && $draftStatus !== 'all')
+                    <input type="hidden" name="draft_status" value="{{ $draftStatus }}">
+                @endif
                 
                 <div class="relative flex-1 max-w-md">
                     <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 text-xs">
@@ -134,8 +137,8 @@
                     Filter
                 </button>
 
-                @if($search || $selectedStage)
-                    <a href="{{ $selectedStage ? route('sand-casting.qc-defects.index', ['mode' => $mode, 'stage' => $selectedStage]) : route('sand-casting.qc-defects.index', ['mode' => $mode]) }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search">
+                @if($search || $selectedStage || (!empty($draftStatus) && $draftStatus !== 'all'))
+                    <a href="{{ $selectedStage ? route('sand-casting.qc-defects.index', ['mode' => $mode, 'stage' => $selectedStage]) : route('sand-casting.qc-defects.index', ['mode' => $mode]) }}" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-2.5 py-1.5 rounded-md transition" title="Reset Search & Filter">
                         Reset
                     </a>
                 @endif
@@ -208,13 +211,34 @@
                         @endif
                     </div>
                     <h3 class="text-sm font-bold text-slate-700">
-                        {{ $mode === 'recorded' ? 'Belum Ada Riwayat Verifikasi QC' : 'Semua Kerusakan Terverifikasi' }}
+                        @if(!empty($draftStatus) && $draftStatus !== 'all')
+                            Tidak Ada KTR yang Sesuai Filter Draft
+                        @elseif($mode === 'recorded')
+                            Belum Ada Riwayat Verifikasi QC
+                        @else
+                            Semua Kerusakan Terverifikasi
+                        @endif
                     </h3>
                     <p class="text-xs text-slate-400 mt-0.5">
-                        {{ $mode === 'recorded'
-                            ? 'Data breakdown defect yang sudah diverifikasi dan terkonfirmasi QC pada tahap ' . ($stageLabels[$selectedStage] ?? strtoupper($selectedStage)) . ' akan tampil di tab ini.'
-                            : 'Tidak ada KTR pada tahap ' . ($stageLabels[$selectedStage] ?? strtoupper($selectedStage)) . ' yang sedang menunggu verifikasi detail defect oleh Admin QC.' }}
+                        @if(!empty($draftStatus) && $draftStatus === 'has_draft')
+                            Tidak ditemukan KTR dengan draft tersimpan pada tahap {{ $stageLabels[$selectedStage] ?? strtoupper($selectedStage) }}.
+                        @elseif(!empty($draftStatus) && $draftStatus === 'no_draft')
+                            Tidak ditemukan KTR tanpa draft pada tahap {{ $stageLabels[$selectedStage] ?? strtoupper($selectedStage) }}.
+                        @elseif($mode === 'recorded')
+                            Data breakdown defect yang sudah diverifikasi dan terkonfirmasi QC pada tahap {{ $stageLabels[$selectedStage] ?? strtoupper($selectedStage) }} akan tampil di tab ini.
+                        @else
+                            Tidak ada KTR pada tahap {{ $stageLabels[$selectedStage] ?? strtoupper($selectedStage) }} yang sedang menunggu verifikasi detail defect oleh Admin QC.
+                        @endif
                     </p>
+                    @if(!empty($draftStatus) && $draftStatus !== 'all')
+                        <div class="mt-3">
+                            <a href="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['draft_status' => 'all', 'page' => 1])) }}"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md text-xs font-bold transition">
+                                <i class="fas fa-undo text-[10px]"></i>
+                                Tampilkan Semua KTR
+                            </a>
+                        </div>
+                    @endif
                 </div>
             @else
                 <!-- Table Container -->
@@ -238,7 +262,28 @@
                                     <th class="py-2.5 px-3 text-right bg-slate-100">Total Defect</th>
                                     <th class="py-2.5 px-3 text-right bg-slate-100">Good</th>
                                     <th class="py-2.5 px-3 text-center bg-slate-100">Status Re-Verifikasi</th>
-                                    <th class="py-2.5 px-3 text-center bg-slate-100 w-32">Aksi</th>
+                                    <th class="py-2 px-2 text-center bg-slate-100 min-w-[145px]">
+                                        <div class="inline-flex flex-col items-center gap-1">
+                                            <span class="text-[11px] font-bold text-slate-700">AKSI</span>
+                                            <select id="actionDraftFilter"
+                                                aria-label="Filter status draft kolom aksi"
+                                                onchange="window.location.href = this.value"
+                                                class="text-[10px] py-0.5 px-1 font-semibold bg-white border border-slate-300 rounded text-slate-700 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer shadow-2xs">
+                                                <option value="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['draft_status' => 'all', 'page' => 1])) }}"
+                                                    {{ ($draftStatus ?? 'all') === 'all' ? 'selected' : '' }}>
+                                                    Semua
+                                                </option>
+                                                <option value="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['draft_status' => 'has_draft', 'page' => 1])) }}"
+                                                    {{ ($draftStatus ?? 'all') === 'has_draft' ? 'selected' : '' }}>
+                                                    Lanjutkan Draft saja
+                                                </option>
+                                                <option value="{{ route('sand-casting.qc-defects.index', array_merge(request()->query(), ['draft_status' => 'no_draft', 'page' => 1])) }}"
+                                                    {{ ($draftStatus ?? 'all') === 'no_draft' ? 'selected' : '' }}>
+                                                    Belum ada Draft saja
+                                                </option>
+                                            </select>
+                                        </div>
+                                    </th>
                                 @endif
                             </tr>
                         </thead>

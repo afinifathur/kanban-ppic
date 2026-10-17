@@ -256,7 +256,7 @@ class QcDefectReportController extends Controller
         $rowIdx++;
         $detailHeaders = [
             'A' => 'No',
-            'B' => 'Tanggal QC',
+            'B' => 'Tanggal Inspeksi',
             'C' => 'KTR (Traveler)',
             'D' => 'Heat Number',
             'E' => 'Kode Produksi',

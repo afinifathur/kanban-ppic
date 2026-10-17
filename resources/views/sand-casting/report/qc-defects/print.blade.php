@@ -315,7 +315,7 @@
         <thead>
             <tr>
                 <th style="width: 3%;">No</th>
-                <th style="width: 7%;">Tanggal QC</th>
+                <th style="width: 7%;">Tanggal Inspeksi</th>
                 <th style="width: 11%;">KTR (Traveler)</th>
                 <th style="width: 8%;">Heat Number</th>
                 <th style="width: 7%;">Kode Plan</th>

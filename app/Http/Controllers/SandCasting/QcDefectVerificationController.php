@@ -50,8 +50,12 @@ class QcDefectVerificationController extends Controller
             $mode = 'unrecorded';
         }
 
+        $rawDraftStatus = $request->query('draft_status', 'all');
+        $draftStatus = in_array($rawDraftStatus, ['has_draft', 'no_draft'], true) ? $rawDraftStatus : 'all';
+
         $filters = [
             'search' => $request->query('search'),
+            'draft_status' => $draftStatus,
         ];
 
         $rawStage = $request->query('stage');
@@ -100,6 +104,7 @@ class QcDefectVerificationController extends Controller
             'stageLabels' => self::STAGE_LABELS,
             'activeTab' => $activeTab,
             'search' => $filters['search'],
+            'draftStatus' => $draftStatus,
             'defectTypesMap' => $defectTypesMap,
         ]);
     }

@@ -1567,4 +1567,163 @@ class QcDefectVerificationTest extends TestCase
         $this->assertSame('2026-10-01', $exec->inspection_date?->toDateString());
         $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $exec->status);
     }
+
+    /**
+     * TEST 29: Filter draft status pada header kolom Aksi (Semua, Lanjutkan Draft saja, Belum ada Draft saja).
+     */
+    public function test_29_action_column_draft_filter_all_has_draft_and_no_draft(): void
+    {
+        // 1. Setup 3 KTRs in WAITING_QC
+        $execWithDraft1 = $this->prepareWaitingQcExecution('netto', 5);
+        $execWithDraft2 = $this->prepareWaitingQcExecution('netto', 6);
+        $execNoDraft = $this->prepareWaitingQcExecution('netto', 4);
+
+        // Save draft for execWithDraft1 (2 pcs)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$execWithDraft1->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 2],
+            ],
+        ])->assertStatus(200);
+
+        // Save draft for execWithDraft2 (3 pcs)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$execWithDraft2->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 3],
+            ],
+        ])->assertStatus(200);
+
+        // 2. Filter = 'all' (default, or explicit 'all')
+        $resDefault = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded');
+        $resDefault->assertStatus(200);
+        $resDefault->assertSee('id="actionDraftFilter"', false);
+        $resDefault->assertSee('Semua');
+        $resDefault->assertSee('Lanjutkan Draft saja');
+        $resDefault->assertSee('Belum ada Draft saja');
+        $itemsDefault = collect($resDefault->viewData('executions')->items());
+        $this->assertCount(3, $itemsDefault);
+        $this->assertTrue($itemsDefault->contains('id', $execWithDraft1->id));
+        $this->assertTrue($itemsDefault->contains('id', $execWithDraft2->id));
+        $this->assertTrue($itemsDefault->contains('id', $execNoDraft->id));
+
+        $resAll = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=all');
+        $resAll->assertStatus(200);
+        $itemsAll = collect($resAll->viewData('executions')->items());
+        $this->assertCount(3, $itemsAll);
+
+        // 3. Filter = 'has_draft' (Lanjutkan Draft saja)
+        $resHasDraft = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=has_draft');
+        $resHasDraft->assertStatus(200);
+        $itemsHasDraft = collect($resHasDraft->viewData('executions')->items());
+        $this->assertCount(2, $itemsHasDraft);
+        $this->assertTrue($itemsHasDraft->contains('id', $execWithDraft1->id));
+        $this->assertTrue($itemsHasDraft->contains('id', $execWithDraft2->id));
+        $this->assertFalse($itemsHasDraft->contains('id', $execNoDraft->id));
+        foreach ($itemsHasDraft as $item) {
+            $this->assertTrue($item['has_draft']);
+        }
+
+        // 4. Filter = 'no_draft' (Belum ada Draft saja)
+        $resNoDraft = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=no_draft');
+        $resNoDraft->assertStatus(200);
+        $itemsNoDraft = collect($resNoDraft->viewData('executions')->items());
+        $this->assertCount(1, $itemsNoDraft);
+        $this->assertTrue($itemsNoDraft->contains('id', $execNoDraft->id));
+        $this->assertFalse($itemsNoDraft->contains('id', $execWithDraft1->id));
+        $this->assertFalse($itemsNoDraft->contains('id', $execWithDraft2->id));
+        $this->assertFalse($itemsNoDraft->first()['has_draft']);
+    }
+
+    /**
+     * TEST 30: Filter draft status dipertahankan pada pagination server-side.
+     */
+    public function test_30_action_draft_filter_persists_across_pagination(): void
+    {
+        // Create 27 KTRs with drafts in netto
+        for ($i = 0; $i < 27; $i++) {
+            $exec = $this->prepareWaitingQcExecution('netto', 5);
+            $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+                'stage' => 'netto',
+                'defects' => [
+                    ['defect_type_id' => $this->defectPorosity->id, 'qty' => 1],
+                ],
+            ])->assertStatus(200);
+        }
+
+        // Create 3 KTRs without drafts
+        for ($i = 0; $i < 3; $i++) {
+            $this->prepareWaitingQcExecution('netto', 5);
+        }
+
+        // Page 1 with draft_status=has_draft (perPage is 25)
+        $resPage1 = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=has_draft&page=1');
+        $resPage1->assertStatus(200);
+        $paginator1 = $resPage1->viewData('executions');
+        $this->assertSame(27, $paginator1->total());
+        $this->assertSame(1, $paginator1->currentPage());
+        $this->assertCount(25, $paginator1->items());
+        $this->assertTrue($paginator1->hasMorePages());
+
+        // Assert pagination links preserve draft_status
+        $html = $resPage1->getContent();
+        $this->assertStringContainsString('draft_status=has_draft', $html);
+        $this->assertStringContainsString('stage=netto', $html);
+        $this->assertStringContainsString('mode=unrecorded', $html);
+
+        // Page 2
+        $resPage2 = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=has_draft&page=2');
+        $resPage2->assertStatus(200);
+        $paginator2 = $resPage2->viewData('executions');
+        $this->assertSame(27, $paginator2->total());
+        $this->assertSame(2, $paginator2->currentPage());
+        $this->assertCount(2, $paginator2->items());
+        foreach ($paginator2->items() as $item) {
+            $this->assertTrue($item['has_draft']);
+        }
+    }
+
+    /**
+     * TEST 31: KTR dengan draft yang sudah dikonfirmasi final tidak muncul lagi dalam antrean draft unrecorded.
+     */
+    public function test_31_confirmed_ktr_leaves_unrecorded_draft_filter_on_refresh(): void
+    {
+        $exec = $this->prepareWaitingQcExecution('netto', 5);
+
+        // Save partial draft (2 pcs)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 2],
+            ],
+        ])->assertStatus(200);
+
+        // Appears in unrecorded has_draft list
+        $resBefore = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=has_draft');
+        $resBefore->assertStatus(200);
+        $itemsBefore = collect($resBefore->viewData('executions')->items());
+        $this->assertTrue($itemsBefore->contains('id', $exec->id));
+
+        // Confirm final (all 5 pcs)
+        $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'inspection_date' => now()->toDateString(),
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 2],
+            ],
+        ])->assertStatus(200);
+
+        // Refresh unrecorded has_draft: KTR is NO LONGER present
+        $resAfter = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=unrecorded&draft_status=has_draft');
+        $resAfter->assertStatus(200);
+        $itemsAfter = collect($resAfter->viewData('executions')->items());
+        $this->assertFalse($itemsAfter->contains('id', $exec->id));
+
+        // It is now in recorded tab
+        $resRecorded = $this->actingAs($this->adminQc)->get('/sand-casting/qc-defects?stage=netto&mode=recorded');
+        $resRecorded->assertStatus(200);
+        $itemsRecorded = collect($resRecorded->viewData('executions')->items());
+        $this->assertTrue($itemsRecorded->contains('id', $exec->id));
+    }
 }
