@@ -66,7 +66,7 @@
         <div class="flex items-center justify-between mb-2 text-[11px] font-mono">
             <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 border border-slate-200/70 text-slate-700">
                 <span class="font-black text-slate-800 uppercase tracking-wider text-[10px]">TOTAL 30 HARI (<span id="z4-summary-stage-name" class="text-blue-700">{{ $currentStageData['stage_label'] ?? 'QC' }}</span>):</span>
-                <span class="font-black text-slate-950" id="z4-total-kg">{{ number_format($initialTotalKg, 4, ',', '.') }}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                <span class="font-black text-slate-950" id="z4-total-kg">{{ number_format($initialTotalKg, 0, ',', '.') }}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
                 <span class="text-slate-300 font-bold">|</span>
                 <span class="font-bold text-slate-800" id="z4-total-pcs">{{ number_format($initialTotalPcs, 0, ',', '.') }}</span> <span class="text-slate-500 text-[10px]">PCS</span>
                 <span class="text-slate-300 font-bold">|</span>

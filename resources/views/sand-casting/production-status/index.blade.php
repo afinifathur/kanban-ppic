@@ -266,48 +266,52 @@
 {{-- 1. WEB UI PRESENTATION --}}
 {{-- ========================================================================= --}}
 <div class="production-status-web space-y-3">
-    <!-- Filter Bar with Search, Codes/Customer Filters, and Segmented Tabs (Aligned with Lost Wax) -->
+    <!-- Filter Bar with Search, Column Filter Triggers, and Segmented Tabs (Aligned with Lost Wax) -->
     <div class="bg-white rounded-lg border border-slate-200/90 p-3 shadow-xs no-print">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <!-- Search & Filters -->
-            <form method="GET" action="{{ route('sand-casting.production-status.index') }}" id="searchForm" class="flex flex-wrap items-center gap-2 flex-grow">
-                <input type="hidden" name="filter" value="{{ $filter ?? ($filters['filter'] ?? 'active') }}">
-                
-                <div class="relative min-w-[200px] flex-grow sm:flex-grow-0">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
-                        <i class="fas fa-search text-[10px]"></i>
-                    </span>
-                    <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
-                           placeholder="Cari Kode / PO / Item / Heat Number / KTR..."
-                           class="w-full pl-7 pr-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-medium">
-                </div>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <!-- Search & Filter Triggers -->
+            <div class="flex flex-wrap items-center gap-3 flex-1">
+                <form method="GET" action="{{ route('sand-casting.production-status.index') }}" id="searchForm" class="w-full sm:w-auto sm:min-w-[280px] relative">
+                    <input type="hidden" name="filter" value="{{ $filter }}">
+                    @foreach($planningGroups as $pg)<input type="hidden" name="planning_groups[]" value="{{ $pg }}">@endforeach
+                    @foreach($codes as $c)<input type="hidden" name="codes[]" value="{{ $c }}">@endforeach
+                    @foreach($products as $p)<input type="hidden" name="products[]" value="{{ $p }}">@endforeach
+                    @foreach($customers as $cust)<input type="hidden" name="customers[]" value="{{ $cust }}">@endforeach
 
-                <div class="min-w-[120px]">
-                    <input type="text" name="production_code"
-                           value="{{ is_array($filters['codes'] ?? null) ? implode(',', $filters['codes']) : ($filters['codes'] ?? '') }}"
-                           placeholder="Kode Produksi..."
-                           class="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-medium">
-                </div>
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" name="search" value="{{ $search }}"
+                        placeholder="Cari Kode / PO / Item / Heat Number / KTR..."
+                        class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 bg-white">
+                </form>
 
-                <div class="min-w-[120px]">
-                    <input type="text" name="customer"
-                           value="{{ is_array($filters['customers'] ?? null) ? implode(',', $filters['customers']) : ($filters['customers'] ?? '') }}"
-                           placeholder="Customer..."
-                           class="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-medium">
-                </div>
+                {{-- Kelompok Perencanaan Filter Trigger --}}
+                <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($planningGroups) ? 'border-indigo-500 text-indigo-700 bg-indigo-50/20' : '' }}" data-filter-type="planning_groups">
+                    <i class="fas fa-clipboard-list"></i> Kelompok
+                    @if(!empty($planningGroups)) <span class="bg-indigo-100 text-indigo-800 text-[9px] px-1 rounded-full">{{ count($planningGroups) }}</span> @endif
+                    <i class="fas fa-chevron-down text-[9px]"></i>
+                </button>
 
-                <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="submit" class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1">
-                        <i class="fas fa-filter text-[9px]"></i>
-                        <span>Terapkan</span>
-                    </button>
-                    @if(!empty($filters['search']) || !empty($filters['codes']) || !empty($filters['customers']) || ($filters['filter'] ?? 'active') !== 'active')
-                        <a href="{{ route('sand-casting.production-status.index') }}" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors">
-                            Reset
-                        </a>
-                    @endif
-                </div>
-            </form>
+                {{-- Kode Produksi Filter Trigger --}}
+                <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($codes) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="codes">
+                    <i class="fas fa-barcode"></i> Kode
+                    @if(!empty($codes)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($codes) }}</span> @endif
+                    <i class="fas fa-chevron-down text-[9px]"></i>
+                </button>
+
+                {{-- Product Name Filter Trigger --}}
+                <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($products) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="products">
+                    <i class="fas fa-cube"></i> Product
+                    @if(!empty($products)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($products) }}</span> @endif
+                    <i class="fas fa-chevron-down text-[9px]"></i>
+                </button>
+
+                {{-- Customer Filter Trigger --}}
+                <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($customers) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="customers">
+                    <i class="fas fa-user-tie"></i> Customer
+                    @if(!empty($customers)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($customers) }}</span> @endif
+                    <i class="fas fa-chevron-down text-[9px]"></i>
+                </button>
+            </div>
 
             <!-- Status Tabs (Lost Wax Segmented Pill Style) -->
             <div class="flex gap-1 bg-slate-100 rounded-lg p-1 shrink-0 self-start md:self-auto">
@@ -329,6 +333,50 @@
             </div>
         </div>
     </div>
+
+    {{-- Active Filters Indicators (Aligned with Lost Wax) --}}
+    @if(!empty($planningGroups) || !empty($codes) || !empty($products) || !empty($customers) || $search !== '')
+        <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 p-2 rounded-lg no-print">
+            <span class="font-semibold mr-1">Active Filters:</span>
+
+            @if($search !== '')
+                <span class="inline-flex items-center gap-1 bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-medium">
+                    Search: "{{ $search }}"
+                    <button type="button" class="hover:text-red-500 font-bold ml-1 text-slate-500" onclick="clearGlobalSearch()">&times;</button>
+                </span>
+            @endif
+
+            @foreach($planningGroups as $pg)
+                <span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full font-medium">
+                    Kelompok: {{ $pg }}
+                    <button type="button" class="hover:text-red-500 font-bold ml-1 text-indigo-700" onclick="removeFilterValue('planning_groups', '{{ $pg }}')">&times;</button>
+                </span>
+            @endforeach
+
+            @foreach($codes as $c)
+                <span class="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-mono font-medium">
+                    Kode: {{ $c }}
+                    <button type="button" class="hover:text-red-500 font-bold ml-1 text-amber-700" onclick="removeFilterValue('codes', '{{ $c }}')">&times;</button>
+                </span>
+            @endforeach
+
+            @foreach($products as $p)
+                <span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-medium">
+                    Product: {{ $p }}
+                    <button type="button" class="hover:text-red-500 font-bold ml-1 text-emerald-700" onclick="removeFilterValue('products', '{{ $p }}')">&times;</button>
+                </span>
+            @endforeach
+
+            @foreach($customers as $cust)
+                <span class="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-medium">
+                    Customer: {{ $cust }}
+                    <button type="button" class="hover:text-red-500 font-bold ml-1 text-blue-700" onclick="removeFilterValue('customers', '{{ $cust }}')">&times;</button>
+                </span>
+            @endforeach
+
+            <a href="{{ route('sand-casting.production-status.index', ['filter' => $filter]) }}" class="text-blue-600 hover:underline font-semibold ml-2">Clear All</a>
+        </div>
+    @endif
 
     <!-- Main Production Status Table Container (Independent Vertical Scroll & Sticky Two-Tier Header) -->
     <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
@@ -353,9 +401,30 @@
                     <!-- Header Tier 2 (Sub-columns) -->
                     <tr class="bg-slate-800 text-white">
                         <th class="compact-th min-w-[28px]">No</th>
-                        <th class="compact-th text-left min-w-[65px] px-1.5">Kode</th>
-                        <th class="compact-th text-left min-w-[170px] max-w-[220px] px-1.5">Product Name</th>
-                        <th class="compact-th text-left min-w-[80px] px-1.5">Customer</th>
+                        <th class="compact-th text-left min-w-[65px] px-1.5 relative">
+                            <div class="flex items-center justify-between">
+                                <span>Kode</span>
+                                <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="codes" title="Filter Kode Produksi">
+                                    <i class="fas fa-filter text-[9px] {{ !empty($codes) ? 'text-amber-400' : '' }}"></i>
+                                </button>
+                            </div>
+                        </th>
+                        <th class="compact-th text-left min-w-[170px] max-w-[220px] px-1.5 relative">
+                            <div class="flex items-center justify-between">
+                                <span>Product Name</span>
+                                <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="products" title="Filter Nama Produk">
+                                    <i class="fas fa-filter text-[9px] {{ !empty($products) ? 'text-amber-400' : '' }}"></i>
+                                </button>
+                            </div>
+                        </th>
+                        <th class="compact-th text-left min-w-[80px] px-1.5 relative">
+                            <div class="flex items-center justify-between">
+                                <span>Customer</span>
+                                <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="customers" title="Filter Customer">
+                                    <i class="fas fa-filter text-[9px] {{ !empty($customers) ? 'text-amber-400' : '' }}"></i>
+                                </button>
+                            </div>
+                        </th>
                         <th class="compact-th text-right min-w-[42px] px-1.5">PO</th>
                         <th class="compact-th text-right min-w-[45px] px-1.5 border-r border-slate-700">Plan</th>
 
@@ -508,7 +577,7 @@
                         <tr>
                             <td colspan="19" class="px-6 py-10 text-center text-slate-500 bg-slate-50/50">
                                 <p class="text-xs font-bold text-slate-700">
-                                    @if(!empty($filters['search']) || !empty($filters['codes']) || !empty($filters['customers']))
+                                    @if(!empty($search) || !empty($planningGroups) || !empty($codes) || !empty($products) || !empty($customers))
                                         Tidak ada data yang sesuai dengan filter.
                                     @else
                                         Tidak ada data Production Status Sand Casting.
@@ -537,6 +606,11 @@
             <strong>Printed At:</strong> {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp;
             <strong>Status Filter:</strong> {{ strtoupper($filters['status'] ?? 'ALL') }} &nbsp;|&nbsp;
             <strong>Total Records:</strong> {{ count($rows) }} Production Codes
+            @if(!empty($search)) &nbsp;|&nbsp; <strong>Search:</strong> "{{ $search }}" @endif
+            @if(!empty($planningGroups)) &nbsp;|&nbsp; <strong>Kelompok:</strong> {{ implode(', ', $planningGroups) }} @endif
+            @if(!empty($codes)) &nbsp;|&nbsp; <strong>Kode:</strong> {{ implode(', ', $codes) }} @endif
+            @if(!empty($products)) &nbsp;|&nbsp; <strong>Product:</strong> {{ implode(', ', $products) }} @endif
+            @if(!empty($customers)) &nbsp;|&nbsp; <strong>Customer:</strong> {{ implode(', ', $customers) }} @endif
         </div>
     </div>
 
@@ -691,8 +765,66 @@
     </div>
 </div>
 
+{{-- Excel Dropdowns --}}
+@foreach([
+    'planning_groups' => ['title' => 'Filter Kelompok Perencanaan', 'options' => $allPlanningGroups ?? [], 'active' => $planningGroups ?? []],
+    'codes' => ['title' => 'Filter Kode Produksi', 'options' => $allCodes ?? [], 'active' => $codes ?? []],
+    'products' => ['title' => 'Filter Nama Produk', 'options' => $allProducts ?? [], 'active' => $products ?? []],
+    'customers' => ['title' => 'Filter Customer', 'options' => $allCustomers ?? [], 'active' => $customers ?? []],
+] as $type => $conf)
+    <div id="{{ $type }}-filter-dropdown" class="filter-dropdown-menu fixed hidden z-50 bg-white border border-slate-300 rounded-lg shadow-xl p-3 w-64 text-slate-800 text-[11px] no-print">
+        <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
+            <span class="font-bold text-slate-700">{{ $conf['title'] }}</span>
+            <button type="button" class="text-slate-400 hover:text-slate-600 font-bold text-sm leading-none" onclick="closeAllDropdowns()">&times;</button>
+        </div>
+        <div class="mb-2">
+            <input type="text" placeholder="Cari pilihan..." class="w-full px-2 py-1 border border-slate-300 rounded text-[11px] filter-search-box focus:border-amber-500 focus:ring-amber-500" oninput="filterDropdownOptions('{{ $type }}', this.value)">
+        </div>
+        <div class="mb-2 flex items-center justify-between">
+            <label class="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-600">
+                <input type="checkbox" class="select-all-checkbox rounded border-slate-300 text-amber-600 focus:ring-amber-500" onchange="toggleSelectAll('{{ $type }}', this.checked)">
+                <span>(Select All)</span>
+            </label>
+            <button type="button" class="text-blue-600 hover:underline" onclick="clearAllOptions('{{ $type }}')">Clear</button>
+        </div>
+        <div class="max-h-48 overflow-y-auto space-y-0.5 border-t border-b border-slate-100 py-1.5 option-list-container">
+            @foreach($conf['options'] as $opt)
+                <label class="flex items-start gap-2 cursor-pointer py-0.5 px-1 rounded hover:bg-slate-50 option-item">
+                    <input type="checkbox" value="{{ $opt }}" class="option-checkbox rounded border-slate-300 text-amber-600 focus:ring-amber-500" {{ in_array($opt, $conf['active']) ? 'checked' : '' }}>
+                    <span class="option-text font-mono text-slate-700 break-words leading-tight">{{ $opt }}</span>
+                </label>
+            @endforeach
+        </div>
+        <div class="flex justify-end gap-1.5 pt-2">
+            <button type="button" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded font-semibold text-[10px] text-slate-700" onclick="closeAllDropdowns()">Cancel</button>
+            <button type="button" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[10px]" onclick="applyFilter('{{ $type }}')">Apply</button>
+        </div>
+    </div>
+@endforeach
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Excel filter dropdown triggers
+        document.querySelectorAll('.filter-dropdown-trigger').forEach(function(button) {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const type = this.dataset.filterType;
+                showDropdown(type, this);
+            });
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.filter-dropdown-menu')) {
+                closeAllDropdowns();
+            }
+        });
+
+        document.querySelectorAll('.filter-dropdown-menu').forEach(function(menu) {
+            menu.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        });
+
         // Bind click on Code link
         document.querySelectorAll('.sc-detail-link').forEach(function(link) {
             link.addEventListener('click', function(e) {
@@ -927,6 +1059,122 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    // Excel Dropdown Functions (Aligned with Lost Wax)
+    function showDropdown(type, button) {
+        closeAllDropdowns();
+        const dropdown = document.getElementById(type + '-filter-dropdown');
+        if (!dropdown) return;
+        dropdown.classList.remove('hidden');
+
+        const rect = button.getBoundingClientRect();
+        const dropdownWidth = 256;
+        let left = rect.left;
+        let top = rect.bottom + 4;
+
+        if (left + dropdownWidth > window.innerWidth) {
+            left = window.innerWidth - dropdownWidth - 10;
+        }
+
+        dropdown.style.left = left + 'px';
+        dropdown.style.top = top + 'px';
+    }
+
+    function closeAllDropdowns() {
+        document.querySelectorAll('.filter-dropdown-menu').forEach(function(menu) {
+            menu.classList.add('hidden');
+        });
+    }
+
+    function filterDropdownOptions(type, query) {
+        const dropdown = document.getElementById(type + '-filter-dropdown');
+        if (!dropdown) return;
+        const items = dropdown.querySelectorAll('.option-item');
+        const q = query.toLowerCase();
+        items.forEach(function(item) {
+            const text = item.querySelector('.option-text').textContent.toLowerCase();
+            if (text.includes(q)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    function toggleSelectAll(type, checked) {
+        const dropdown = document.getElementById(type + '-filter-dropdown');
+        if (!dropdown) return;
+        dropdown.querySelectorAll('.option-item').forEach(function(item) {
+            if (item.style.display !== 'none') {
+                item.querySelector('.option-checkbox').checked = checked;
+            }
+        });
+    }
+
+    function clearAllOptions(type) {
+        const dropdown = document.getElementById(type + '-filter-dropdown');
+        if (!dropdown) return;
+        dropdown.querySelectorAll('.option-checkbox').forEach(function(cb) {
+            cb.checked = false;
+        });
+        const selectAll = dropdown.querySelector('.select-all-checkbox');
+        if (selectAll) selectAll.checked = false;
+    }
+
+    function applyFilter(type) {
+        const dropdown = document.getElementById(type + '-filter-dropdown');
+        if (!dropdown) return;
+        const checkedValues = [];
+        dropdown.querySelectorAll('.option-checkbox').forEach(function(cb) {
+            if (cb.checked) {
+                checkedValues.push(cb.value);
+            }
+        });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('page'); // Reset to page 1 on filter apply
+        urlParams.delete(type + '[]');
+        urlParams.delete(type); // fallback check
+
+        if (type === 'planning_groups') { urlParams.delete('planning_group'); urlParams.delete('plan_titles'); urlParams.delete('plan_title'); urlParams.delete('title'); }
+        if (type === 'codes') { urlParams.delete('production_code'); urlParams.delete('code'); }
+        if (type === 'products') { urlParams.delete('product'); urlParams.delete('item_names'); urlParams.delete('item_name'); }
+        if (type === 'customers') { urlParams.delete('customer'); }
+
+        checkedValues.forEach(function(val) {
+            urlParams.append(type + '[]', val);
+        });
+
+        window.location.href = window.location.pathname + '?' + urlParams.toString();
+    }
+
+    function removeFilterValue(type, value) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('page'); // Reset to page 1 on filter removal
+        const values = urlParams.getAll(type + '[]');
+        urlParams.delete(type + '[]');
+        urlParams.delete(type);
+
+        if (type === 'planning_groups') { urlParams.delete('planning_group'); urlParams.delete('plan_titles'); urlParams.delete('plan_title'); urlParams.delete('title'); }
+        if (type === 'codes') { urlParams.delete('production_code'); urlParams.delete('code'); }
+        if (type === 'products') { urlParams.delete('product'); urlParams.delete('item_names'); urlParams.delete('item_name'); }
+        if (type === 'customers') { urlParams.delete('customer'); }
+
+        values.forEach(function(val) {
+            if (val !== value) {
+                urlParams.append(type + '[]', val);
+            }
+        });
+
+        window.location.href = window.location.pathname + '?' + urlParams.toString();
+    }
+
+    function clearGlobalSearch() {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('page');
+        urlParams.delete('search');
+        window.location.href = window.location.pathname + '?' + urlParams.toString();
     }
 </script>
 @endsection

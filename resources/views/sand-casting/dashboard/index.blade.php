@@ -175,8 +175,8 @@
                 const x = bar.x;
                 const topY = bar.y;
 
-                // Format values in Indonesian locale with 4 decimal places for kg
-                const kgText = `${formatNumber(kgVal, 4)} kg`;
+                // Format values in Indonesian locale: integer kg without decimals, and PCS
+                const kgText = `${formatNumber(kgVal, 0)} kg`;
                 const pcsText = `${formatNumber(pcsVal, 0)} PCS`;
 
                 if (isDense) {
@@ -455,7 +455,7 @@
                             grid: { color: '#e2e8f0' },
                             title: { display: true, text: 'KG', color: '#1d4ed8', font: { size: 11, weight: 'bold' } },
                             ticks: {
-                                callback: v => formatNumber(v, 4) + ' kg',
+                                callback: v => formatNumber(v, 0) + ' kg',
                                 color: '#475569',
                                 font: { weight: 'bold' }
                             }
@@ -796,6 +796,11 @@
             const line3Data = (seriesByLine[3] && seriesByLine[3].data) ? seriesByLine[3].data : daily.map(d => Number(d.lines?.[3]?.good_kg || 0));
             const line4Data = (seriesByLine[4] && seriesByLine[4].data) ? seriesByLine[4].data : daily.map(d => Number(d.lines?.[4]?.good_kg || 0));
 
+            const line1PcsData = (seriesByLine[1] && seriesByLine[1].pcs_data) ? seriesByLine[1].pcs_data : daily.map(d => Number(d.lines?.[1]?.good_pcs || 0));
+            const line2PcsData = (seriesByLine[2] && seriesByLine[2].pcs_data) ? seriesByLine[2].pcs_data : daily.map(d => Number(d.lines?.[2]?.good_pcs || 0));
+            const line3PcsData = (seriesByLine[3] && seriesByLine[3].pcs_data) ? seriesByLine[3].pcs_data : daily.map(d => Number(d.lines?.[3]?.good_pcs || 0));
+            const line4PcsData = (seriesByLine[4] && seriesByLine[4].pcs_data) ? seriesByLine[4].pcs_data : daily.map(d => Number(d.lines?.[4]?.good_pcs || 0));
+
             const allKgValues = [...line1Data, ...line2Data, ...line3Data, ...line4Data];
             const maxLineKg = Math.max(...allKgValues, 0);
 
@@ -804,10 +809,13 @@
                 type: 'line',
                 data: {
                     labels: labels,
+                    dailyData: daily,
                     datasets: [
                         {
                             label: 'Line 1',
+                            lineNumber: 1,
                             data: line1Data,
+                            pcsData: line1PcsData,
                             borderColor: '#2563eb',
                             backgroundColor: 'rgba(37, 99, 235, 0.1)',
                             borderWidth: 2,
@@ -818,7 +826,9 @@
                         },
                         {
                             label: 'Line 2',
+                            lineNumber: 2,
                             data: line2Data,
+                            pcsData: line2PcsData,
                             borderColor: '#059669',
                             backgroundColor: 'rgba(5, 150, 105, 0.1)',
                             borderWidth: 2,
@@ -829,7 +839,9 @@
                         },
                         {
                             label: 'Line 3',
+                            lineNumber: 3,
                             data: line3Data,
+                            pcsData: line3PcsData,
                             borderColor: '#d97706',
                             backgroundColor: 'rgba(217, 119, 6, 0.1)',
                             borderWidth: 2,
@@ -840,7 +852,9 @@
                         },
                         {
                             label: 'Line 4',
+                            lineNumber: 4,
                             data: line4Data,
+                            pcsData: line4PcsData,
                             borderColor: '#7c3aed',
                             backgroundColor: 'rgba(124, 58, 237, 0.1)',
                             borderWidth: 2,
@@ -877,12 +891,23 @@
                             callbacks: {
                                 title: function(context) {
                                     const idx = context[0]?.dataIndex ?? 0;
-                                    const d = daily[idx] || {};
-                                    return d.date ? `${d.day_label} (${d.date})` : context[0]?.label;
+                                    const currentDaily = context[0]?.chart?.data?.dailyData || daily;
+                                    const d = currentDaily[idx] || {};
+                                    if (d.date) {
+                                        const year = d.date.split('-')[0];
+                                        return `${d.day_label} ${year}`;
+                                    }
+                                    return context[0]?.label || '';
                                 },
                                 label: function(context) {
-                                    const val = Number(context.raw || 0);
-                                    return ` ${context.dataset.label}: ${formatNumber(val, 4)} kg`;
+                                    const idx = context.dataIndex;
+                                    const currentDaily = context.chart?.data?.dailyData || daily;
+                                    const d = currentDaily[idx] || {};
+                                    const lineNo = context.dataset?.lineNumber || (context.datasetIndex + 1);
+                                    const lineInfo = d.lines?.[lineNo] || {};
+                                    const kgVal = Number(context.raw ?? lineInfo.good_kg ?? 0);
+                                    const pcsVal = Number(lineInfo.good_pcs ?? context.dataset?.pcsData?.[idx] ?? 0);
+                                    return ` ${context.dataset.label}: ${formatNumber(kgVal, 0)} kg | ${formatNumber(pcsVal, 0)} PCS`;
                                 }
                             }
                         }
@@ -1014,14 +1039,24 @@
             const line3Data = (seriesByLine[3] && seriesByLine[3].data) ? seriesByLine[3].data : daily.map(d => Number(d.lines?.[3]?.good_kg || 0));
             const line4Data = (seriesByLine[4] && seriesByLine[4].data) ? seriesByLine[4].data : daily.map(d => Number(d.lines?.[4]?.good_kg || 0));
 
+            const line1PcsData = (seriesByLine[1] && seriesByLine[1].pcs_data) ? seriesByLine[1].pcs_data : daily.map(d => Number(d.lines?.[1]?.good_pcs || 0));
+            const line2PcsData = (seriesByLine[2] && seriesByLine[2].pcs_data) ? seriesByLine[2].pcs_data : daily.map(d => Number(d.lines?.[2]?.good_pcs || 0));
+            const line3PcsData = (seriesByLine[3] && seriesByLine[3].pcs_data) ? seriesByLine[3].pcs_data : daily.map(d => Number(d.lines?.[3]?.good_pcs || 0));
+            const line4PcsData = (seriesByLine[4] && seriesByLine[4].pcs_data) ? seriesByLine[4].pcs_data : daily.map(d => Number(d.lines?.[4]?.good_pcs || 0));
+
             const allKgValues = [...line1Data, ...line2Data, ...line3Data, ...line4Data];
             const maxLineKg = Math.max(...allKgValues, 0);
 
             dashboardCharts.zone4Lines.data.labels = labels;
+            dashboardCharts.zone4Lines.data.dailyData = daily;
             dashboardCharts.zone4Lines.data.datasets[0].data = line1Data;
+            dashboardCharts.zone4Lines.data.datasets[0].pcsData = line1PcsData;
             dashboardCharts.zone4Lines.data.datasets[1].data = line2Data;
+            dashboardCharts.zone4Lines.data.datasets[1].pcsData = line2PcsData;
             dashboardCharts.zone4Lines.data.datasets[2].data = line3Data;
+            dashboardCharts.zone4Lines.data.datasets[2].pcsData = line3PcsData;
             dashboardCharts.zone4Lines.data.datasets[3].data = line4Data;
+            dashboardCharts.zone4Lines.data.datasets[3].pcsData = line4PcsData;
             dashboardCharts.zone4Lines.options.scales.y.suggestedMax = maxLineKg > 0 ? maxLineKg * 1.25 : 50;
             dashboardCharts.zone4Lines.update();
         }
@@ -1144,7 +1179,7 @@
 
             const elTotalKg = document.getElementById('z4-total-kg');
             if (elTotalKg && stageData.total_weight_kg !== undefined) {
-                elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 4);
+                elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
             }
 
             const elTotalPcs = document.getElementById('z4-total-pcs');
@@ -1196,7 +1231,7 @@
         // Update Summary KPI
         const elTotalKg = document.getElementById('z4-total-kg');
         if (elTotalKg && stageData.total_weight_kg !== undefined) {
-            elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 4);
+            elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
         }
         const elTotalPcs = document.getElementById('z4-total-pcs');
         if (elTotalPcs && stageData.total_good_pcs !== undefined) {
@@ -1241,14 +1276,24 @@
             const line3Data = (seriesByLine[3] && seriesByLine[3].data) ? seriesByLine[3].data : daily.map(d => Number(d.lines?.[3]?.good_kg || 0));
             const line4Data = (seriesByLine[4] && seriesByLine[4].data) ? seriesByLine[4].data : daily.map(d => Number(d.lines?.[4]?.good_kg || 0));
 
+            const line1PcsData = (seriesByLine[1] && seriesByLine[1].pcs_data) ? seriesByLine[1].pcs_data : daily.map(d => Number(d.lines?.[1]?.good_pcs || 0));
+            const line2PcsData = (seriesByLine[2] && seriesByLine[2].pcs_data) ? seriesByLine[2].pcs_data : daily.map(d => Number(d.lines?.[2]?.good_pcs || 0));
+            const line3PcsData = (seriesByLine[3] && seriesByLine[3].pcs_data) ? seriesByLine[3].pcs_data : daily.map(d => Number(d.lines?.[3]?.good_pcs || 0));
+            const line4PcsData = (seriesByLine[4] && seriesByLine[4].pcs_data) ? seriesByLine[4].pcs_data : daily.map(d => Number(d.lines?.[4]?.good_pcs || 0));
+
             const allKgValues = [...line1Data, ...line2Data, ...line3Data, ...line4Data];
             const maxLineKg = Math.max(...allKgValues, 0);
 
             dashboardCharts.zone4Lines.data.labels = daily.map(d => d.day_label);
+            dashboardCharts.zone4Lines.data.dailyData = daily;
             dashboardCharts.zone4Lines.data.datasets[0].data = line1Data;
+            dashboardCharts.zone4Lines.data.datasets[0].pcsData = line1PcsData;
             dashboardCharts.zone4Lines.data.datasets[1].data = line2Data;
+            dashboardCharts.zone4Lines.data.datasets[1].pcsData = line2PcsData;
             dashboardCharts.zone4Lines.data.datasets[2].data = line3Data;
+            dashboardCharts.zone4Lines.data.datasets[2].pcsData = line3PcsData;
             dashboardCharts.zone4Lines.data.datasets[3].data = line4Data;
+            dashboardCharts.zone4Lines.data.datasets[3].pcsData = line4PcsData;
             dashboardCharts.zone4Lines.options.scales.y.suggestedMax = maxLineKg > 0 ? maxLineKg * 1.25 : 50;
             dashboardCharts.zone4Lines.update();
         }

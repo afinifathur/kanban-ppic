@@ -79,7 +79,7 @@ class ProductionFloorKanbanUiTest extends TestCase
         $plan = ProductionPlan::create([
             'code' => $attributes['production_code'] ?? '268ET'.rand(100, 999),
             'title' => 'Rencana SC '.rand(100, 999),
-            'item_code' => '4.'.rand(100, 999),
+            'item_code' => $attributes['item_code'] ?? ('4.'.rand(100, 999)),
             'item_name' => $attributes['item_name'] ?? 'SS304 EN1092-1 PN16 DN350',
             'po_number' => 'PO-'.rand(100, 999),
             'line_number' => $attributes['line_number'] ?? 1,
@@ -588,5 +588,147 @@ class ProductionFloorKanbanUiTest extends TestCase
         $response->assertSee('heatsearch99', false);
         $response->assertSee('special flange 4 inch', false);
         $response->assertSee('data-card-line="2"', false);
+    }
+
+    /**
+     * Requirement: Searching 'A02' isolates customer 'A02' and does NOT match cards of other customers
+     * whose ERP item_code happens to contain '.A0200' (8 inch) or '.A0250' (10 inch).
+     */
+    public function test_kanban_search_a02_isolates_customer_and_ignores_internal_item_code_suffix(): void
+    {
+        // 1. Card 1: Customer LOKAL with 8" flange (.A0200 suffix)
+        $card1 = $this->createKtrLine([
+            'traveler_number' => 'KTR-TEST-LOKAL-8IN',
+            'heat_number' => 'A225092615',
+            'item_name' => 'SS304 DIN 2576 PN 10 8"',
+            'item_code' => '4.1011DINPN10.A0200',
+            'production_code' => 'LH559',
+            'customer' => 'LOKAL',
+            'line_number' => 1,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 2. Card 2: Customer E02 with 8" flange (.A0200 suffix)
+        $card2 = $this->createKtrLine([
+            'traveler_number' => 'KTR-TEST-E02-8IN',
+            'heat_number' => 'LA228092605',
+            'item_name' => 'SS304 DIN 2502 PN 16 8"',
+            'item_code' => '4.1011DINPN16.A0200',
+            'production_code' => '268ET741',
+            'customer' => 'E02',
+            'line_number' => 2,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 3. Card 3: True Customer A02 (small flange without A0200 item code)
+        $card3 = $this->createKtrLine([
+            'traveler_number' => 'KTR-TEST-TRUE-A02',
+            'heat_number' => 'A215102605',
+            'item_name' => 'SS304 BLIND RAISED ANSI 300LBS 2-1/2"',
+            'item_code' => '4.1061300LB.A0065',
+            'production_code' => '269UN148',
+            'customer' => 'A02',
+            'line_number' => 3,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 4. Card 4: Customer A06 with 8" flange (.A0200 suffix)
+        $card4 = $this->createKtrLine([
+            'traveler_number' => 'KTR-TEST-A06-8IN',
+            'heat_number' => 'P329092603',
+            'item_name' => 'SS316 SORF ANSI 150LBS 8"',
+            'item_code' => '4.1092150LB.A0200',
+            'production_code' => '268ET888',
+            'customer' => 'A06',
+            'line_number' => 4,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 5. Card 5: Customer STOK NON PO with 10" flange (.A0250 suffix)
+        $card5 = $this->createKtrLine([
+            'traveler_number' => 'KTR-TEST-STOK-10IN',
+            'heat_number' => 'A309092604',
+            'item_name' => 'SS304 JIS 10K 10"',
+            'item_code' => '4.101110K.A0250',
+            'production_code' => '2610S836',
+            'customer' => 'STOK NON PO',
+            'line_number' => 2,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // A. Verify Server-Side Search for 'A02'
+        $respSearchA02 = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=A02');
+        $respSearchA02->assertOk();
+
+        // Card 3 (true customer A02) MUST appear
+        $respSearchA02->assertSee('SS304 BLIND RAISED ANSI 300LBS 2-1/2"');
+        $respSearchA02->assertSee('A215102605');
+
+        // Cards 1, 2, 4, 5 MUST NOT appear (they are other customers despite .A0200/.A0250 item_code)
+        $respSearchA02->assertDontSee('SS304 DIN 2576 PN 10 8"');
+        $respSearchA02->assertDontSee('SS304 DIN 2502 PN 16 8"');
+        $respSearchA02->assertDontSee('SS316 SORF ANSI 150LBS 8"');
+        $respSearchA02->assertDontSee('SS304 JIS 10K 10"');
+
+        // B. Verify Frontend HTML data-search-text does NOT expose hidden item_code
+        $respAll = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od');
+        $respAll->assertOk();
+        $html = $respAll->getContent();
+
+        // Card 1 search text must include heat, product, spk, traveler, customer, but NOT .a0200
+        $this->assertStringContainsString('a225092615', $html);
+        $this->assertStringContainsString('ss304 din 2576 pn 10 8', $html);
+        $this->assertStringContainsString('lh559', $html);
+        $this->assertStringContainsString('ktr-test-lokal-8in', $html);
+        $this->assertStringContainsString('lokal', $html);
+        $this->assertStringNotContainsString('4.1011dinpn10.a0200', $html);
+        $this->assertStringNotContainsString('4.1011dinpn16.a0200', $html);
+
+        // C. Verify Search for other customers (LOKAL, E02, A06)
+        $respLokal = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=LOKAL');
+        $respLokal->assertOk();
+        $respLokal->assertSee('SS304 DIN 2576 PN 10 8"');
+        $respLokal->assertDontSee('SS304 DIN 2502 PN 16 8"');
+        $respLokal->assertDontSee('SS304 BLIND RAISED ANSI 300LBS 2-1/2"');
+
+        $respE02 = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=E02');
+        $respE02->assertOk();
+        $respE02->assertSee('SS304 DIN 2502 PN 16 8"');
+        $respE02->assertDontSee('SS304 DIN 2576 PN 10 8"');
+        $respE02->assertDontSee('SS304 BLIND RAISED ANSI 300LBS 2-1/2"');
+
+        $respA06 = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=A06');
+        $respA06->assertOk();
+        $respA06->assertSee('SS316 SORF ANSI 150LBS 8"');
+        $respA06->assertDontSee('SS304 DIN 2576 PN 10 8"');
+        $respA06->assertDontSee('SS304 BLIND RAISED ANSI 300LBS 2-1/2"');
+
+        // D. Verify Search by Product Name, Heat Number, KTR, and SPK
+        $respProduct = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=DIN%202576');
+        $respProduct->assertOk();
+        $respProduct->assertSee('SS304 DIN 2576 PN 10 8"');
+        $respProduct->assertDontSee('SS304 DIN 2502 PN 16 8"');
+
+        $respHeat = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=LA228092605');
+        $respHeat->assertOk();
+        $respHeat->assertSee('SS304 DIN 2502 PN 16 8"');
+        $respHeat->assertDontSee('SS304 DIN 2576 PN 10 8"');
+
+        $respKtr = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=KTR-TEST-A06-8IN');
+        $respKtr->assertOk();
+        $respKtr->assertSee('SS316 SORF ANSI 150LBS 8"');
+        $respKtr->assertDontSee('SS304 DIN 2576 PN 10 8"');
+
+        $respSpk = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/bubut-od?search=269UN148');
+        $respSpk->assertOk();
+        $respSpk->assertSee('SS304 BLIND RAISED ANSI 300LBS 2-1/2"');
+        $respSpk->assertDontSee('SS304 DIN 2576 PN 10 8"');
+
+        // E. Verify Print Preview also excludes false positives
+        $respPrint = $this->actingAs($this->spvBubutOd)->get('/sand-casting/kanban/stage/bubut-od/print?search=A02');
+        $respPrint->assertOk();
+        $respPrint->assertSee('SS304 BLIND RAISED ANSI 300LBS 2-1/2"');
+        $respPrint->assertDontSee('SS304 DIN 2576 PN 10 8"');
+        $respPrint->assertDontSee('SS304 DIN 2502 PN 16 8"');
     }
 }

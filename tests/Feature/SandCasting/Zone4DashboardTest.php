@@ -334,7 +334,7 @@ class Zone4DashboardTest extends TestCase
     }
 
     /**
-     * 7. Zone 1 displays weight in kilogram with four decimal places.
+     * 7. Zone 1 payload preserves weight precision, while bar label uses integer kg and tooltip retains 4 decimal places.
      */
     public function test_zone_1_displays_weight_with_four_decimal_places(): void
     {
@@ -373,9 +373,11 @@ class Zone4DashboardTest extends TestCase
         $viewRes->assertStatus(200);
         $viewContent = $viewRes->getContent();
 
-        // Check formatNumber(..., 4) is used for Throughput labels and Y-axis callback
-        $this->assertStringContainsString('formatNumber(kgVal, 4)', $viewContent);
-        $this->assertStringContainsString("callback: v => formatNumber(v, 4) + ' kg'", $viewContent);
+        // Check formatNumber(..., 0) is used for Throughput above-bar direct labels and Y-axis callback, while detail tooltip retains 4 decimals
+        $this->assertStringContainsString('const kgText = `${formatNumber(kgVal, 0)} kg`;', $viewContent);
+        $this->assertStringContainsString('const pcsText = `${formatNumber(pcsVal, 0)} PCS`;', $viewContent);
+        $this->assertStringContainsString("callback: v => formatNumber(v, 0) + ' kg'", $viewContent);
+        $this->assertStringContainsString('${formatNumber(stage.good_kg ?? context.raw, 4)} kg', $viewContent);
         $this->assertStringContainsString('THROUGHPUT 6 TAHAP PROSES (KG & PCS)', $viewContent);
     }
 
@@ -401,6 +403,8 @@ class Zone4DashboardTest extends TestCase
 
             foreach ([1, 2, 3, 4] as $ln) {
                 $this->assertCount(30, $seriesByLine[$ln]['data']);
+                $this->assertArrayHasKey('pcs_data', $seriesByLine[$ln]);
+                $this->assertCount(30, $seriesByLine[$ln]['pcs_data']);
                 $this->assertSame("Line {$ln}", $seriesByLine[$ln]['label']);
             }
 
@@ -496,6 +500,13 @@ class Zone4DashboardTest extends TestCase
         $this->assertSame(0, $dayData['unallocated_pcs']);
         $this->assertTrue($dayData['is_fully_reconciled']);
 
+        // series_by_line pcs_data matches daily lines good_pcs
+        $dayIndex = collect($qcStage['daily'])->search(fn ($d) => $d['date'] === $targetDate->toDateString());
+        $this->assertNotFalse($dayIndex);
+        foreach ([1, 2, 3, 4] as $ln) {
+            $this->assertSame((int) $dayData['lines'][$ln]['good_pcs'], $qcStage['series_by_line'][$ln]['pcs_data'][$dayIndex]);
+        }
+
         // Stage totals also reconcile
         $this->assertTrue($qcStage['is_fully_reconciled']);
         $this->assertEquals(0.0, (float) $qcStage['total_unallocated_kg']);
@@ -590,19 +601,23 @@ class Zone4DashboardTest extends TestCase
 
         $content = $response->getContent();
 
-        // Compact summary metadata exists above bar chart with Zone 3 styling
+        // Compact summary metadata exists above bar chart with Zone 3 styling and integer kg formatting
         $this->assertStringContainsString('TOTAL 30 HARI (', $content);
         $this->assertStringContainsString('id="z4-summary-stage-name"', $content);
         $this->assertStringContainsString('id="z4-total-kg"', $content);
+        $partialContent = file_get_contents(resource_path('views/sand-casting/dashboard/partials/zone-4.blade.php'));
+        $this->assertStringContainsString("number_format(\$initialTotalKg, 0, ',', '.')", $partialContent);
+        $this->assertStringContainsString('elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);', $content);
         $this->assertStringContainsString('id="z4-total-pcs"', $content);
         $this->assertStringContainsString('id="z4-total-ktr"', $content);
 
         // Y-axis ticks on both charts use integer formatting (e.g. 0 kg, 500 kg, 1.000 kg)
         $this->assertStringContainsString("callback: function(value) { return formatNumber(value, 0) + ' kg'; }", $content);
 
-        // Detail tooltips retain 4 decimal places precision for kg
+        // Detail tooltips: bar chart retains 4 decimals for kg; line chart displays integer kg and PCS
         $this->assertStringContainsString('` Output Baik: ${formatNumber(kgVal, 4)} kg`', $content);
-        $this->assertStringContainsString('` ${context.dataset.label}: ${formatNumber(val, 4)} kg`', $content);
+        $this->assertStringContainsString('` ${context.dataset.label}: ${formatNumber(kgVal, 0)} kg | ${formatNumber(pcsVal, 0)} PCS`', $content);
+        $this->assertStringContainsString('${d.day_label} ${year}', $content);
     }
 
     /**
@@ -618,8 +633,8 @@ class Zone4DashboardTest extends TestCase
         // directDataLabelsPlugin is shared between Zona 1 and Zona 4
         $this->assertStringContainsString('plugins: [directDataLabelsPlugin]', $content);
 
-        // Bar label formats: 4-decimal kg and PCS
-        $this->assertStringContainsString('const kgText = `${formatNumber(kgVal, 4)} kg`;', $content);
+        // Bar label formats: integer kg and PCS
+        $this->assertStringContainsString('const kgText = `${formatNumber(kgVal, 0)} kg`;', $content);
         $this->assertStringContainsString('const pcsText = `${formatNumber(pcsVal, 0)} PCS`;', $content);
 
         // Days with zero production (0 kg & 0 pcs) are omitted in dense 30-day mode to prevent clutter

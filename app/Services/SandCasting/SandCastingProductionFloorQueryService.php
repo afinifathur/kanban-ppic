@@ -338,7 +338,6 @@ class SandCastingProductionFloorQueryService
                     ($card['heat_number'] ?? '').' '.
                     ($card['production_code'] ?? '').' '.
                     ($card['item_name'] ?? '').' '.
-                    ($card['item_code'] ?? '').' '.
                     ($card['customer'] ?? '')
                 );
                 if (! str_contains($haystack, $search)) {

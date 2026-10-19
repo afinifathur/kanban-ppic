@@ -300,7 +300,6 @@
                                             $card['production_code'] ?? '',
                                             $card['traveler_number'] ?? '',
                                             $card['customer'] ?? '',
-                                            $card['item_code'] ?? '',
                                         ])));
                                     @endphp
                                     <div class="kanban-card bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs"
@@ -402,7 +401,6 @@
                                             $card['production_code'] ?? '',
                                             $card['traveler_number'] ?? '',
                                             $card['customer'] ?? '',
-                                            $card['item_code'] ?? '',
                                         ])));
                                     @endphp
                                     <div class="kanban-card bg-white rounded-xl border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200' }} p-2.5 sm:p-3 flex flex-col justify-between transition-all hover:border-slate-300 shadow-xs"

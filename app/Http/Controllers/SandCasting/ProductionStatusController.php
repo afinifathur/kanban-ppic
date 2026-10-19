@@ -20,13 +20,23 @@ class ProductionStatusController extends Controller
     public function index(Request $request): View|JsonResponse
     {
         $filter = $request->input('filter', $request->input('status', 'active'));
+
+        $codes = $this->statusService->parseFilterArray($request->input('codes') ?? $request->input('production_code') ?? $request->input('code'));
+        $products = $this->statusService->parseFilterArray($request->input('products') ?? $request->input('product') ?? $request->input('item_names') ?? $request->input('item_name'));
+        $customers = $this->statusService->parseFilterArray($request->input('customers') ?? $request->input('customer'));
+        $planningGroups = $this->statusService->parseFilterArray($request->input('planning_groups') ?? $request->input('planning_group') ?? $request->input('plan_titles') ?? $request->input('plan_title') ?? $request->input('title'));
+        $poNumbers = $this->statusService->parseFilterArray($request->input('po_numbers') ?? $request->input('po_number'));
+        $search = trim((string) $request->input('search', ''));
+
         $filters = [
-            'search' => $request->input('search'),
+            'search' => $search,
             'filter' => $filter,
             'status' => $filter,
-            'codes' => $request->input('production_code') ?? $request->input('codes') ?? $request->input('code'),
-            'customers' => $request->input('customer') ?? $request->input('customers'),
-            'po_numbers' => $request->input('po_number') ?? $request->input('po_numbers'),
+            'codes' => $codes,
+            'products' => $products,
+            'customers' => $customers,
+            'planning_groups' => $planningGroups,
+            'po_numbers' => $poNumbers,
         ];
 
         $rows = $this->statusService->getAggregatedRows($filters, $request->user());
@@ -39,13 +49,27 @@ class ProductionStatusController extends Controller
             ]);
         }
 
+        $options = $this->statusService->getFilterOptions(['status' => $filter], $request->user());
+        $allPlanningGroups = collect($options['all_planning_groups'] ?? [])->merge($planningGroups)->unique()->filter(fn ($v) => $v !== '' && $v !== null)->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->toArray();
+        $allCodes = collect($options['all_codes'])->merge($codes)->unique()->filter(fn ($v) => $v !== '' && $v !== null && $v !== '-')->sort()->values()->toArray();
+        $allProducts = collect($options['all_products'])->merge($products)->unique()->filter(fn ($v) => $v !== '' && $v !== null && $v !== '-')->sort()->values()->toArray();
+        $allCustomers = collect($options['all_customers'])->merge($customers)->unique()->filter(fn ($v) => $v !== '' && $v !== null && $v !== '-')->sort()->values()->toArray();
+
         return view('sand-casting.production-status.index', [
             'rows' => $rows,
             'summary' => $summary,
             'filters' => $filters,
             'filter' => $filter,
             'activeFilter' => $filter,
-            'search' => $filters['search'] ?? '',
+            'search' => $search,
+            'planningGroups' => $planningGroups,
+            'codes' => $codes,
+            'products' => $products,
+            'customers' => $customers,
+            'allPlanningGroups' => $allPlanningGroups,
+            'allCodes' => $allCodes,
+            'allProducts' => $allProducts,
+            'allCustomers' => $allCustomers,
             'activeCount' => $summary['active_count'] ?? 0,
             'completedCount' => $summary['completed_count'] ?? 0,
             'totalCount' => $summary['total_count'] ?? 0,

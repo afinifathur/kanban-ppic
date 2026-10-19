@@ -607,4 +607,406 @@ class ProductionStatusControllerTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('placeholder="Cari Kode / PO / Item / Heat Number / KTR..."', false);
     }
+
+    /**
+     * TEST 21: Column filters codes, products, and customers isolate data individually and in combination
+     */
+    public function test_21_column_filters_codes_products_customers_individually_and_in_combination(): void
+    {
+        $planA = $this->createPlan(['code' => 'SPK-A', 'item_name' => 'Flange SS304 4 Inch', 'customer' => 'PT SINAR UTAMA']);
+        $planB = $this->createPlan(['code' => 'SPK-B', 'item_name' => 'Flange SS316 6 Inch', 'customer' => 'PT BINA TEKNIK']);
+        $planC = $this->createPlan(['code' => 'SPK-C', 'item_name' => 'Flange SS304 4 Inch', 'customer' => 'PT BINA TEKNIK']);
+
+        $this->createKtr($planA, 100, 0, 'netto');
+        $this->createKtr($planB, 100, 0, 'netto');
+        $this->createKtr($planC, 100, 0, 'netto');
+
+        // 1. Filter codes[]
+        $resCode = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?codes[]=SPK-A&codes[]=SPK-B');
+        $resCode->assertStatus(200);
+        $this->assertCount(2, $resCode->json('rows'));
+
+        // 2. Filter products[]
+        $resProd = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?products[]='.urlencode('Flange SS304 4 Inch'));
+        $resProd->assertStatus(200);
+        $this->assertCount(2, $resProd->json('rows'));
+        $this->assertEqualsCanonicalizing(['SPK-A', 'SPK-C'], collect($resProd->json('rows'))->pluck('code')->all());
+
+        // 3. Filter customers[]
+        $resCust = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?customers[]='.urlencode('PT BINA TEKNIK'));
+        $resCust->assertStatus(200);
+        $this->assertCount(2, $resCust->json('rows'));
+        $this->assertEqualsCanonicalizing(['SPK-B', 'SPK-C'], collect($resCust->json('rows'))->pluck('code')->all());
+
+        // 4. Combination: products=Flange SS304 4 Inch AND customers=PT BINA TEKNIK -> only SPK-C
+        $resCombo = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?products[]='.urlencode('Flange SS304 4 Inch').'&customers[]='.urlencode('PT BINA TEKNIK'));
+        $resCombo->assertStatus(200);
+        $this->assertCount(1, $resCombo->json('rows'));
+        $this->assertSame('SPK-C', $resCombo->json('rows.0.code'));
+
+        // 5. Triple combination including codes[]
+        $resTriple = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?codes[]=SPK-C&products[]='.urlencode('Flange SS304 4 Inch').'&customers[]='.urlencode('PT BINA TEKNIK'));
+        $resTriple->assertStatus(200);
+        $this->assertCount(1, $resTriple->json('rows'));
+        $this->assertSame('SPK-C', $resTriple->json('rows.0.code'));
+
+        // Mismatching triple combination returns 0 rows
+        $resEmpty = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?codes[]=SPK-A&products[]='.urlencode('Flange SS316 6 Inch'));
+        $resEmpty->assertStatus(200);
+        $this->assertCount(0, $resEmpty->json('rows'));
+    }
+
+    /**
+     * TEST 22: Column filters work together with global search
+     */
+    public function test_22_column_filters_work_together_with_global_search(): void
+    {
+        $plan1 = $this->createPlan(['code' => 'SPK-01', 'item_name' => 'Elbow 90 SS304', 'customer' => 'PT ALPHA', 'po_number' => 'PO-100']);
+        $plan2 = $this->createPlan(['code' => 'SPK-02', 'item_name' => 'Elbow 90 SS304', 'customer' => 'PT ALPHA', 'po_number' => 'PO-200']);
+
+        $this->createKtr($plan1, 50, 0, 'netto');
+        $this->createKtr($plan2, 50, 0, 'netto');
+
+        // Filter products[] AND search=PO-200
+        $res = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?products[]='.urlencode('Elbow 90 SS304').'&search=PO-200');
+
+        $res->assertStatus(200);
+        $this->assertCount(1, $res->json('rows'));
+        $this->assertSame('SPK-02', $res->json('rows.0.code'));
+    }
+
+    /**
+     * TEST 23: Column filters maintain consistency across status tabs
+     */
+    public function test_23_column_filters_remain_consistent_across_status_tabs(): void
+    {
+        $planActive = $this->createPlan(['code' => 'SPK-ACT', 'customer' => 'PT TARGET', 'qty_planned' => 100, 'po_quantity' => 100]);
+        $this->createKtr($planActive, 50, 0, 'netto'); // Incomplete, still in netto -> ACTIVE
+
+        $planComp = $this->createPlan(['code' => 'SPK-COMP', 'customer' => 'PT TARGET', 'qty_planned' => 100, 'po_quantity' => 100]);
+        $ktrComp = $this->createKtr($planComp, 100, 0, 'completed');
+        $ktrComp->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->adminUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        // Filter customer=PT TARGET under active tab
+        $resActive = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?customers[]=PT TARGET&filter=active');
+        $resActive->assertStatus(200);
+        $this->assertCount(1, $resActive->json('rows'));
+        $this->assertSame('SPK-ACT', $resActive->json('rows.0.code'));
+        $this->assertSame(1, $resActive->json('summary.active_count'));
+        $this->assertSame(1, $resActive->json('summary.completed_count'));
+        $this->assertSame(2, $resActive->json('summary.total_count'));
+
+        // Switch to completed tab with same customer filter
+        $resComp = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?customers[]=PT TARGET&filter=completed');
+        $resComp->assertStatus(200);
+        $this->assertCount(1, $resComp->json('rows'));
+        $this->assertSame('SPK-COMP', $resComp->json('rows.0.code'));
+
+        // Switch to all tab with same customer filter
+        $resAll = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?customers[]=PT TARGET&filter=all');
+        $resAll->assertStatus(200);
+        $this->assertCount(2, $resAll->json('rows'));
+    }
+
+    /**
+     * TEST 24: View renders Excel filter triggers, popover dropdowns, and active badges
+     */
+    public function test_24_view_renders_excel_filter_triggers_popovers_and_active_badges(): void
+    {
+        $plan = $this->createPlan(['code' => 'SPK-VIEW', 'item_name' => 'Valve Body 2 Inch', 'customer' => 'PT METAL JAYA']);
+        $this->createKtr($plan, 100, 0, 'netto');
+
+        // Request view with active filters
+        $response = $this->actingAs($this->adminUser)
+            ->get('/sand-casting/production-status?codes[]=SPK-VIEW&products[]='.urlencode('Valve Body 2 Inch').'&customers[]='.urlencode('PT METAL JAYA'));
+
+        $response->assertStatus(200);
+
+        // Header buttons exist with active filter icon classes
+        $response->assertSee('data-filter-type="codes"', false);
+        $response->assertSee('data-filter-type="products"', false);
+        $response->assertSee('data-filter-type="customers"', false);
+        $response->assertSee('title="Filter Kode Produksi"', false);
+        $response->assertSee('title="Filter Nama Produk"', false);
+        $response->assertSee('title="Filter Customer"', false);
+
+        // Popovers exist with search, select all, clear, and action buttons
+        $response->assertSee('id="codes-filter-dropdown"', false);
+        $response->assertSee('id="products-filter-dropdown"', false);
+        $response->assertSee('id="customers-filter-dropdown"', false);
+        $response->assertSee('Filter Kode Produksi', false);
+        $response->assertSee('Filter Nama Produk', false);
+        $response->assertSee('Filter Customer', false);
+        $response->assertSee('applyFilter(\'codes\')', false);
+        $response->assertSee('applyFilter(\'products\')', false);
+        $response->assertSee('applyFilter(\'customers\')', false);
+
+        // Active filter pills and Clear All link exist
+        $response->assertSee('Active Filters:', false);
+        $response->assertSee('Kode: SPK-VIEW', false);
+        $response->assertSee('Product: Valve Body 2 Inch', false);
+        $response->assertSee('Customer: PT METAL JAYA', false);
+        $response->assertSee('Clear All', false);
+
+        // View data has options collections
+        $response->assertViewHas('allCodes');
+        $response->assertViewHas('allProducts');
+        $response->assertViewHas('allCustomers');
+    }
+
+    /**
+     * TEST 25: Dropdown options are not lost when filtering other dimensions
+     */
+    public function test_25_dropdown_options_not_lost_when_filtering_other_columns(): void
+    {
+        $plan1 = $this->createPlan(['code' => 'SPK-OP1', 'item_name' => 'Item Alpha', 'customer' => 'Customer One']);
+        $plan2 = $this->createPlan(['code' => 'SPK-OP2', 'item_name' => 'Item Beta', 'customer' => 'Customer Two']);
+
+        $this->createKtr($plan1, 50, 0, 'netto');
+        $this->createKtr($plan2, 50, 0, 'netto');
+
+        // When filtering code=SPK-OP1, products dropdown should still contain 'Item Beta' and customers should contain 'Customer Two'
+        $response = $this->actingAs($this->adminUser)
+            ->get('/sand-casting/production-status?codes[]=SPK-OP1');
+
+        $response->assertStatus(200);
+
+        $allCodes = $response->viewData('allCodes');
+        $allProducts = $response->viewData('allProducts');
+        $allCustomers = $response->viewData('allCustomers');
+
+        $this->assertContains('SPK-OP1', $allCodes);
+        $this->assertContains('SPK-OP2', $allCodes);
+
+        $this->assertContains('Item Alpha', $allProducts);
+        $this->assertContains('Item Beta', $allProducts);
+
+        $this->assertContains('Customer One', $allCustomers);
+        $this->assertContains('Customer Two', $allCustomers);
+    }
+
+    /**
+     * TEST 26: Planning group filter isolates records and prevents cross-group leakage
+     */
+    public function test_26_planning_group_filter_isolates_records_and_prevents_cross_group_leakage(): void
+    {
+        // Two different planning groups with identical item_code and item_name
+        $planNov = $this->createPlan([
+            'title' => 'A02 NOVEMBER',
+            'code' => 'SPK-NOV-01',
+            'item_code' => 'FLG.SS304.10K',
+            'item_name' => 'SS304 JIS 10K 10 Inch',
+            'customer' => 'A02',
+        ]);
+        $planSep = $this->createPlan([
+            'title' => 'A02 SEPTEMBER',
+            'code' => 'SPK-SEP-01',
+            'item_code' => 'FLG.SS304.10K',
+            'item_name' => 'SS304 JIS 10K 10 Inch',
+            'customer' => 'A02',
+        ]);
+        $planStok = $this->createPlan([
+            'title' => 'STOK OKTOBER',
+            'code' => 'SPK-STOK-01',
+            'item_code' => 'FLG.SS304.16K',
+            'item_name' => 'SS304 JIS 16K 10 Inch',
+            'customer' => 'INTERNAL',
+        ]);
+
+        $this->createKtr($planNov, 50, 0, 'netto');
+        $this->createKtr($planSep, 50, 0, 'netto');
+        $this->createKtr($planStok, 30, 0, 'netto');
+
+        // Filter by A02 NOVEMBER
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?planning_groups[]='.urlencode('A02 NOVEMBER'));
+
+        $response->assertStatus(200);
+        $codes = collect($response->json('rows'))->pluck('code')->all();
+
+        $this->assertContains('SPK-NOV-01', $codes);
+        $this->assertNotContains('SPK-SEP-01', $codes);
+        $this->assertNotContains('SPK-STOK-01', $codes);
+
+        // Also test alias parameter 'planning_group'
+        $responseAlias = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?planning_group='.urlencode('A02 NOVEMBER'));
+
+        $responseAlias->assertStatus(200);
+        $aliasCodes = collect($responseAlias->json('rows'))->pluck('code')->all();
+        $this->assertEquals(['SPK-NOV-01'], $aliasCodes);
+    }
+
+    /**
+     * TEST 27: Planning group filter combines with code, product, customer, and search
+     */
+    public function test_27_planning_group_combines_with_code_product_customer_and_search(): void
+    {
+        $plan1 = $this->createPlan([
+            'title' => 'A02 NOVEMBER',
+            'code' => 'SPK-NOV-01',
+            'item_name' => 'Flange A',
+            'customer' => 'A02',
+        ]);
+        $plan2 = $this->createPlan([
+            'title' => 'A02 NOVEMBER',
+            'code' => 'SPK-NOV-02',
+            'item_name' => 'Flange B',
+            'customer' => 'A02',
+        ]);
+        $plan3 = $this->createPlan([
+            'title' => 'E02 OKTOBER',
+            'code' => 'SPK-OCT-01',
+            'item_name' => 'Flange A',
+            'customer' => 'E02',
+        ]);
+
+        $this->createKtr($plan1, 20, 0, 'netto');
+        $this->createKtr($plan2, 20, 0, 'netto');
+        $this->createKtr($plan3, 20, 0, 'netto');
+
+        // Combination: planning_group = A02 NOVEMBER AND products[] = Flange A
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?planning_groups[]='.urlencode('A02 NOVEMBER').'&products[]='.urlencode('Flange A'));
+
+        $response->assertStatus(200);
+        $codes = collect($response->json('rows'))->pluck('code')->all();
+        $this->assertEquals(['SPK-NOV-01'], $codes);
+
+        // Global search within planning group
+        $responseSearch = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?planning_groups[]='.urlencode('A02 NOVEMBER').'&search=NOV-02');
+
+        $responseSearch->assertStatus(200);
+        $searchCodes = collect($responseSearch->json('rows'))->pluck('code')->all();
+        $this->assertEquals(['SPK-NOV-02'], $searchCodes);
+    }
+
+    /**
+     * TEST 28: Summary counts reflect planning group filter
+     */
+    public function test_28_summary_counts_reflect_planning_group_filter(): void
+    {
+        // In A02 NOVEMBER: 1 active plan, 1 completed plan
+        $planNovActive = $this->createPlan(['title' => 'A02 NOVEMBER', 'code' => 'NOV-ACT', 'po_quantity' => 50]);
+        $this->createKtr($planNovActive, 50, 0, 'netto');
+
+        $planNovComp = $this->createPlan(['title' => 'A02 NOVEMBER', 'code' => 'NOV-CMP', 'po_quantity' => 40]);
+        $ktrComp = $this->createKtr($planNovComp, 40, 0, 'completed');
+        $ktrComp->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->adminUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        // In OTHER GROUP: 2 active plans
+        $planOther1 = $this->createPlan(['title' => 'OTHER GROUP', 'code' => 'OTH-01', 'po_quantity' => 10]);
+        $this->createKtr($planOther1, 10, 0, 'netto');
+        $planOther2 = $this->createPlan(['title' => 'OTHER GROUP', 'code' => 'OTH-02', 'po_quantity' => 20]);
+        $this->createKtr($planOther2, 20, 0, 'netto');
+
+        $response = $this->actingAs($this->adminUser)
+            ->getJson('/sand-casting/production-status?planning_groups[]='.urlencode('A02 NOVEMBER'));
+
+        $response->assertStatus(200);
+        $summary = $response->json('summary');
+
+        $this->assertEquals(1, $summary['active_count']);
+        $this->assertEquals(1, $summary['completed_count']);
+        $this->assertEquals(2, $summary['total_count']);
+    }
+
+    /**
+     * TEST 29: Planning group options respect domain and product scope
+     */
+    public function test_29_planning_group_options_respect_domain_and_product_scope(): void
+    {
+        // Sand casting plans with different scopes
+        $this->createPlan([
+            'title' => 'GROUP FLANGE BESI',
+            'code' => 'SC-BESI',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+        ]);
+        $this->createPlan([
+            'title' => 'GROUP FLANGE STAINLESS',
+            'code' => 'SC-SS',
+            'product_scope' => 'FLANGE_STAINLESS',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+        ]);
+        // Lost wax plan
+        $this->createPlan([
+            'title' => 'GROUP LOST WAX ONLY',
+            'code' => 'LW-01',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_LOST_WAX,
+        ]);
+
+        // When accessed by PPIC user with FLANGE_BESI scope
+        $response = $this->actingAs($this->ppicUser)->get('/sand-casting/production-status');
+        $response->assertStatus(200);
+
+        $allPlanningGroups = $response->viewData('allPlanningGroups');
+
+        $this->assertContains('GROUP FLANGE BESI', $allPlanningGroups);
+        $this->assertNotContains('GROUP FLANGE STAINLESS', $allPlanningGroups);
+        $this->assertNotContains('GROUP LOST WAX ONLY', $allPlanningGroups);
+    }
+
+    /**
+     * TEST 30: View renders planning group trigger, popover, and active filter badge
+     */
+    public function test_30_view_renders_planning_group_trigger_popover_and_badge(): void
+    {
+        $plan = $this->createPlan(['title' => 'A02 NOVEMBER', 'code' => 'SPK-VIEW-PG']);
+        $this->createKtr($plan, 30, 0, 'netto');
+
+        $response = $this->actingAs($this->adminUser)
+            ->get('/sand-casting/production-status?planning_groups[]='.urlencode('A02 NOVEMBER'));
+
+        $response->assertStatus(200);
+
+        // Header trigger button exists
+        $response->assertSee('data-filter-type="planning_groups"', false);
+        $response->assertSee('Kelompok', false);
+
+        // Popover exists
+        $response->assertSee('id="planning_groups-filter-dropdown"', false);
+        $response->assertSee('Filter Kelompok Perencanaan', false);
+        $response->assertSee('applyFilter(\'planning_groups\')', false);
+
+        // Active badge and remove button exist
+        $response->assertSee('Kelompok: A02 NOVEMBER', false);
+        $response->assertSee('removeFilterValue(\'planning_groups\', \'A02 NOVEMBER\')', false);
+
+        // View data has allPlanningGroups
+        $response->assertViewHas('allPlanningGroups');
+        $this->assertContains('A02 NOVEMBER', $response->viewData('allPlanningGroups'));
+    }
 }

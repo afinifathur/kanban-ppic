@@ -44,8 +44,10 @@ class SandCastingProductionStatusService
         $search = trim((string) ($filters['search'] ?? ''));
         $statusFilter = strtolower(trim((string) ($filters['status'] ?? $filters['filter'] ?? 'all')));
 
-        $codes = $this->parseFilterArray($filters['codes'] ?? $filters['code'] ?? null);
+        $codes = $this->parseFilterArray($filters['codes'] ?? $filters['production_code'] ?? $filters['code'] ?? null);
+        $products = $this->parseFilterArray($filters['products'] ?? $filters['product'] ?? $filters['item_names'] ?? $filters['item_name'] ?? null);
         $customers = $this->parseFilterArray($filters['customers'] ?? $filters['customer'] ?? null);
+        $planningGroups = $this->parseFilterArray($filters['planning_groups'] ?? $filters['planning_group'] ?? $filters['plan_titles'] ?? $filters['plan_title'] ?? $filters['title'] ?? null);
         $poNumbers = $this->parseFilterArray($filters['po_numbers'] ?? $filters['po_number'] ?? null);
 
         $planQuery = ProductionPlan::query()
@@ -75,6 +77,7 @@ class SandCastingProductionStatusService
         if ($search !== '') {
             $planQuery->where(function (Builder $q) use ($search) {
                 $q->where('code', 'like', "%{$search}%")
+                    ->orWhere('title', 'like', "%{$search}%")
                     ->orWhere('po_number', 'like', "%{$search}%")
                     ->orWhere('customer', 'like', "%{$search}%")
                     ->orWhere('item_name', 'like', "%{$search}%")
@@ -88,8 +91,29 @@ class SandCastingProductionStatusService
         }
 
         // Apply Category Array Filters
+        if (! empty($planningGroups)) {
+            $hasEmpty = in_array('(Tanpa Kelompok)', $planningGroups, true) || in_array('', $planningGroups, true);
+            $nonEmpty = array_values(array_filter($planningGroups, fn ($v) => $v !== '' && $v !== '(Tanpa Kelompok)'));
+
+            if ($hasEmpty && ! empty($nonEmpty)) {
+                $planQuery->where(function (Builder $q) use ($nonEmpty) {
+                    $q->whereIn('title', $nonEmpty)
+                        ->orWhereNull('title')
+                        ->orWhere('title', '');
+                });
+            } elseif ($hasEmpty) {
+                $planQuery->where(function (Builder $q) {
+                    $q->whereNull('title')->orWhere('title', '');
+                });
+            } else {
+                $planQuery->whereIn('title', $nonEmpty);
+            }
+        }
         if (! empty($codes)) {
             $planQuery->whereIn('code', $codes);
+        }
+        if (! empty($products)) {
+            $planQuery->whereIn('item_name', $products);
         }
         if (! empty($customers)) {
             $planQuery->whereIn('customer', $customers);
@@ -124,7 +148,7 @@ class SandCastingProductionStatusService
     /**
      * Get summary counts (active, completed, total) for the given filter context.
      *
-     * @param  array{search?: string, codes?: array, customers?: array, po_numbers?: array}  $filters
+     * @param  array{search?: string, planning_groups?: array, codes?: array, customers?: array, po_numbers?: array}  $filters
      * @return array{active_count: int, completed_count: int, total_count: int}
      */
     public function getSummaryCounts(array $filters = [], ?User $user = null): array
@@ -146,6 +170,53 @@ class SandCastingProductionStatusService
             'active_count' => $activeCount,
             'completed_count' => $completedCount,
             'total_count' => count($allRows),
+        ];
+    }
+
+    /**
+     * Get distinct filter options for planning groups, codes, products, and customers under the current status and user context.
+     *
+     * @param  array{status?: string, filter?: string}  $filters
+     * @return array{all_planning_groups: array<int, string>, all_codes: array<int, string>, all_products: array<int, string>, all_customers: array<int, string>}
+     */
+    public function getFilterOptions(array $filters = [], ?User $user = null): array
+    {
+        $currentUser = $user ?? auth()->user();
+        $scope = $currentUser?->product_scope;
+        $statusFilter = strtolower(trim((string) ($filters['status'] ?? $filters['filter'] ?? 'active')));
+
+        // Fetch base rows under the requested status mode without category filter constraints
+        $baseRows = $this->getAggregatedRows(['status' => $statusFilter], $user);
+
+        $allCodes = collect($baseRows)->pluck('code')->unique()->filter(fn ($v) => $v !== '' && $v !== null && $v !== '-')->sort()->values()->toArray();
+        $allProducts = collect($baseRows)->pluck('item_name')->unique()->filter(fn ($v) => $v !== '' && $v !== null && $v !== '-')->sort()->values()->toArray();
+        $allCustomers = collect($baseRows)->pluck('customer')->unique()->filter(fn ($v) => $v !== '' && $v !== null && $v !== '-')->sort()->values()->toArray();
+
+        // Fetch distinct planning group titles for Sand Casting within user's product_scope
+        $groupQuery = ProductionPlan::query()
+            ->where(function (Builder $q) {
+                $q->where('production_domain', ProductionPlan::DOMAIN_SAND_CASTING)
+                    ->orWhereHas('sandCastingResultLines')
+                    ->orWhereHas('castingOrderLines');
+            });
+
+        if ($currentUser && $currentUser->hasRole('ppic') && $scope) {
+            $groupQuery->where('product_scope', $scope);
+        }
+
+        $allPlanningGroups = $groupQuery->whereNotNull('title')
+            ->where('title', '!=', '')
+            ->distinct()
+            ->pluck('title')
+            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->toArray();
+
+        return [
+            'all_planning_groups' => $allPlanningGroups,
+            'all_codes' => $allCodes,
+            'all_products' => $allProducts,
+            'all_customers' => $allCustomers,
         ];
     }
 
@@ -240,6 +311,8 @@ class SandCastingProductionStatusService
             'no' => $rowNumber,
             'production_plan_id' => $plan->id,
             'code' => $plan->code,
+            'title' => $plan->title,
+            'planning_group' => $plan->title,
             'customer' => $plan->customer ?? '-',
             'item_code' => $plan->item_code ?? '-',
             'item_name' => $plan->item_name ?? '-',
@@ -489,7 +562,7 @@ class SandCastingProductionStatusService
      *
      * @return array<int, string>
      */
-    protected function parseFilterArray(mixed $input): array
+    public function parseFilterArray(mixed $input): array
     {
         if (empty($input)) {
             return [];

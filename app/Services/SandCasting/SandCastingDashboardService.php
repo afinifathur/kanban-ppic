@@ -1072,10 +1072,10 @@ class SandCastingDashboardService
             $stageUnallocatedKtr = 0;
 
             $seriesByLine = [
-                1 => ['line_number' => 1, 'label' => 'Line 1', 'data' => []],
-                2 => ['line_number' => 2, 'label' => 'Line 2', 'data' => []],
-                3 => ['line_number' => 3, 'label' => 'Line 3', 'data' => []],
-                4 => ['line_number' => 4, 'label' => 'Line 4', 'data' => []],
+                1 => ['line_number' => 1, 'label' => 'Line 1', 'data' => [], 'pcs_data' => []],
+                2 => ['line_number' => 2, 'label' => 'Line 2', 'data' => [], 'pcs_data' => []],
+                3 => ['line_number' => 3, 'label' => 'Line 3', 'data' => [], 'pcs_data' => []],
+                4 => ['line_number' => 4, 'label' => 'Line 4', 'data' => [], 'pcs_data' => []],
             ];
 
             foreach ($calendarDays as $dayInfo) {
@@ -1137,6 +1137,7 @@ class SandCastingDashboardService
                 foreach ([1, 2, 3, 4] as $ln) {
                     $dayLines[$ln]['good_kg'] = round($dayLines[$ln]['good_kg'], 4);
                     $seriesByLine[$ln]['data'][] = $dayLines[$ln]['good_kg'];
+                    $seriesByLine[$ln]['pcs_data'][] = (int) $dayLines[$ln]['good_pcs'];
                 }
 
                 $daily[] = [

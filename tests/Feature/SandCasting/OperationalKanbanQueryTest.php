@@ -102,15 +102,15 @@ class OperationalKanbanQueryTest extends TestCase
     protected function createKtrLine(array $attributes = []): SandCastingCastingResultLine
     {
         $plan = ProductionPlan::create([
-            'code' => '268ET'.rand(100, 999),
+            'code' => $attributes['production_code'] ?? ('268ET'.rand(100, 999)),
             'title' => 'Rencana SC '.rand(100, 999),
-            'item_code' => '4.'.rand(100, 999),
-            'item_name' => 'FLANGE BESI JIS 10K 2"',
+            'item_code' => $attributes['item_code'] ?? ('4.'.rand(100, 999)),
+            'item_name' => $attributes['item_name'] ?? 'FLANGE BESI JIS 10K 2"',
             'po_number' => 'PO-'.rand(100, 999),
-            'line_number' => 1,
+            'line_number' => $attributes['line_number'] ?? 1,
             'qty_planned' => 100,
             'qty_remaining' => 100,
-            'customer' => 'PT SINAR METAL',
+            'customer' => $attributes['customer'] ?? 'PT SINAR METAL',
             'product_scope' => 'FLANGE_BESI',
             'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
             'status' => 'planning',
@@ -655,5 +655,138 @@ class OperationalKanbanQueryTest extends TestCase
         $this->assertEquals($execCountBefore, SandCastingStageExecution::count(), 'Executions count must not change');
         $this->assertEquals($lineCountBefore, SandCastingCastingResultLine::count(), 'Line count must not change');
         $this->assertEquals('netto', $ktr->fresh()->current_stage, 'current_stage must not change');
+    }
+
+    /**
+     * Requirement: getStageKanbanData search filter ignores item_code ERP suffix (.A0200/.A0250)
+     * across Ready, Incoming, and Halted buckets while correctly matching customer A02.
+     */
+    public function test_kanban_search_filter_excludes_item_code_suffix_and_matches_customer_a02(): void
+    {
+        // 1. Ready card - Customer LOKAL with .A0200 item_code suffix
+        $readyLokal = $this->createKtrLine([
+            'traveler_number' => 'KTR-READY-LOKAL',
+            'heat_number' => 'HEATLOKAL8',
+            'item_name' => 'SS304 DIN 2576 PN 10 8"',
+            'item_code' => '4.1011DINPN10.A0200',
+            'production_code' => 'LH559',
+            'customer' => 'LOKAL',
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 2. Ready card - Customer E02 with .A0200 item_code suffix
+        $readyE02 = $this->createKtrLine([
+            'traveler_number' => 'KTR-READY-E02',
+            'heat_number' => 'HEATE02-8',
+            'item_name' => 'SS304 DIN 2502 PN 16 8"',
+            'item_code' => '4.1011DINPN16.A0200',
+            'production_code' => '268ET741',
+            'customer' => 'E02',
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 3. Ready card - True Customer A02
+        $readyA02 = $this->createKtrLine([
+            'traveler_number' => 'KTR-READY-A02',
+            'heat_number' => 'HEATA02-TRUE',
+            'item_name' => 'SS304 BLIND RAISED 2-1/2"',
+            'item_code' => '4.1061300LB.A0065',
+            'production_code' => '269UN148',
+            'customer' => 'A02',
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // 4. Incoming card (at netto) - Customer LOKAL with .A0250 item_code suffix
+        $incomingLokal = $this->createKtrLine([
+            'traveler_number' => 'KTR-INC-LOKAL',
+            'heat_number' => 'HEATINC-LOKAL',
+            'item_name' => 'SS304 JIS 10K 10"',
+            'item_code' => '4.101110K.A0250',
+            'production_code' => '2610S836',
+            'customer' => 'LOKAL',
+            'current_stage' => 'netto',
+        ]);
+
+        // 5. Incoming card (at netto) - True Customer A02
+        $incomingA02 = $this->createKtrLine([
+            'traveler_number' => 'KTR-INC-A02',
+            'heat_number' => 'HEATINC-A02',
+            'item_name' => 'SS304 TABLE E 1"',
+            'item_code' => '4.1011TABLEEID.A0025',
+            'production_code' => '269UN103',
+            'customer' => 'A02',
+            'current_stage' => 'netto',
+        ]);
+
+        // 6. Halted card (at bubut_od with 0 good qty) - Customer LOKAL with .A0200
+        $haltedLokal = $this->createKtrLine([
+            'traveler_number' => 'KTR-HALT-LOKAL',
+            'heat_number' => 'HEATHALT-LOKAL',
+            'item_name' => 'SS304 JIS 10K NS 8"',
+            'item_code' => '4.101110KNS.A0200',
+            'customer' => 'LOKAL',
+            'current_stage' => 'bubut_od',
+        ]);
+        $haltedLokal->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 10,
+            'defect_qty' => 10,
+            'good_qty' => 0,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->spvBubutOd->id,
+            'executed_at' => now(),
+        ]);
+
+        // 7. Halted card (at bubut_od with 0 good qty) - True Customer A02
+        $haltedA02 = $this->createKtrLine([
+            'traveler_number' => 'KTR-HALT-A02',
+            'heat_number' => 'HEATHALT-A02',
+            'item_name' => 'SS304 SORF 2-1/2"',
+            'item_code' => '4.1091300LB.A0065',
+            'customer' => 'A02',
+            'current_stage' => 'bubut_od',
+        ]);
+        $haltedA02->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 10,
+            'defect_qty' => 10,
+            'good_qty' => 0,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->spvBubutOd->id,
+            'executed_at' => now(),
+        ]);
+
+        // Execute search for 'A02'
+        $resultA02 = $this->queryService->getStageKanbanData('bubut_od', ['search' => 'A02']);
+
+        // Ready bucket: ONLY True Customer A02 must match
+        $readyTravelers = array_column($resultA02['ready'], 'traveler_number');
+        $this->assertEquals(['KTR-READY-A02'], $readyTravelers);
+        $this->assertNotContains('KTR-READY-LOKAL', $readyTravelers);
+        $this->assertNotContains('KTR-READY-E02', $readyTravelers);
+
+        // Incoming bucket: ONLY True Customer A02 must match
+        $incomingTravelers = array_column($resultA02['incoming'], 'traveler_number');
+        $this->assertEquals(['KTR-INC-A02'], $incomingTravelers);
+        $this->assertNotContains('KTR-INC-LOKAL', $incomingTravelers);
+
+        // Halted bucket: ONLY True Customer A02 must match
+        $haltedTravelers = array_column($resultA02['halted'], 'traveler_number');
+        $this->assertEquals(['KTR-HALT-A02'], $haltedTravelers);
+        $this->assertNotContains('KTR-HALT-LOKAL', $haltedTravelers);
+
+        // Search for 'LOKAL' returns only LOKAL cards
+        $resultLokal = $this->queryService->getStageKanbanData('bubut_od', ['search' => 'LOKAL']);
+        $lokalReady = array_column($resultLokal['ready'], 'traveler_number');
+        $this->assertContains('KTR-READY-LOKAL', $lokalReady);
+        $this->assertNotContains('KTR-READY-A02', $lokalReady);
+        $this->assertNotContains('KTR-READY-E02', $lokalReady);
+
+        // Search for 'E02' returns only E02 cards
+        $resultE02 = $this->queryService->getStageKanbanData('bubut_od', ['search' => 'E02']);
+        $e02Ready = array_column($resultE02['ready'], 'traveler_number');
+        $this->assertEquals(['KTR-READY-E02'], $e02Ready);
     }
 }
