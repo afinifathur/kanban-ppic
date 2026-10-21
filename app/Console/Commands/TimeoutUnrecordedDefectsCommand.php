@@ -19,7 +19,8 @@ class TimeoutUnrecordedDefectsCommand extends Command
     protected $signature = 'sand-casting:timeout-unrecorded-defects
                             {--dry-run : Preview matching executions without mutating database}
                             {--since= : Optional activation cut-off date (YYYY-MM-DD) for physical_done_at}
-                            {--days= : Override timeout duration in calendar days}';
+                            {--days= : Override timeout duration in calendar days}
+                            {--id= : Process a specific stage execution ID only}';
 
     /**
      * The console command description.
@@ -61,12 +62,17 @@ class TimeoutUnrecordedDefectsCommand extends Command
         $now = now();
         $cutoffThreshold = $now->copy()->subDays($timeoutDays);
 
+        $targetId = $this->option('id') ? (int) $this->option('id') : null;
+
         $this->info('========================================================================');
         $this->info(' SAND CASTING: DEFECT ZERO TIMEOUT SCHEDULER (AUTO-NIHIL)               ');
         $this->info('========================================================================');
         $this->info("Waktu Saat Ini       : {$now->format('Y-m-d H:i:s')} (Asia/Jakarta)");
         $this->info("Batas Waktu Timeout  : {$timeoutDays} Hari Kalender (<= {$cutoffThreshold->format('Y-m-d H:i:s')})");
         $this->info('Tanggal Aktivasi     : '.($activationDate ? $activationDate->format('Y-m-d') : 'Semua (Tanpa batas bawah)'));
+        if ($targetId) {
+            $this->info("Target Spesifik ID   : #{$targetId}");
+        }
         $this->info('Mode Eksekusi        : '.($isDryRun ? 'DRY-RUN (Simulasi Saja)' : 'LIVE EXECUTION'));
         $this->info('------------------------------------------------------------------------');
 
@@ -79,6 +85,10 @@ class TimeoutUnrecordedDefectsCommand extends Command
             ->where('is_auto_nihil', false)
             ->orderBy('physical_done_at', 'asc')
             ->orderBy('id', 'asc');
+
+        if ($targetId) {
+            $query->where('id', $targetId);
+        }
 
         if ($activationDate !== null) {
             $query->where('physical_done_at', '>=', $activationDate);

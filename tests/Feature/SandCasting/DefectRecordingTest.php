@@ -660,6 +660,115 @@ class DefectRecordingTest extends TestCase
     }
 
     /**
+     * TEST 26: Auto-nihil idempotency is safe on repeated calls without duplicate logs
+     */
+    public function test_26_auto_nihil_idempotency_safe_on_repeated_calls(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 50, 'current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(6),
+            'executed_at' => now()->subDays(6),
+        ]);
+
+        // First execution
+        $res1 = $this->executionService->timeoutToAutoNihil($exec);
+        $this->assertTrue((bool) $res1->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $res1->status);
+        $this->assertCount(1, $res1->defectLogs);
+
+        // Second execution (idempotency check)
+        $res2 = $this->executionService->timeoutToAutoNihil($res1);
+        $this->assertTrue((bool) $res2->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $res2->status);
+        // Defect logs must remain exactly 1, no duplicate entries created
+        $this->assertCount(1, $res2->fresh()->defectLogs);
+    }
+
+    /**
+     * TEST 27: Auto-nihil command processes only the targeted ID when --id option is passed
+     */
+    public function test_27_auto_nihil_command_with_specific_id_option(): void
+    {
+        $line1 = $this->createKtrLine(['qty_good' => 40, 'current_stage' => 'netto']);
+        $exec1 = $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 40,
+            'defect_qty' => 0,
+            'good_qty' => 40,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(6),
+            'executed_at' => now()->subDays(6),
+        ]);
+
+        $line2 = $this->createKtrLine(['qty_good' => 30, 'current_stage' => 'netto']);
+        $exec2 = $line2->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 30,
+            'defect_qty' => 0,
+            'good_qty' => 30,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(6),
+            'executed_at' => now()->subDays(6),
+        ]);
+
+        // Run command specifically targeting exec1
+        $this->artisan('sand-casting:timeout-unrecorded-defects', [
+            '--id' => $exec1->id,
+            '--days' => 5,
+        ])->assertSuccessful();
+
+        // Exec1 must be converted to auto-nihil
+        $fresh1 = $exec1->fresh();
+        $this->assertTrue((bool) $fresh1->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_QC, $fresh1->status);
+        $this->assertEquals(0, $fresh1->defect_qty);
+
+        // Exec2 must remain untouched (still WAITING_DEFECT)
+        $fresh2 = $exec2->fresh();
+        $this->assertFalse((bool) $fresh2->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $fresh2->status);
+    }
+
+    /**
+     * TEST 28: Auto-nihil command targeted ID in dry-run mode does not mutate
+     */
+    public function test_28_auto_nihil_command_id_dry_run(): void
+    {
+        $line = $this->createKtrLine(['qty_good' => 25, 'current_stage' => 'netto']);
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 25,
+            'defect_qty' => 0,
+            'good_qty' => 25,
+            'status' => SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now()->subDays(6),
+            'executed_at' => now()->subDays(6),
+        ]);
+
+        $this->artisan('sand-casting:timeout-unrecorded-defects', [
+            '--id' => $exec->id,
+            '--dry-run' => true,
+        ])->assertSuccessful();
+
+        $fresh = $exec->fresh();
+        $this->assertFalse((bool) $fresh->is_auto_nihil);
+        $this->assertEquals(SandCastingStageExecution::STATUS_WAITING_DEFECT, $fresh->status);
+    }
+
+    /**
      * PHASE 5I - TEST 1: Tab 'Semua' tidak ditampilkan pada UI.
      */
     public function test_phase5i_1_semua_tab_not_displayed_in_ui(): void

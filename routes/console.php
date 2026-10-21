@@ -8,5 +8,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 \Illuminate\Support\Facades\Schedule::command('sand-casting:timeout-unrecorded-defects')
-    ->dailyAt('23:30')
+    ->hourly()
     ->name('sand-casting-auto-nihil-defects');

@@ -18,7 +18,8 @@ class CastingResultController extends Controller
 
     public function __construct(
         SandCastingCastingResultService $resultService,
-        protected \App\Services\SandCasting\SandCastingQuantityResolverService $quantityResolver
+        protected \App\Services\SandCasting\SandCastingQuantityResolverService $quantityResolver,
+        protected \App\Services\SandCasting\SandCastingProductionStatusService $statusService
     ) {
         $this->resultService = $resultService;
     }
@@ -203,7 +204,10 @@ class CastingResultController extends Controller
 
         $this->authorizeCastingResult($castingResult);
 
-        return view('sand-casting.casting-results.show', compact('castingResult'));
+        $positionSummary = $this->statusService->resolveHeatPositionSummary($castingResult);
+        $defectSummary = $this->statusService->resolveHeatDefectSummary($castingResult);
+
+        return view('sand-casting.casting-results.show', compact('castingResult', 'positionSummary', 'defectSummary'));
     }
 
     /**

@@ -761,4 +761,597 @@ class CastingResultUiTest extends TestCase
         $resHeat->assertOk();
         $resHeat->assertSee('HEAT-MULTI-PC-01');
     }
+
+    /**
+     * TEST POSISI 1: Satu KTR pada satu tahap.
+     */
+    public function test_position_card_renders_single_stage_with_qty_and_ktr_count(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-POS-01',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 50,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-POS-01',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $traveler = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $traveler,
+            'qty_good' => 50,
+            'qty_reject' => 2,
+            'current_stage' => 'netto',
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        // 4 kartu lama tetap ada
+        $response->assertSee('Total Good');
+        $response->assertSee('50 pcs');
+        $response->assertSee('Total Reject');
+        $response->assertSee('2 pcs');
+        $response->assertSee('Total Output');
+        $response->assertSee('52 pcs');
+        $response->assertSee('Total Berat Cor');
+
+        // Kartu kelima: Posisi Barang Saat Ini
+        $response->assertSee('Posisi Barang Saat Ini');
+        $response->assertSee('NETTO');
+        $response->assertSee('50');
+        $response->assertSee('1 KTR');
+    }
+
+    /**
+     * TEST POSISI 2: Beberapa KTR pada tahapan berbeda.
+     */
+    public function test_position_card_renders_multi_stage_breakdown(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-POS-02',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-POS-02',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+
+        $t1 = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $t1,
+            'qty_good' => 40,
+            'qty_reject' => 0,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        $t2 = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $t2,
+            'qty_good' => 25,
+            'qty_reject' => 0,
+            'current_stage' => 'gudang_jadi',
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('Posisi Barang Saat Ini');
+        $response->assertSee('MULTI TAHAP');
+        $response->assertSee('(2 Tahap)');
+        $response->assertSee('BUBUT OD');
+        $response->assertSee('40');
+        $response->assertSee('GUDANG JADI');
+        $response->assertSee('25');
+    }
+
+    /**
+     * TEST POSISI 3: Kuantitas efektif setelah pengurangan defect.
+     */
+    public function test_position_card_deducts_defect_quantity_accurately(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-POS-03',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 50,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-POS-03',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $traveler = TravelerNumberGenerator::generateNext('2026-09-14');
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $traveler,
+            'qty_good' => 50,
+            'qty_reject' => 0,
+            'current_stage' => 'bubut_od',
+        ]);
+
+        // Netto defect = 8 pcs
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 50,
+            'defect_qty' => 8,
+            'good_qty' => 42,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        // Bubut OD defect = 2 pcs
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 42,
+            'defect_qty' => 2,
+            'good_qty' => 40,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('Posisi Barang Saat Ini');
+        $response->assertSee('BUBUT OD');
+        // Kuantitas efektif di Bubut OD adalah 50 - 8 - 2 = 40 pcs (bukan 50)
+        $response->assertSee('40');
+        $response->assertSee('1 KTR');
+    }
+
+    /**
+     * TEST POSISI 4: Tidak ada KTR (empty lines).
+     */
+    public function test_position_card_handles_empty_ktrs(): void
+    {
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-POS-EMPTY',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('Posisi Barang Saat Ini');
+        $response->assertSee('BELUM ADA KTR');
+        $response->assertSee('0 pcs (0 KTR)');
+    }
+
+    /**
+     * TEST POSISI 5: Tahap NULL dan barang di Gudang Jadi/completed.
+     */
+    public function test_position_card_handles_null_stage_and_completed_stage(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-POS-05',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 60,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-POS-05',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+
+        $t1 = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $t1,
+            'qty_good' => 35,
+            'qty_reject' => 0,
+            'current_stage' => null, // Tahap NULL -> COR
+        ]);
+
+        $t2 = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $t2,
+            'qty_good' => 25,
+            'qty_reject' => 0,
+            'current_stage' => 'completed', // completed -> GUDANG JADI
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('Posisi Barang Saat Ini');
+        $response->assertSee('MULTI TAHAP');
+        $response->assertSee('COR');
+        $response->assertSee('35');
+        $response->assertSee('GUDANG JADI');
+        $response->assertSee('25');
+    }
+
+    /**
+     * TEST POSISI 6: Kuantitas efektif nol.
+     */
+    public function test_position_card_handles_zero_effective_quantity(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-POS-06',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 20,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-POS-06',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $traveler = TravelerNumberGenerator::generateNext('2026-09-14');
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $traveler,
+            'qty_good' => 20,
+            'qty_reject' => 0,
+            'current_stage' => 'netto',
+        ]);
+
+        // Netto defect = 20 (All rejected, good = 0, confirmed)
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 20,
+            'defect_qty' => 20,
+            'good_qty' => 0,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('Posisi Barang Saat Ini');
+        $response->assertSee('NETTO');
+        $response->assertSee('0');
+        $response->assertSee('1 KTR');
+    }
+
+    /**
+     * TEST DEFECT 1: Heat tanpa defect (Zero defect).
+     */
+    public function test_defect_summary_heat_without_defect(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-DEF-01',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 80,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-DEF-01',
+            'cast_date' => '2026-09-14',
+            'total_qty_good' => 80,
+            'total_qty_reject' => 0,
+            'total_weight_kg' => 200.0,
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $t = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $t,
+            'qty_good' => 80,
+            'qty_reject' => 0,
+            'current_stage' => 'netto',
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('80 pcs');
+        $response->assertSee('Hasil Cor');
+        $response->assertSee('0 pcs');
+        $response->assertSee('Reject Hasil Cor');
+        $response->assertSee('Penuangan Cor');
+        $response->assertSee('NETTO');
+        // Quick print button visible for single line
+        $response->assertSee('Cetak Kitir');
+    }
+
+    /**
+     * TEST DEFECT 2: Reject saat cor saja.
+     */
+    public function test_defect_summary_reject_at_cor_only(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-DEF-02',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 80,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-DEF-02',
+            'cast_date' => '2026-09-14',
+            'total_qty_good' => 75,
+            'total_qty_reject' => 5,
+            'total_weight_kg' => 195.0,
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $t = TravelerNumberGenerator::generateNext('2026-09-14');
+        $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => $t,
+            'qty_good' => 75,
+            'qty_reject' => 5,
+            'current_stage' => 'netto',
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+        $response->assertSee('75 pcs');
+        $response->assertSee('5 pcs');
+        $response->assertSee('80 pcs'); // Total Output Cor
+        $response->assertSee('Reject Hasil Cor');
+    }
+
+    /**
+     * TEST DEFECT 3: Kasus Heat A213102601 — defect 1 PCS di tahap NETTO POTONG, posisi di BUBUT CNC.
+     */
+    public function test_defect_summary_heat_a213102601_scenario_defect_at_netto_potong(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261013-0004',
+            'scheduled_date' => '2026-10-13',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 92,
+            'code' => '269UN95',
+            'item_name' => 'SS304 JIS 10K ID90.7 3"',
+            'customer' => 'A02',
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'A213102601',
+            'cast_date' => '2026-10-13',
+            'furnace' => '2',
+            'shift' => '1',
+            'total_qty_good' => 92,
+            'total_qty_reject' => 0,
+            'total_weight_kg' => 237.36,
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-20261013-0018',
+            'qty_good' => 92,
+            'qty_reject' => 0,
+            'current_stage' => 'bubut_cnc',
+        ]);
+
+        // Netto: input 92, defect 1, good 91
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 92,
+            'defect_qty' => 1,
+            'good_qty' => 91,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+            'defect_entered_at' => now(),
+        ]);
+
+        // Bubut OD: input 91, defect 0, good 91
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 91,
+            'defect_qty' => 0,
+            'good_qty' => 91,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_WAITING_DEFECT,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+
+        // 1. Total Good menampilkan 92 pcs dan subtext Efektif: 91 pcs
+        $response->assertSee('92 pcs');
+        $response->assertSee('Efektif: 91 pcs');
+
+        // 2. Total Reject menampilkan 1 pcs dan breakdown Cor: 0 • Proses: 1
+        $response->assertSee('1 pcs');
+        $response->assertSee('Cor: 0');
+        $response->assertSee('Proses: 1');
+
+        // 3. Total Output menampilkan 92 pcs
+        $response->assertSee('92 pcs');
+
+        // 4. Posisi Barang Saat Ini menampilkan BUBUT CNC 91 pcs (1 KTR)
+        $response->assertSee('BUBUT CNC');
+        $response->assertSee('91');
+        $response->assertSee('1 KTR');
+
+        // 5. Tabel rincian item menampilkan +1 proses
+        $response->assertSee('+1 proses');
+    }
+
+    /**
+     * TEST DEFECT 4: Defect di beberapa tahap berbeda mencegah double-counting.
+     */
+    public function test_defect_summary_multi_stage_defects_prevents_double_counting(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-DEF-04',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'HEAT-DEF-04',
+            'cast_date' => '2026-09-14',
+            'total_qty_good' => 100,
+            'total_qty_reject' => 3, // Cor reject = 3
+            'total_weight_kg' => 250.0,
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => TravelerNumberGenerator::generateNext('2026-09-14'),
+            'qty_good' => 100,
+            'qty_reject' => 3,
+            'current_stage' => 'qc',
+        ]);
+
+        // Netto defect: 2 pcs
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 2,
+            'good_qty' => 98,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        // Bubut OD defect: 1 pc
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'OD_TURNING',
+            'input_qty' => 98,
+            'defect_qty' => 1,
+            'good_qty' => 97,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        // QC defect: 1 pc
+        $line->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_FINAL_INSPECTION',
+            'input_qty' => 97,
+            'defect_qty' => 1,
+            'good_qty' => 96,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->ppicUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-results.show', $result));
+
+        $response->assertOk();
+
+        // Total Cor Reject: 3
+        // Total Process Defect: 2 + 1 + 1 = 4
+        // Total Cumulative Reject: 3 + 4 = 7 pcs
+        $response->assertSee('7 pcs');
+        $response->assertSee('Cor: 3');
+        $response->assertSee('Proses: 4');
+
+        // Net Effective Good: 100 - 4 = 96 pcs
+        $response->assertSee('Efektif: 96 pcs');
+
+        // Posisi Barang Saat Ini: 96 pcs di QC
+        $response->assertSee('QC');
+        $response->assertSee('96');
+    }
 }

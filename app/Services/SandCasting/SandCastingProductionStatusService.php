@@ -24,6 +24,20 @@ class SandCastingProductionStatusService
         'gudang_jadi' => 'Gudang Jadi',
     ];
 
+    /**
+     * Uppercase stage labels for dashboard cards and summary widgets.
+     */
+    public const STAGES_DISPLAY = [
+        'cor' => 'COR',
+        'netto' => 'NETTO',
+        'bubut_od' => 'BUBUT OD',
+        'bubut_cnc' => 'BUBUT CNC',
+        'bor' => 'BOR',
+        'qc' => 'QC',
+        'gudang_jadi' => 'GUDANG JADI',
+        'completed' => 'GUDANG JADI',
+    ];
+
     public function __construct(
         protected ?SandCastingQuantityResolverService $quantityResolver = null
     ) {
@@ -588,5 +602,200 @@ class SandCastingProductionStatusService
         }
 
         return [];
+    }
+
+    /**
+     * Resolve the aggregated physical position summary for a single Casting Result (Heat).
+     *
+     * @return array{
+     *     is_empty: bool,
+     *     is_multi_stage: bool,
+     *     total_pcs: int,
+     *     total_ktr: int,
+     *     single_stage: array{stage: string, stage_label: string, total_pcs: int, ktr_count: int}|null,
+     *     stages: list<array{stage: string, stage_label: string, total_pcs: int, ktr_count: int, traveler_numbers: list<string>}>,
+     *     line_positions: list<array{line_id: int, traveler_number: string, stage: string, stage_label: string, effective_qty: int}>
+     * }
+     */
+    public function resolveHeatPositionSummary(\App\Models\SandCastingCastingResult $castingResult): array
+    {
+        $lines = $castingResult->lines ?? collect();
+
+        if ($lines->isEmpty()) {
+            return [
+                'is_empty' => true,
+                'is_multi_stage' => false,
+                'total_pcs' => 0,
+                'total_ktr' => 0,
+                'single_stage' => null,
+                'stages' => [],
+                'line_positions' => [],
+            ];
+        }
+
+        $stageOrder = [
+            'cor' => 1,
+            'netto' => 2,
+            'bubut_od' => 3,
+            'bubut_cnc' => 4,
+            'bor' => 5,
+            'qc' => 6,
+            'gudang_jadi' => 7,
+            'completed' => 7,
+        ];
+
+        $stageGroups = [];
+        $linePositions = [];
+        $totalPcs = 0;
+
+        foreach ($lines as $line) {
+            $rawStage = $line->current_stage;
+
+            if ($rawStage === null) {
+                $canonicalStage = 'cor';
+                $stageLabel = self::STAGES_DISPLAY['cor'];
+                $effectiveQty = (int) $line->qty_good;
+            } elseif ($rawStage === 'completed' || $rawStage === 'gudang_jadi') {
+                $canonicalStage = 'gudang_jadi';
+                $stageLabel = self::STAGES_DISPLAY['gudang_jadi'];
+                $effectiveQty = $this->quantityResolver->resolveEffectiveGoodQty($line, 'gudang_jadi');
+            } else {
+                $canonicalStage = SandCastingQuantityResolverService::normalizeStageName($rawStage) ?? $rawStage;
+                $stageLabel = self::STAGES_DISPLAY[$canonicalStage] ?? strtoupper(str_replace('_', ' ', $canonicalStage));
+
+                $execs = $line->relationLoaded('stageExecutions')
+                    ? $line->stageExecutions
+                    : $line->stageExecutions;
+
+                $hasHalted = $execs->contains(function (SandCastingStageExecution $e) {
+                    return $e->status === SandCastingStageExecution::STATUS_CONFIRMED && (int) $e->good_qty === 0;
+                });
+
+                if ($hasHalted) {
+                    $effectiveQty = 0;
+                } else {
+                    $effectiveQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $canonicalStage);
+                }
+            }
+
+            $totalPcs += $effectiveQty;
+
+            $linePositions[] = [
+                'line_id' => $line->id,
+                'traveler_number' => $line->traveler_number,
+                'stage' => $canonicalStage,
+                'stage_label' => $stageLabel,
+                'effective_qty' => $effectiveQty,
+            ];
+
+            if (! isset($stageGroups[$canonicalStage])) {
+                $stageGroups[$canonicalStage] = [
+                    'stage' => $canonicalStage,
+                    'stage_label' => $stageLabel,
+                    'total_pcs' => 0,
+                    'ktr_count' => 0,
+                    'order' => $stageOrder[$canonicalStage] ?? 99,
+                    'traveler_numbers' => [],
+                ];
+            }
+
+            $stageGroups[$canonicalStage]['total_pcs'] += $effectiveQty;
+            $stageGroups[$canonicalStage]['ktr_count'] += 1;
+            $stageGroups[$canonicalStage]['traveler_numbers'][] = $line->traveler_number;
+        }
+
+        uasort($stageGroups, fn ($a, $b) => $a['order'] <=> $b['order']);
+        $stagesList = array_values($stageGroups);
+
+        $isMultiStage = count($stagesList) > 1;
+        $singleStage = (! $isMultiStage && ! empty($stagesList)) ? $stagesList[0] : null;
+
+        return [
+            'is_empty' => false,
+            'is_multi_stage' => $isMultiStage,
+            'total_pcs' => $totalPcs,
+            'total_ktr' => $lines->count(),
+            'single_stage' => $singleStage,
+            'stages' => $stagesList,
+            'line_positions' => $linePositions,
+        ];
+    }
+
+    /**
+     * Resolve comprehensive defect and reject summary for a Heat (Casting Result).
+     * Distinguishes root casting reject from downstream process defects without double-counting.
+     *
+     * @return array{
+     *     cast_good: int,
+     *     cast_reject: int,
+     *     cast_total_output: int,
+     *     process_defect: int,
+     *     total_cumulative_reject: int,
+     *     net_effective_good: int,
+     *     department_defects: array<string, int>,
+     *     line_defects: array<int, array{line_id: int, traveler_number: string, cast_good: int, cast_reject: int, process_defect: int, cumulative_reject: int, net_good: int}>
+     * }
+     */
+    public function resolveHeatDefectSummary(\App\Models\SandCastingCastingResult $castingResult): array
+    {
+        $lines = $castingResult->lines ?? collect();
+
+        $castGood = (int) ($castingResult->total_qty_good ?? $lines->sum('qty_good'));
+        $castReject = (int) ($castingResult->total_qty_reject ?? $lines->sum('qty_reject'));
+        $castTotalOutput = $castGood + $castReject;
+
+        $allExecutions = $lines->flatMap(function (SandCastingCastingResultLine $line) {
+            return $line->relationLoaded('stageExecutions') ? $line->stageExecutions : $line->stageExecutions()->get();
+        });
+
+        // Non-cumulative downstream defects by canonical checkpoint/stage
+        $rNetto = (int) $allExecutions->where('checkpoint_code', 'NETTO_CUT')->sum('defect_qty');
+        $rOd = (int) $allExecutions->where('checkpoint_code', 'OD_TURNING')->sum('defect_qty');
+        $rCnc = (int) $allExecutions->whereIn('checkpoint_code', ['CNC_MACHINING', 'QC_POST_CNC', 'QC_PRE_BOR'])->sum('defect_qty');
+        $rBor = (int) $allExecutions->where('checkpoint_code', 'BOR_DRILLING')->sum('defect_qty');
+        $rQc = (int) $allExecutions->where('checkpoint_code', 'QC_FINAL_INSPECTION')->sum('defect_qty');
+
+        $processDefect = $rNetto + $rOd + $rCnc + $rBor + $rQc;
+        $totalCumulativeReject = $castReject + $processDefect;
+        $netEffectiveGood = max(0, $castGood - $processDefect);
+
+        $lineDefects = [];
+        foreach ($lines as $line) {
+            $lineExecs = $line->relationLoaded('stageExecutions') ? $line->stageExecutions : $line->stageExecutions()->get();
+            $lineProcessDefect = 0;
+            if ($lineExecs && $lineExecs->isNotEmpty()) {
+                $lineProcessDefect = (int) $lineExecs->whereIn('checkpoint_code', [
+                    'NETTO_CUT', 'OD_TURNING', 'CNC_MACHINING', 'QC_POST_CNC', 'QC_PRE_BOR', 'BOR_DRILLING', 'QC_FINAL_INSPECTION',
+                ])->sum('defect_qty');
+            }
+            $lineCastGood = (int) $line->qty_good;
+            $lineCastReject = (int) $line->qty_reject;
+            $lineDefects[$line->id] = [
+                'line_id' => $line->id,
+                'traveler_number' => $line->traveler_number,
+                'cast_good' => $lineCastGood,
+                'cast_reject' => $lineCastReject,
+                'process_defect' => $lineProcessDefect,
+                'cumulative_reject' => $lineCastReject + $lineProcessDefect,
+                'net_good' => max(0, $lineCastGood - $lineProcessDefect),
+            ];
+        }
+
+        return [
+            'cast_good' => $castGood,
+            'cast_reject' => $castReject,
+            'cast_total_output' => $castTotalOutput,
+            'process_defect' => $processDefect,
+            'total_cumulative_reject' => $totalCumulativeReject,
+            'net_effective_good' => $netEffectiveGood,
+            'department_defects' => [
+                'netto' => $rNetto,
+                'bubut_od' => $rOd,
+                'bubut_cnc' => $rCnc,
+                'bor' => $rBor,
+                'qc' => $rQc,
+            ],
+            'line_defects' => $lineDefects,
+        ];
     }
 }

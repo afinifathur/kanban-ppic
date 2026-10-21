@@ -554,6 +554,10 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException("Eksekusi dengan ID {$executionId} tidak ditemukan.");
             }
 
+            if ($execution->is_auto_nihil && $execution->status === SandCastingStageExecution::STATUS_WAITING_QC) {
+                return $execution->load(['castingResultLine', 'operator', 'defectLogs.user']);
+            }
+
             if ($execution->status !== SandCastingStageExecution::STATUS_WAITING_DEFECT) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah tidak dalam status WAITING_DEFECT (Status: {$execution->status}).");
             }
