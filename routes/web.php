@@ -198,6 +198,10 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/report/production', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'index'])->name('report.production.index');
             Route::get('/report/production/export/excel', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportExcel'])->name('report.production.export.excel');
             Route::get('/report/production/export/pdf', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportPdf'])->name('report.production.export.pdf');
+
+            // Antrean & Dokumen Barang Siap Oven
+            Route::get('/reports/ready-for-oven', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'index'])->name('reports.ready-for-oven.index');
+            Route::get('/reports/ready-for-oven/print', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'print'])->name('reports.ready-for-oven.print');
         });
     });
 
@@ -248,6 +252,8 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'reorder'])->name('reorder');
             Route::get('/stage/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print'])->name('print');
             Route::get('/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print']);
+            Route::get('/stage/{stage}/export/excel', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'exportExcel'])->name('export.excel');
+            Route::get('/{stage}/export/excel', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'exportExcel']);
             Route::get('/stage/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'show'])->name('stage');
             Route::get('/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'show'])->name('show');
         });

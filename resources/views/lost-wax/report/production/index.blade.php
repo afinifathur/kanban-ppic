@@ -175,6 +175,7 @@
                         <th class="py-3 px-3">Kode Customer</th>
                         <th class="py-3 px-4">Nama Barang</th>
                         <th class="py-3 px-3 text-center">Tahapan</th>
+                        <th class="py-3 px-3 text-right">Jumlah Barcode/Rangkai</th>
                         <th class="py-3 px-3 text-right">Berat</th>
                         <th class="py-3 px-3 text-right">Qty Dikerjakan</th>
                         <th class="py-3 px-3 text-right">Total Berat</th>
@@ -209,6 +210,9 @@
                                     {{ $item['stage_label'] }}
                                 </span>
                             </td>
+                            <td class="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                                {{ $item['barcode_count'] > 0 ? number_format($item['barcode_count']) : '-' }}
+                            </td>
                             <td class="py-2.5 px-3 text-right font-mono text-slate-700">
                                 {{ number_format($item['weight'], 2) }} kg
                             </td>
@@ -224,7 +228,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="py-12 text-center text-slate-400">
+                            <td colspan="10" class="py-12 text-center text-slate-400">
                                 <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
                                     <i class="fas fa-inbox text-xl"></i>
                                 </div>
@@ -238,6 +242,9 @@
                     <tfoot>
                         <tr class="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300 text-xs">
                             <td colspan="5" class="py-3 px-4 text-center uppercase tracking-wider">TOTAL KESELURUHAN</td>
+                            <td class="py-3 px-3 text-right font-mono text-slate-900 font-bold">
+                                {{ $summary['total_barcodes'] > 0 ? number_format($summary['total_barcodes']) : '-' }}
+                            </td>
                             <td class="py-3 px-3 text-center text-slate-400 font-mono">-</td>
                             <td class="py-3 px-3 text-right font-mono text-blue-700">
                                 {{ number_format($summary['total_qty']) }} pcs

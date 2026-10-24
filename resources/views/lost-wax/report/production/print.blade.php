@@ -257,15 +257,16 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th class="text-center" style="width: 30px;">No</th>
-                <th style="width: 90px;">Kode Produksi</th>
-                <th style="width: 90px;">Kode Customer</th>
+                <th class="text-center" style="width: 25px;">No</th>
+                <th style="width: 85px;">Kode Produksi</th>
+                <th style="width: 80px;">Kode Customer</th>
                 <th>Nama Barang</th>
-                <th class="text-center" style="width: 80px;">Tahapan</th>
-                <th class="text-right" style="width: 70px;">Berat (kg/pcs)</th>
-                <th class="text-right" style="width: 85px;">Qty Dikerjakan</th>
-                <th class="text-right" style="width: 85px;">Total Berat</th>
-                <th class="text-right" style="width: 75px;">Qty Rusak</th>
+                <th class="text-center" style="width: 75px;">Tahapan</th>
+                <th class="text-right" style="width: 80px;">Jumlah Barcode/Rangkai</th>
+                <th class="text-right" style="width: 65px;">Berat (kg/pcs)</th>
+                <th class="text-right" style="width: 80px;">Qty Dikerjakan</th>
+                <th class="text-right" style="width: 80px;">Total Berat</th>
+                <th class="text-right" style="width: 70px;">Qty Rusak</th>
             </tr>
         </thead>
         <tbody>
@@ -278,6 +279,7 @@
                     <td class="text-center">
                         <span class="badge-stage">{{ $item['stage_label'] }}</span>
                     </td>
+                    <td class="text-right font-mono font-bold">{{ $item['barcode_count'] > 0 ? number_format($item['barcode_count']) : '-' }}</td>
                     <td class="text-right font-mono">{{ number_format($item['weight'], 2) }} kg</td>
                     <td class="text-right font-mono font-bold">{{ number_format($item['qty_processed']) }} pcs</td>
                     <td class="text-right font-mono font-bold" style="color: #047857;">{{ number_format($item['total_weight'], 2) }} kg</td>
@@ -287,7 +289,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="text-center" style="padding: 20px; color: #94a3b8;">
+                    <td colspan="10" class="text-center" style="padding: 20px; color: #94a3b8;">
                         Tidak ada catatan aktivitas produksi yang sesuai dengan filter pada periode ini.
                     </td>
                 </tr>
@@ -297,6 +299,7 @@
             <tfoot>
                 <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #0f172a;">
                     <td colspan="5" class="text-center" style="padding: 6px; text-transform: uppercase;">TOTAL KESELURUHAN</td>
+                    <td class="text-right font-mono" style="color: #0f172a;">{{ $summary['total_barcodes'] > 0 ? number_format($summary['total_barcodes']) : '-' }}</td>
                     <td class="text-center font-mono">-</td>
                     <td class="text-right font-mono" style="color: #1e40af;">{{ number_format($summary['total_qty']) }} pcs</td>
                     <td class="text-right font-mono" style="color: #047857;">{{ number_format($summary['total_weight'], 2) }} kg</td>

@@ -83,12 +83,12 @@ class ProductionReportController extends Controller
         $sheet->setTitle('Report Produksi Lost Wax');
 
         // Header Title
-        $sheet->mergeCells('A1:I1');
+        $sheet->mergeCells('A1:J1');
         $sheet->setCellValue('A1', 'REPORT PRODUKSI LOST WAX');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet->mergeCells('A2:I2');
+        $sheet->mergeCells('A2:J2');
         $stageName = $activeFilters['stage'] === 'all'
             ? 'SEMUA TAHAPAN'
             : strtoupper(LostWaxProductionReportService::STAGES[$activeFilters['stage']] ?? $activeFilters['stage']);
@@ -130,10 +130,11 @@ class ProductionReportController extends Controller
             'C' => 'Kode Customer',
             'D' => 'Nama Barang',
             'E' => 'Tahapan',
-            'F' => 'Berat (kg/pcs)',
-            'G' => 'Qty Dikerjakan (pcs)',
-            'H' => 'Total Berat (kg)',
-            'I' => 'Qty Rusak (pcs)',
+            'F' => 'Jumlah Barcode/Rangkai',
+            'G' => 'Berat (kg/pcs)',
+            'H' => 'Qty Dikerjakan (pcs)',
+            'I' => 'Total Berat (kg)',
+            'J' => 'Qty Rusak (pcs)',
         ];
 
         foreach ($headers as $colChar => $h) {
@@ -153,10 +154,11 @@ class ProductionReportController extends Controller
             $sheet->setCellValue('C'.$currRow, $item['customer_code']);
             $sheet->setCellValue('D'.$currRow, $item['item_name']);
             $sheet->setCellValue('E'.$currRow, $item['stage_label']);
-            $sheet->setCellValue('F'.$currRow, $item['weight']);
-            $sheet->setCellValue('G'.$currRow, $item['qty_processed']);
-            $sheet->setCellValue('H'.$currRow, $item['total_weight']);
-            $sheet->setCellValue('I'.$currRow, $item['qty_defect']);
+            $sheet->setCellValue('F'.$currRow, $item['barcode_count'] > 0 ? $item['barcode_count'] : '-');
+            $sheet->setCellValue('G'.$currRow, $item['weight']);
+            $sheet->setCellValue('H'.$currRow, $item['qty_processed']);
+            $sheet->setCellValue('I'.$currRow, $item['total_weight']);
+            $sheet->setCellValue('J'.$currRow, $item['qty_defect']);
 
             $sheet->getStyle('A'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle('B'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -166,12 +168,16 @@ class ProductionReportController extends Controller
             $sheet->getStyle('G'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             $sheet->getStyle('H'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             $sheet->getStyle('I'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('J'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
             // Number formats
-            $sheet->getStyle('F'.$currRow)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('G'.$currRow)->getNumberFormat()->setFormatCode('#,##0');
-            $sheet->getStyle('H'.$currRow)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('I'.$currRow)->getNumberFormat()->setFormatCode('#,##0');
+            if ($item['barcode_count'] > 0) {
+                $sheet->getStyle('F'.$currRow)->getNumberFormat()->setFormatCode('#,##0');
+            }
+            $sheet->getStyle('G'.$currRow)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('H'.$currRow)->getNumberFormat()->setFormatCode('#,##0');
+            $sheet->getStyle('I'.$currRow)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('J'.$currRow)->getNumberFormat()->setFormatCode('#,##0');
 
             $currRow++;
         }
@@ -182,25 +188,32 @@ class ProductionReportController extends Controller
         $sheet->getStyle("A{$currRow}")->getFont()->setBold(true)->setSize(10);
         $sheet->getStyle("A{$currRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet->setCellValue("F{$currRow}", '-');
-        $sheet->getStyle("F{$currRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $totalBarcodes = (int) $items->sum('barcode_count');
+        $sheet->setCellValue("F{$currRow}", $totalBarcodes > 0 ? $totalBarcodes : '-');
+        $sheet->getStyle("F{$currRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        if ($totalBarcodes > 0) {
+            $sheet->getStyle("F{$currRow}")->getNumberFormat()->setFormatCode('#,##0');
+        }
 
-        $sheet->setCellValue("G{$currRow}", $summary['total_qty']);
-        $sheet->setCellValue("H{$currRow}", $summary['total_weight']);
-        $sheet->setCellValue("I{$currRow}", $summary['total_defect']);
+        $sheet->setCellValue("G{$currRow}", '-');
+        $sheet->getStyle("G{$currRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet->getStyle("A{$currRow}:I{$currRow}")->getFont()->setBold(true);
-        $sheet->getStyle("A{$currRow}:I{$currRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF1F5F9');
-        $sheet->getStyle("G{$currRow}:I{$currRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->setCellValue("H{$currRow}", $summary['total_qty']);
+        $sheet->setCellValue("I{$currRow}", $summary['total_weight']);
+        $sheet->setCellValue("J{$currRow}", $summary['total_defect']);
 
-        $sheet->getStyle("G{$currRow}")->getNumberFormat()->setFormatCode('#,##0');
-        $sheet->getStyle("H{$currRow}")->getNumberFormat()->setFormatCode('#,##0.00');
-        $sheet->getStyle("I{$currRow}")->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle("A{$currRow}:J{$currRow}")->getFont()->setBold(true);
+        $sheet->getStyle("A{$currRow}:J{$currRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF1F5F9');
+        $sheet->getStyle("H{$currRow}:J{$currRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
-        $sheet->getStyle("A{$rowIdx}:I{$currRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle("H{$currRow}")->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle("I{$currRow}")->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle("J{$currRow}")->getNumberFormat()->setFormatCode('#,##0');
+
+        $sheet->getStyle("A{$rowIdx}:J{$currRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         // Auto-fit column widths
-        foreach (range('A', 'I') as $col) {
+        foreach (range('A', 'J') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 

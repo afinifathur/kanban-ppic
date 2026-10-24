@@ -28,6 +28,15 @@
                 <i class="fas fa-print text-xs"></i>
                 <span>CETAK PDF</span>
             </button>
+            {{-- Tombol Export Excel (Hanya Desktop) --}}
+            <button type="button"
+                id="btnKanbanExportExcel"
+                onclick="exportKanbanExcel()"
+                class="hidden md:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white shadow-sm transition-all min-h-[36px] touch-manipulation"
+                title="Export Excel Antrean Kanban {{ $stageLabel }} (4 Lines XLSX)">
+                <i class="fas fa-file-excel text-xs"></i>
+                <span>EXPORT EXCEL</span>
+            </button>
             {{-- Auto-Refresh Indicator Badge (Desktop / TV) --}}
             <span id="autoRefreshBadge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-100 border border-slate-200 text-slate-600 min-h-[36px]" title="Auto-Refresh Aktif (Desktop / TV)">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -559,6 +568,30 @@
         }
 
         window.open(url.toString(), '_blank');
+    }
+
+    function exportKanbanExcel() {
+        const baseUrl = @json(route('sand-casting.kanban.export.excel', $stageSlug));
+        const url = new URL(baseUrl, window.location.origin);
+
+        // Copy active URL query parameters (excluding line_number and search)
+        const currentParams = new URLSearchParams(window.location.search);
+        currentParams.forEach((val, key) => {
+            if (key !== 'search' && key !== 'line_number') {
+                url.searchParams.set(key, val);
+            }
+        });
+
+        // Always capture the latest search input value directly from DOM
+        const searchInput = document.getElementById('kanbanSearchInput');
+        const currentSearchVal = searchInput ? searchInput.value.trim() : '';
+        if (currentSearchVal !== '') {
+            url.searchParams.set('search', currentSearchVal);
+        } else {
+            url.searchParams.delete('search');
+        }
+
+        window.location.href = url.toString();
     }
 
     function applyKanbanSearch(rawQuery) {

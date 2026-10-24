@@ -108,6 +108,7 @@ class LostWaxProductionReportService
                     'production_code' => (string) $prodCode,
                     'customer_code' => (string) $customerCode,
                     'item_name' => (string) $itemName,
+                    'barcode' => null,
                     'weight' => $weight,
                     'qty_processed' => (int) $exec->qty_good,
                 ]);
@@ -152,6 +153,8 @@ class LostWaxProductionReportService
             $trees = $treesQuery->get();
 
             foreach ($trees as $tree) {
+                $treeBarcode = (string) ($tree->barcode ?: ($tree->id ? 'TREE-'.$tree->id : null));
+
                 if ($tree->allocations->isNotEmpty()) {
                     foreach ($tree->allocations as $alloc) {
                         $line = $alloc->printOrderLine;
@@ -174,6 +177,7 @@ class LostWaxProductionReportService
                             'production_code' => (string) $prodCode,
                             'customer_code' => (string) $customerCode,
                             'item_name' => (string) $itemName,
+                            'barcode' => $treeBarcode,
                             'weight' => $weight,
                             'qty_processed' => (int) $alloc->allocated_qty,
                         ]);
@@ -199,6 +203,7 @@ class LostWaxProductionReportService
                         'production_code' => (string) $prodCode,
                         'customer_code' => (string) $customerCode,
                         'item_name' => (string) $itemName,
+                        'barcode' => $treeBarcode,
                         'weight' => $weight,
                         'qty_processed' => (int) $tree->quantity,
                     ]);
@@ -266,6 +271,7 @@ class LostWaxProductionReportService
                 $stage = $event->stage;
                 $stageLabel = self::STAGES[$stage] ?? ucfirst(str_replace('_', ' ', (string) $stage));
                 $stageOrder = self::getStageOrder((string) $stage);
+                $eventBarcode = (string) ($event->barcode ?: $tree->barcode ?: ($tree->id ? 'TREE-'.$tree->id : null));
 
                 if ($tree->allocations->isNotEmpty()) {
                     foreach ($tree->allocations as $alloc) {
@@ -288,6 +294,7 @@ class LostWaxProductionReportService
                             'production_code' => (string) $prodCode,
                             'customer_code' => (string) $customerCode,
                             'item_name' => (string) $itemName,
+                            'barcode' => $eventBarcode,
                             'weight' => $weight,
                             'qty_processed' => (int) $alloc->allocated_qty,
                         ]);
@@ -313,6 +320,7 @@ class LostWaxProductionReportService
                         'production_code' => (string) $prodCode,
                         'customer_code' => (string) $customerCode,
                         'item_name' => (string) $itemName,
+                        'barcode' => $eventBarcode,
                         'weight' => $weight,
                         'qty_processed' => (int) $tree->quantity,
                     ]);
@@ -382,6 +390,9 @@ class LostWaxProductionReportService
             $weight = (float) ($first['weight'] ?? 0.0);
             $totalWeight = round($qtyProcessed * $weight, 2);
             $qtyDefect = (int) ($defectsMap[$groupKey] ?? 0);
+            $barcodeCount = $group->pluck('barcode')->filter(function ($b) {
+                return ! empty($b) && $b !== '-';
+            })->unique()->count();
 
             return [
                 'group_key' => $groupKey,
@@ -391,6 +402,7 @@ class LostWaxProductionReportService
                 'stage' => (string) $first['stage'],
                 'stage_label' => (string) $first['stage_label'],
                 'stage_order' => (int) $first['stage_order'],
+                'barcode_count' => $barcodeCount,
                 'weight' => $weight,
                 'qty_processed' => $qtyProcessed,
                 'total_weight' => $totalWeight,
@@ -423,6 +435,7 @@ class LostWaxProductionReportService
             'total_weight' => (float) round($items->sum('total_weight'), 2),
             'total_defect' => (int) $items->sum('qty_defect'),
             'total_records' => $items->count(),
+            'total_barcodes' => (int) $items->sum('barcode_count'),
         ];
 
         return [

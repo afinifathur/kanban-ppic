@@ -535,4 +535,153 @@ class ProductionReportTest extends TestCase
         $resAdmin->assertSee('850.00 kg'); // 250 + 600
         $resAdmin->assertSee('8 pcs'); // 3 + 5
     }
+
+    /**
+     * 9. Barcode count calculates accurately, prevents duplicate counts from re-scans, and ignores void/cancelled.
+     */
+    public function test_barcode_count_accuracy_and_duplicate_scan_prevention(): void
+    {
+        $plan = $this->createPlan(['code' => '268_BARCODE_TEST', 'weight' => 2.00]);
+
+        $order = LostWaxPrintOrder::create([
+            'print_order_number' => 'PO-BARCODE-01',
+            'scheduled_date' => '2026-10-05',
+            'order_date' => '2026-10-05',
+            'status' => 'ISSUED',
+            'created_by' => $this->user->id,
+        ]);
+
+        $line = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 200,
+            'code' => $plan->code,
+            'customer' => $plan->customer,
+            'item_name' => $plan->item_name,
+        ]);
+
+        // Tree 1: 50 pcs (barcode T001)
+        $tree1 = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line->id,
+            'family_code' => 'F01',
+            'daily_sequence' => 1,
+            'barcode' => 'T001',
+            'tree_number' => 1,
+            'quantity' => 50,
+            'status' => 'ready_for_coating',
+            'production_date' => '2026-10-05',
+        ]);
+
+        // Tree 2: 50 pcs (barcode T002)
+        $tree2 = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line->id,
+            'family_code' => 'F01',
+            'daily_sequence' => 2,
+            'barcode' => 'T002',
+            'tree_number' => 2,
+            'quantity' => 50,
+            'status' => 'ready_for_coating',
+            'production_date' => '2026-10-05',
+        ]);
+
+        // Tree 3: Cancelled tree (should be ignored)
+        $tree3 = LostWaxTree::create([
+            'lost_wax_print_order_line_id' => $line->id,
+            'family_code' => 'F01',
+            'daily_sequence' => 3,
+            'barcode' => 'T003_CANCELLED',
+            'tree_number' => 3,
+            'quantity' => 50,
+            'status' => 'cancelled',
+            'production_date' => '2026-10-05',
+        ]);
+
+        // Scan events on layer_1 on 2026-10-06:
+        // Tree 1 scanned ONCE
+        LostWaxScanEvent::create([
+            'tree_id' => $tree1->id,
+            'barcode' => $tree1->barcode,
+            'stage' => 'layer_1',
+            'scanned_at' => Carbon::parse('2026-10-06 08:00:00'),
+            'operator_id' => $this->user->id,
+            'result' => 'success',
+        ]);
+
+        // Tree 2 scanned TWICE (e.g. re-scan / double scan)
+        LostWaxScanEvent::create([
+            'tree_id' => $tree2->id,
+            'barcode' => $tree2->barcode,
+            'stage' => 'layer_1',
+            'scanned_at' => Carbon::parse('2026-10-06 08:30:00'),
+            'operator_id' => $this->user->id,
+            'result' => 'success',
+        ]);
+        LostWaxScanEvent::create([
+            'tree_id' => $tree2->id,
+            'barcode' => $tree2->barcode,
+            'stage' => 'layer_1',
+            'scanned_at' => Carbon::parse('2026-10-06 08:35:00'),
+            'operator_id' => $this->user->id,
+            'result' => 'success',
+        ]);
+
+        // Scan event for Tree 1 that was VOIDED (should not add scan or barcode)
+        $voidEvent = LostWaxScanEvent::create([
+            'tree_id' => $tree1->id,
+            'barcode' => $tree1->barcode,
+            'stage' => 'layer_1',
+            'scanned_at' => Carbon::parse('2026-10-06 09:00:00'),
+            'operator_id' => $this->user->id,
+            'result' => 'success',
+        ]);
+        \App\Models\LostWaxScanEventVoid::create([
+            'scan_event_id' => $voidEvent->id,
+            'voided_by' => $this->user->id,
+            'void_reason' => 'Duplicate scan error',
+            'voided_at' => now(),
+        ]);
+
+        // Test dataset directly from service
+        $service = app(\App\Services\LostWaxProductionReportService::class);
+        $dataset = $service->getProductionDataset([
+            'date_from' => '2026-10-05',
+            'date_to' => '2026-10-07',
+            'stage' => 'layer_1',
+        ]);
+
+        $item = $dataset['items']->firstWhere('production_code', '268_BARCODE_TEST');
+        $this->assertNotNull($item);
+        // There are 2 distinct valid trees scanned (T001 and T002), even though T002 had 2 scan events and 1 void event existed
+        $this->assertEquals(2, $item['barcode_count']);
+        // Existing report formula sums scan event quantities: 50 (T001) + 50 (T002 scan 1) + 50 (T002 scan 2) = 150 pcs
+        $this->assertEquals(150, $item['qty_processed']);
+        $this->assertEquals(300.00, $item['total_weight']); // 150 * 2.00
+
+        // Test Web View response
+        $webRes = $this->actingAs($this->user)->get(route('lost-wax.report.production.index', [
+            'date_from' => '2026-10-05',
+            'date_to' => '2026-10-07',
+            'stage' => 'layer_1',
+        ]));
+        $webRes->assertStatus(200);
+        $webRes->assertSee('Jumlah Barcode/Rangkai');
+        $webRes->assertSee('268_BARCODE_TEST');
+
+        // Test PDF View response
+        $pdfRes = $this->actingAs($this->user)->get(route('lost-wax.report.production.export.pdf', [
+            'date_from' => '2026-10-05',
+            'date_to' => '2026-10-07',
+            'stage' => 'layer_1',
+        ]));
+        $pdfRes->assertStatus(200);
+        $pdfRes->assertSee('Jumlah Barcode/Rangkai');
+        $pdfRes->assertSee('268_BARCODE_TEST');
+
+        // Test Excel Export response
+        $excelRes = $this->actingAs($this->user)->get(route('lost-wax.report.production.export.excel', [
+            'date_from' => '2026-10-05',
+            'date_to' => '2026-10-07',
+            'stage' => 'layer_1',
+        ]));
+        $excelRes->assertStatus(200);
+    }
 }
