@@ -181,8 +181,9 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
         $this->assertEquals(1, $sheet1->getCell('A6')->getValue());
         $this->assertEquals('NETTO TEST ITEM 1', $sheet1->getCell('B6')->getValue());
         $this->assertEquals('A214001', $sheet1->getCell('C6')->getValue());
-        $this->assertEquals(30, $sheet1->getCell('D6')->getValue());
-        $this->assertEquals(60.0, (float) $sheet1->getCell('E6')->getValue());
+        $this->assertStringStartsWith('KTR-', (string) $sheet1->getCell('D6')->getValue());
+        $this->assertEquals(30, $sheet1->getCell('E6')->getValue());
+        $this->assertEquals(60.0, (float) $sheet1->getCell('F6')->getValue());
     }
 
     /**
@@ -265,10 +266,11 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
             'A' => 'No. Urut',
             'B' => 'Nama Item',
             'C' => 'No. Heat',
-            'D' => 'Jumlah (pcs)',
-            'E' => 'Berat (kg)',
-            'F' => 'Aging',
-            'G' => 'Customer',
+            'D' => 'No. KTR',
+            'E' => 'Jumlah (pcs)',
+            'F' => 'Berat (kg)',
+            'G' => 'Aging',
+            'H' => 'Customer',
         ];
 
         foreach ($sheetNames as $name) {
@@ -276,6 +278,13 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
 
             // Company header
             $this->assertEquals('PT. PERONI KARYA SENTRA', $sheet->getCell('A1')->getValue());
+
+            // Check merged header ranges
+            $mergedRanges = $sheet->getMergeCells();
+            $this->assertArrayHasKey('A1:H1', $mergedRanges);
+            $this->assertArrayHasKey('A2:H2', $mergedRanges);
+            $this->assertArrayHasKey('A3:H3', $mergedRanges);
+            $this->assertArrayHasKey('A4:H4', $mergedRanges);
 
             // Column headers on row 5
             foreach ($expectedHeaders as $col => $expectedText) {
@@ -289,18 +298,24 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
         // Sheet 1 has 2 data rows (row 6 and 7) and total at row 8
         $sheet1 = $spreadsheet->getSheetByName('Line 1');
         $this->assertEquals('TOTAL', $sheet1->getCell('A8')->getValue());
-        $this->assertEquals('=SUM(D6:D7)', $sheet1->getCell('D8')->getValue());
+        $this->assertArrayHasKey('A8:D8', $sheet1->getMergeCells());
         $this->assertEquals('=SUM(E6:E7)', $sheet1->getCell('E8')->getValue());
-        $this->assertEquals(30, $sheet1->getCell('D8')->getCalculatedValue());
-        $this->assertEquals(75.0, (float) $sheet1->getCell('E8')->getCalculatedValue());
+        $this->assertEquals('=SUM(F6:F7)', $sheet1->getCell('F8')->getValue());
+        $this->assertEquals(30, $sheet1->getCell('E8')->getCalculatedValue());
+        $this->assertEquals(75.0, (float) $sheet1->getCell('F8')->getCalculatedValue());
+        $this->assertEmpty($sheet1->getCell('G8')->getValue());
+        $this->assertEmpty($sheet1->getCell('H8')->getValue());
 
         // Sheet 2 is empty: total at row 6
         $sheet2 = $spreadsheet->getSheetByName('Line 2');
         $this->assertEquals('TOTAL', $sheet2->getCell('A6')->getValue());
-        $this->assertEquals('=SUM(0)', $sheet2->getCell('D6')->getValue());
+        $this->assertArrayHasKey('A6:D6', $sheet2->getMergeCells());
         $this->assertEquals('=SUM(0)', $sheet2->getCell('E6')->getValue());
-        $this->assertEquals(0, $sheet2->getCell('D6')->getCalculatedValue());
+        $this->assertEquals('=SUM(0)', $sheet2->getCell('F6')->getValue());
         $this->assertEquals(0, $sheet2->getCell('E6')->getCalculatedValue());
+        $this->assertEquals(0, $sheet2->getCell('F6')->getCalculatedValue());
+        $this->assertEmpty($sheet2->getCell('G6')->getValue());
+        $this->assertEmpty($sheet2->getCell('H6')->getValue());
     }
 
     /**
@@ -321,19 +336,19 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
 
         $sheet1 = $spreadsheet->getSheetByName('Line 1');
         $this->assertEquals('ITEM L1', $sheet1->getCell('B6')->getValue());
-        $this->assertEquals(11, $sheet1->getCell('D6')->getValue());
+        $this->assertEquals(11, $sheet1->getCell('E6')->getValue());
 
         $sheet2 = $spreadsheet->getSheetByName('Line 2');
         $this->assertEquals('ITEM L2', $sheet2->getCell('B6')->getValue());
-        $this->assertEquals(22, $sheet2->getCell('D6')->getValue());
+        $this->assertEquals(22, $sheet2->getCell('E6')->getValue());
 
         $sheet3 = $spreadsheet->getSheetByName('Line 3');
         $this->assertEquals('ITEM L3', $sheet3->getCell('B6')->getValue());
-        $this->assertEquals(33, $sheet3->getCell('D6')->getValue());
+        $this->assertEquals(33, $sheet3->getCell('E6')->getValue());
 
         $sheet4 = $spreadsheet->getSheetByName('Line 4');
         $this->assertEquals('ITEM L4', $sheet4->getCell('B6')->getValue());
-        $this->assertEquals(44, $sheet4->getCell('D6')->getValue());
+        $this->assertEquals(44, $sheet4->getCell('E6')->getValue());
     }
 
     /**
@@ -406,6 +421,41 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
     }
 
     /**
+     * D.21: No. KTR ditulis sebagai teks eksplisit (TYPE_STRING), persis nilai traveler_number, dan jika kosong tetap kosong.
+     */
+    public function test_ktr_number_is_explicit_string_and_empty_ktr_is_blank(): void
+    {
+        $this->createKtr([
+            'current_stage' => 'netto',
+            'line_number' => 1,
+            'traveler_number' => 'KTR-20251104-0001',
+            'heat_number' => 'HEAT991',
+        ]);
+
+        $this->createKtr([
+            'current_stage' => 'netto',
+            'line_number' => 1,
+            'traveler_number' => '',
+            'heat_number' => 'HEAT992',
+        ]);
+
+        $res = $this->actingAs($this->spvNetto)->get('/sand-casting/kanban/stage/netto/export/excel');
+        $res->assertStatus(200);
+
+        $spreadsheet = $this->loadSpreadsheetFromResponse($res);
+        $sheet1 = $spreadsheet->getSheetByName('Line 1');
+
+        // Row 6 has KTR-20251104-0001 as explicit string
+        $cellD6 = $sheet1->getCell('D6');
+        $this->assertEquals('KTR-20251104-0001', $cellD6->getValue());
+        $this->assertEquals(\PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING, $cellD6->getDataType());
+
+        // Row 7 has empty KTR without invented value
+        $cellD7 = $sheet1->getCell('D7');
+        $this->assertEmpty($cellD7->getValue());
+    }
+
+    /**
      * D.16, D.17, D.19, D.20: Urutan antrean, penomoran urut, pcs, berat, dan aging konsisten dengan query service.
      */
     public function test_queue_ordering_and_data_parity_with_query_service(): void
@@ -440,21 +490,23 @@ class ProductionFloorKanbanExportExcelTest extends TestCase
         // Check Row 6 (first item)
         $this->assertEquals(1, $sheet1->getCell('A6')->getValue());
         $this->assertEquals('ITEM FIRST', $sheet1->getCell('B6')->getValue());
-        $this->assertEquals(15, $sheet1->getCell('D6')->getValue());
-        $this->assertEquals(30.0, (float) $sheet1->getCell('E6')->getValue());
-        $this->assertStringContainsString('Aging', (string) $sheet1->getCell('F6')->getValue());
-        $this->assertEquals('CUST A', $sheet1->getCell('G6')->getValue());
+        $this->assertStringStartsWith('KTR-', (string) $sheet1->getCell('D6')->getValue());
+        $this->assertEquals(15, $sheet1->getCell('E6')->getValue());
+        $this->assertEquals(30.0, (float) $sheet1->getCell('F6')->getValue());
+        $this->assertStringContainsString('Aging', (string) $sheet1->getCell('G6')->getValue());
+        $this->assertEquals('CUST A', $sheet1->getCell('H6')->getValue());
 
         // Check Row 7 (second item)
         $this->assertEquals(2, $sheet1->getCell('A7')->getValue());
         $this->assertEquals('ITEM SECOND', $sheet1->getCell('B7')->getValue());
-        $this->assertEquals(25, $sheet1->getCell('D7')->getValue());
-        $this->assertEquals(100.0, (float) $sheet1->getCell('E7')->getValue());
-        $this->assertEquals('CUST B', $sheet1->getCell('G7')->getValue());
+        $this->assertStringStartsWith('KTR-', (string) $sheet1->getCell('D7')->getValue());
+        $this->assertEquals(25, $sheet1->getCell('E7')->getValue());
+        $this->assertEquals(100.0, (float) $sheet1->getCell('F7')->getValue());
+        $this->assertEquals('CUST B', $sheet1->getCell('H7')->getValue());
 
         // Check Total Row (Row 8)
-        $this->assertEquals(40, $sheet1->getCell('D8')->getCalculatedValue());
-        $this->assertEquals(130.0, (float) $sheet1->getCell('E8')->getCalculatedValue());
+        $this->assertEquals(40, $sheet1->getCell('E8')->getCalculatedValue());
+        $this->assertEquals(130.0, (float) $sheet1->getCell('F8')->getCalculatedValue());
     }
 
     /**

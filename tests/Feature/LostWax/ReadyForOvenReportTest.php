@@ -607,4 +607,51 @@ class ReadyForOvenReportTest extends TestCase
         $response->assertSee('Diterima Oleh');
         $response->assertSee('size: A4 portrait', false);
     }
+
+    /**
+     * 18. Sidebar contains Barang Siap Oven link and displays active state when viewing Ready for Oven page.
+     */
+    public function test_sidebar_contains_ready_for_oven_link_and_displays_active_state(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('lost-wax.reports.ready-for-oven.index'));
+
+        $response->assertStatus(200);
+
+        // Link with route URL
+        $response->assertSee(route('lost-wax.reports.ready-for-oven.index'), false);
+
+        // Link label, tooltip, and icon
+        $response->assertSee('Barang Siap Oven');
+        $response->assertSee('title="Barang Siap Masuk Oven"', false);
+        $response->assertSee('fa-temperature-high');
+
+        // Active state class
+        $html = $response->getContent();
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/lost-wax\/reports\/ready-for-oven"[^>]*class="[^"]*text-white font-medium border-l-2 border-amber-400/',
+            $html
+        );
+    }
+
+    /**
+     * 19. Sidebar does not activate Barang Siap Oven link when viewing other Lost Wax pages.
+     */
+    public function test_sidebar_ready_for_oven_link_is_inactive_on_other_pages(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('lost-wax.production-status'));
+
+        $response->assertStatus(200);
+        $response->assertSee(route('lost-wax.reports.ready-for-oven.index'), false);
+        $response->assertSee('Barang Siap Oven');
+
+        $html = $response->getContent();
+        $this->assertDoesNotMatchRegularExpression(
+            '/href="[^"]*\/lost-wax\/reports\/ready-for-oven"[^>]*class="[^"]*border-amber-400/',
+            $html
+        );
+        $this->assertMatchesRegularExpression(
+            '/href="[^"]*\/lost-wax\/reports\/ready-for-oven"[^>]*class="[^"]*text-slate-300/',
+            $html
+        );
+    }
 }

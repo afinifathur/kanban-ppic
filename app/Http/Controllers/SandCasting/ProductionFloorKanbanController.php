@@ -301,21 +301,22 @@ class ProductionFloorKanbanController extends Controller
             $sheet->setCellValue('A4', $filterDescription);
             $sheet->getStyle('A4')->getFont()->setSize(9)->getColor()->setARGB('FF64748B');
 
-            // Merge A1:G1, A2:G2, A3:G3, A4:G4
-            $sheet->mergeCells('A1:G1');
-            $sheet->mergeCells('A2:G2');
-            $sheet->mergeCells('A3:G3');
-            $sheet->mergeCells('A4:G4');
+            // Merge A1:H1, A2:H2, A3:H3, A4:H4
+            $sheet->mergeCells('A1:H1');
+            $sheet->mergeCells('A2:H2');
+            $sheet->mergeCells('A3:H3');
+            $sheet->mergeCells('A4:H4');
 
             // Row 5: Table Headers
             $headers = [
                 'A' => 'No. Urut',
                 'B' => 'Nama Item',
                 'C' => 'No. Heat',
-                'D' => 'Jumlah (pcs)',
-                'E' => 'Berat (kg)',
-                'F' => 'Aging',
-                'G' => 'Customer',
+                'D' => 'No. KTR',
+                'E' => 'Jumlah (pcs)',
+                'F' => 'Berat (kg)',
+                'G' => 'Aging',
+                'H' => 'Customer',
             ];
 
             foreach ($headers as $col => $title) {
@@ -325,7 +326,7 @@ class ProductionFloorKanbanController extends Controller
                 $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF0F172A'); // Slate 900
             }
 
-            $sheet->getStyle('A5:G5')->getAlignment()
+            $sheet->getStyle('A5:H5')->getAlignment()
                 ->setHorizontal(Alignment::HORIZONTAL_CENTER)
                 ->setVertical(Alignment::VERTICAL_CENTER);
             $sheet->getRowDimension(5)->setRowHeight(24);
@@ -339,6 +340,7 @@ class ProductionFloorKanbanController extends Controller
                 $queueSeq = $card['queue_seq'] ?? ($idx + 1);
                 $itemName = (string) ($card['item_name'] ?? '-');
                 $heatNumber = (string) ($card['heat_number'] ?? '-');
+                $ktrNumber = ! empty($card['traveler_number']) ? (string) $card['traveler_number'] : '';
                 $qty = (int) ($card['qty'] ?? 0);
                 $weight = (float) ($card['total_weight_kg'] ?? 0);
                 $aging = $formatAging($card['aging'] ?? null);
@@ -347,24 +349,30 @@ class ProductionFloorKanbanController extends Controller
                 $sheet->setCellValue("A{$currentRow}", $queueSeq);
                 $sheet->setCellValue("B{$currentRow}", $itemName);
                 $sheet->setCellValueExplicit("C{$currentRow}", $heatNumber, DataType::TYPE_STRING);
-                $sheet->setCellValue("D{$currentRow}", $qty);
-                $sheet->setCellValue("E{$currentRow}", $weight);
-                $sheet->setCellValue("F{$currentRow}", $aging);
-                $sheet->setCellValue("G{$currentRow}", $customer);
+                if ($ktrNumber !== '') {
+                    $sheet->setCellValueExplicit("D{$currentRow}", $ktrNumber, DataType::TYPE_STRING);
+                } else {
+                    $sheet->setCellValue("D{$currentRow}", '');
+                }
+                $sheet->setCellValue("E{$currentRow}", $qty);
+                $sheet->setCellValue("F{$currentRow}", $weight);
+                $sheet->setCellValue("G{$currentRow}", $aging);
+                $sheet->setCellValue("H{$currentRow}", $customer);
 
                 // Alignments & Number formats
                 $sheet->getStyle("A{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle("B{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
                 $sheet->getStyle("C{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle("D{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle("D{$currentRow}")->getNumberFormat()->setFormatCode('#,##0');
+                $sheet->getStyle("D{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle("E{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle("E{$currentRow}")->getNumberFormat()->setFormatCode('#,##0.00');
-                $sheet->getStyle("F{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle("G{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+                $sheet->getStyle("E{$currentRow}")->getNumberFormat()->setFormatCode('#,##0');
+                $sheet->getStyle("F{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                $sheet->getStyle("F{$currentRow}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle("G{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("H{$currentRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
                 // Cell borders
-                $sheet->getStyle("A{$currentRow}:G{$currentRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FFCBD5E1');
+                $sheet->getStyle("A{$currentRow}:H{$currentRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FFCBD5E1');
                 $sheet->getRowDimension($currentRow)->setRowHeight(19);
 
                 $currentRow++;
@@ -372,34 +380,34 @@ class ProductionFloorKanbanController extends Controller
 
             // Total Row
             $totalRow = $currentRow;
-            $sheet->mergeCells("A{$totalRow}:C{$totalRow}");
+            $sheet->mergeCells("A{$totalRow}:D{$totalRow}");
             $sheet->setCellValue("A{$totalRow}", 'TOTAL');
 
             if ($count > 0) {
                 $lastDataRow = $currentRow - 1;
-                $sheet->setCellValue("D{$totalRow}", "=SUM(D6:D{$lastDataRow})");
                 $sheet->setCellValue("E{$totalRow}", "=SUM(E6:E{$lastDataRow})");
+                $sheet->setCellValue("F{$totalRow}", "=SUM(F6:F{$lastDataRow})");
             } else {
-                $sheet->setCellValue("D{$totalRow}", '=SUM(0)');
                 $sheet->setCellValue("E{$totalRow}", '=SUM(0)');
+                $sheet->setCellValue("F{$totalRow}", '=SUM(0)');
             }
 
-            $sheet->getStyle("A{$totalRow}:G{$totalRow}")->getFont()->setBold(true);
+            $sheet->getStyle("A{$totalRow}:H{$totalRow}")->getFont()->setBold(true);
             $sheet->getStyle("A{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-            $sheet->getStyle("D{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle("D{$totalRow}")->getNumberFormat()->setFormatCode('#,##0');
             $sheet->getStyle("E{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle("E{$totalRow}")->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle("E{$totalRow}")->getNumberFormat()->setFormatCode('#,##0');
+            $sheet->getStyle("F{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle("F{$totalRow}")->getNumberFormat()->setFormatCode('#,##0.00');
 
             // Total row fill & border
-            $sheet->getStyle("A{$totalRow}:G{$totalRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF1F5F9');
-            $sheet->getStyle("A{$totalRow}:G{$totalRow}")->getBorders()->getTop()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FF94A3B8');
-            $sheet->getStyle("A{$totalRow}:G{$totalRow}")->getBorders()->getBottom()->setBorderStyle(Border::BORDER_DOUBLE)->getColor()->setARGB('FF0F172A');
+            $sheet->getStyle("A{$totalRow}:H{$totalRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF1F5F9');
+            $sheet->getStyle("A{$totalRow}:H{$totalRow}")->getBorders()->getTop()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FF94A3B8');
+            $sheet->getStyle("A{$totalRow}:H{$totalRow}")->getBorders()->getBottom()->setBorderStyle(Border::BORDER_DOUBLE)->getColor()->setARGB('FF0F172A');
             $sheet->getRowDimension($totalRow)->setRowHeight(22);
 
             // AutoFilter & Freeze Panes
             $filterEndRow = max(5, $currentRow - 1);
-            $sheet->setAutoFilter("A5:G{$filterEndRow}");
+            $sheet->setAutoFilter("A5:H{$filterEndRow}");
             $sheet->freezePane('A6');
 
             // Set column widths
@@ -407,10 +415,11 @@ class ProductionFloorKanbanController extends Controller
                 'A' => 10,
                 'B' => 36,
                 'C' => 16,
-                'D' => 14,
+                'D' => 22,
                 'E' => 14,
-                'F' => 18,
-                'G' => 24,
+                'F' => 14,
+                'G' => 18,
+                'H' => 24,
             ];
             foreach ($columnWidths as $col => $w) {
                 $sheet->getColumnDimension($col)->setWidth($w);

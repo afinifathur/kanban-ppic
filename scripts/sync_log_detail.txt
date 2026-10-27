@@ -2851,3 +2851,79 @@ mysqldump: [Warning] Using a password on the command line interface can be insec
 [2026-10-23 17:00:10] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
 [2026-10-23 17:00:10] [INFO] ============================================
 [2026-10-23 17:00:10] [INFO] 
+[2026-10-24 17:00:02] [INFO] ============================================
+[2026-10-24 17:00:02] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-10-24 17:00:02] [INFO] ============================================
+[2026-10-24 17:00:02] [INFO] 
+[2026-10-24 17:00:02] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-10-24 17:00:02] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-10-24 17:00:03] [INFO] Mendownload prod_kanban_ppic_20261024_170002.sql...
+[2026-10-24 17:00:05] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-10-24 17:00:05] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-10-24 17:00:09] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-10-24 17:00:09] [INFO] Membersihkan file temporary di server...
+[2026-10-24 17:00:10] [INFO] 
+[2026-10-24 17:00:10] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-10-24 17:00:10] [INFO] 
+[2026-10-24 17:00:10] [INFO] ============================================
+[2026-10-24 17:00:10] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-10-24 17:00:10] [INFO] ============================================
+[2026-10-24 17:00:10] [INFO] 
+[2026-10-26 17:00:02] [INFO] ============================================
+[2026-10-26 17:00:02] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-10-26 17:00:02] [INFO] ============================================
+[2026-10-26 17:00:02] [INFO] 
+[2026-10-26 17:00:02] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-10-26 17:00:02] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-10-26 17:00:03] [INFO] Mendownload prod_kanban_ppic_20261026_170002.sql...
+[2026-10-26 17:00:05] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-10-26 17:00:05] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-10-26 17:00:13] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-10-26 17:00:13] [INFO] Membersihkan file temporary di server...
+[2026-10-26 17:00:13] [INFO] 
+[2026-10-26 17:00:13] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-10-26 17:00:14] [INFO] 
+[2026-10-26 17:00:14] [INFO] ============================================
+[2026-10-26 17:00:14] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-10-26 17:00:14] [INFO] ============================================
+[2026-10-26 17:00:14] [INFO] 
+[2026-10-26 18:37:30] [INFO] ============================================
+[2026-10-26 18:37:30] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-10-26 18:37:30] [INFO] ============================================
+[2026-10-26 18:37:30] [INFO] 
+[2026-10-26 18:37:30] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-10-26 18:37:30] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-10-26 18:37:30] [INFO] Mendownload prod_kanban_ppic_20261026_183730.sql...
+[2026-10-26 18:37:32] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-10-26 18:37:32] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-10-26 18:37:41] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-10-26 18:37:41] [INFO] Membersihkan file temporary di server...
+[2026-10-26 18:37:41] [INFO] 
+[2026-10-26 18:37:41] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-10-26 18:37:41] [INFO] 
+[2026-10-26 18:37:41] [INFO] ============================================
+[2026-10-26 18:37:41] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-10-26 18:37:41] [INFO] ============================================
+[2026-10-26 18:37:41] [INFO] 
+[2026-10-27 17:00:02] [INFO] ============================================
+[2026-10-27 17:00:02] [INFO]    PRODUCTION TO LOCAL DB SYNC (KANBAN PPIC) 
+[2026-10-27 17:00:02] [INFO] ============================================
+[2026-10-27 17:00:02] [INFO] 
+[2026-10-27 17:00:02] [INFO] >>> SINKRONISASI DATABASE: kanban_ppic -> kanban-ppic
+[2026-10-27 17:00:02] [INFO] Mengekspor kanban_ppic dari container kanban-ppic-db di server...
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
+[2026-10-27 17:00:03] [INFO] Mendownload prod_kanban_ppic_20261027_170002.sql...
+[2026-10-27 17:00:05] [INFO] Menginput data ke MySQL Lokal (Laragon) database kanban-ppic...
+[2026-10-27 17:00:05] [INFO] Menjalankan import menggunakan CMD redirection...
+[2026-10-27 17:00:10] [SUCCESS] Sinkronisasi kanban_ppic SELESAI!
+[2026-10-27 17:00:10] [INFO] Membersihkan file temporary di server...
+[2026-10-27 17:00:10] [INFO] 
+[2026-10-27 17:00:10] [INFO] Membersihkan backup lama di lokal ( > 7 hari)...
+[2026-10-27 17:00:10] [INFO] 
+[2026-10-27 17:00:10] [INFO] ============================================
+[2026-10-27 17:00:10] [SUCCESS]    SINKRONISASI SELESAI - DATA TERBARU!
+[2026-10-27 17:00:10] [INFO] ============================================
+[2026-10-27 17:00:10] [INFO] 

@@ -467,6 +467,14 @@
                         </li>
                         @endif
                         <li>
+                            <a href="{{ route('lost-wax.reports.ready-for-oven.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.reports.ready-for-oven.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Barang Siap Masuk Oven">
+                                <i class="fas fa-temperature-high w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Barang Siap Oven</span>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ route('lost-wax.production-status') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
                                 title="Production Status">
