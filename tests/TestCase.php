@@ -13,7 +13,7 @@ abstract class TestCase extends BaseTestCase
         $testClass = static::class;
         // Bypass gates/permissions in tests, except for RBAC/Scope security tests
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) use ($testClass) {
-            if (str_contains($testClass, 'RbacScope')) {
+            if (str_contains($testClass, 'RbacScope') || str_contains($testClass, 'SalesVisibility')) {
                 return null;
             }
 

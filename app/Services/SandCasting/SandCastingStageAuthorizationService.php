@@ -52,6 +52,56 @@ class SandCastingStageAuthorizationService
     }
 
     /**
+     * Check if a user is authorized to view a specific Kanban stage board.
+     * Allowed: Admin, PPIC, SPV (for their assigned stage), and users with access_production_visibility or role sales.
+     */
+    public function canViewStageKanban(?User $user, string $stage): bool
+    {
+        try {
+            $this->authorizeKanbanView($user, $stage);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Strictly authorize a user to view a specific Sand Casting Kanban stage.
+     *
+     * @throws AuthorizationException
+     * @throws InvalidArgumentException
+     */
+    public function authorizeKanbanView(?User $user, string $stage): void
+    {
+        $targetStage = self::normalizeStage($stage);
+
+        if ($targetStage === null) {
+            throw new \InvalidArgumentException("Tahap operasional '{$stage}' tidak valid dalam alur Sand Casting.");
+        }
+
+        if (! $user) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('User belum terautentikasi.');
+        }
+
+        // 1. Sales visibility role / access_production_visibility permission: can view all valid Kanban stages (read-only)
+        if ($user->hasRole('sales')) {
+            return;
+        }
+
+        try {
+            if ($user->hasPermissionTo('access_production_visibility')) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            // Permission does not exist or unassigned
+        }
+
+        // 2. Otherwise fallback to execution access rules (admin, ppic, spv for assigned stage)
+        $this->authorize($user, $targetStage);
+    }
+
+    /**
      * Check if a user is authorized to view or execute a specific stage.
      */
     public function canAccessStage(?User $user, string $stage): bool

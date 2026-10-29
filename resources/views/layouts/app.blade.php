@@ -248,6 +248,39 @@
                             <span class="text-sm sidebar-text ml-2">Scanner</span>
                         </a>
                     </li>
+                @elseif(Auth::user() && Auth::user()->hasRole('sales'))
+                    <!-- SALES VISIBILITY -->
+                    <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                        <span class="sidebar-text">Sand Casting</span>
+                    </li>
+                    <li>
+                        <a href="{{ route('sand-casting.kanban.index') }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('sand-casting.kanban.*') ? 'bg-blue-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Kanban Floor">
+                            <i class="fas fa-th-list w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Kanban Floor</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ route('sand-casting.production-status.index') }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('sand-casting.production-status.*') ? 'bg-blue-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Production Status">
+                            <i class="fas fa-table w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Production Status</span>
+                        </a>
+                    </li>
+
+                    <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                        <span class="sidebar-text">Lost Wax</span>
+                    </li>
+                    <li>
+                        <a href="{{ route('lost-wax.production-status') }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'bg-amber-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Production Status">
+                            <i class="fas fa-table w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Production Status</span>
+                        </a>
+                    </li>
                 @else
                 <!-- 1. DASHBOARD -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">

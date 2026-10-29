@@ -20,11 +20,24 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/', function () {
+        if (auth()->user() && auth()->user()->hasRole('sales')) {
+            return redirect()->route('sand-casting.production-status.index');
+        }
+
         return redirect()->route('dashboard');
     });
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('/dashboard/defects', [\App\Http\Controllers\DefectDashboardController::class, 'index'])->name('dashboard.defects');
+
+    // Reports & Analytics Routes
+    Route::middleware(['permission:access_planning|access_execution'])->group(function () {
+        Route::get('/dashboard/defects', [\App\Http\Controllers\DefectDashboardController::class, 'index'])->name('dashboard.defects');
+        Route::get('/report', [ReportController::class, 'index'])->name('report.index');
+        Route::get('/report/export/{type}', [ReportController::class, 'export'])->name('report.export');
+        Route::get('/report-defects', [\App\Http\Controllers\DefectReportController::class, 'index'])->name('report-defects.index');
+        Route::get('/report-defects/summary', [\App\Http\Controllers\DefectReportController::class, 'summary'])->name('report-defects.summary');
+        Route::get('/report-defects/export/{type}', [\App\Http\Controllers\DefectReportController::class, 'export'])->name('report-defects.export');
+    });
 
     // Plan Routes
     Route::middleware(['permission:access_planning'])->group(function () {
@@ -37,54 +50,54 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/plan/{plan}', [PlanController::class, 'destroy'])->name('plan.destroy');
     });
 
-    // Input Routes
-    Route::get('/input/{dept}', [InputController::class, 'index'])->name('input.index');
-    Route::get('/input/{dept}/create', [InputController::class, 'create'])->name('input.create');
-    Route::post('/input/{dept}', [InputController::class, 'store'])->name('input.store');
-    Route::get('/input/{dept}/{date}', [InputController::class, 'show'])->name('input.show');
-    Route::patch('/input/history/{history}', [InputController::class, 'updateHistory'])->name('input.history.update');
-    Route::delete('/input/history/{history}', [InputController::class, 'destroyHistory'])->name('input.history.destroy');
+    // Shop Floor Execution & WIP Routes (Legacy Cast Iron Tracking)
+    Route::middleware(['permission:access_execution'])->group(function () {
+        // Input Routes
+        Route::get('/input/{dept}', [InputController::class, 'index'])->name('input.index');
+        Route::get('/input/{dept}/create', [InputController::class, 'create'])->name('input.create');
+        Route::post('/input/{dept}', [InputController::class, 'store'])->name('input.store');
+        Route::get('/input/{dept}/{date}', [InputController::class, 'show'])->name('input.show');
+        Route::patch('/input/history/{history}', [InputController::class, 'updateHistory'])->name('input.history.update');
+        Route::delete('/input/history/{history}', [InputController::class, 'destroyHistory'])->name('input.history.destroy');
 
-    // Kanban Routes
-    Route::get('/kanban/{dept}', [KanbanController::class, 'index'])->name('kanban.index');
-    Route::post('/kanban/move', [KanbanController::class, 'move'])->name('kanban.move');
-    Route::post('/kanban/reorder', [KanbanController::class, 'reorder'])->name('kanban.reorder');
+        // Kanban Routes
+        Route::get('/kanban/{dept}', [KanbanController::class, 'index'])->name('kanban.index');
+        Route::post('/kanban/move', [KanbanController::class, 'move'])->name('kanban.move');
+        Route::post('/kanban/reorder', [KanbanController::class, 'reorder'])->name('kanban.reorder');
 
-    // Report Routes
-    Route::get('/report', [ReportController::class, 'index'])->name('report.index');
-    Route::get('/report/export/{type}', [ReportController::class, 'export'])->name('report.export');
+        // Defect Entry
+        Route::get('/defects/{dept}', [\App\Http\Controllers\DefectController::class, 'index'])->name('defects.index');
+        Route::post('/defects/{item}', [\App\Http\Controllers\DefectController::class, 'store'])->name('defects.store');
 
-    // Defect Report Routes
-    Route::get('/report-defects', [\App\Http\Controllers\DefectReportController::class, 'index'])->name('report-defects.index');
-    Route::get('/report-defects/summary', [\App\Http\Controllers\DefectReportController::class, 'summary'])->name('report-defects.summary');
-    Route::get('/report-defects/export/{type}', [\App\Http\Controllers\DefectReportController::class, 'export'])->name('report-defects.export');
+        // WIP & Heat Number Management
+        Route::get('/wip', [WipController::class, 'index'])->name('wip.index');
+        Route::get('/wip/{date}', [WipController::class, 'show'])->name('wip.show');
+        Route::post('/wip/update', [WipController::class, 'update'])->name('wip.update');
+        Route::get('/report/wip', [WipController::class, 'report'])->name('wip.report');
+    });
 
-    // Defect Settings
-    Route::get('/settings/defect-types', [\App\Http\Controllers\DefectTypeController::class, 'index'])->name('settings.defect-types.index');
-    Route::post('/settings/defect-types', [\App\Http\Controllers\DefectTypeController::class, 'store'])->name('settings.defect-types.store');
-    Route::put('/settings/defect-types/{defectType}', [\App\Http\Controllers\DefectTypeController::class, 'update'])->name('settings.defect-types.update');
+    // Settings & Master Data Routes
+    Route::prefix('settings')->name('settings.')->group(function () {
+        // Defect & Customer Settings (Planning/Admin only)
+        Route::middleware(['permission:access_planning'])->group(function () {
+            Route::get('/defect-types', [\App\Http\Controllers\DefectTypeController::class, 'index'])->name('defect-types.index');
+            Route::post('/defect-types', [\App\Http\Controllers\DefectTypeController::class, 'store'])->name('defect-types.store');
+            Route::put('/defect-types/{defectType}', [\App\Http\Controllers\DefectTypeController::class, 'update'])->name('defect-types.update');
 
-    // Customer Settings
-    Route::get('/settings/customers', [\App\Http\Controllers\CustomerController::class, 'index'])->name('settings.customers.index');
-    Route::post('/settings/customers', [\App\Http\Controllers\CustomerController::class, 'store'])->name('settings.customers.store');
-    Route::delete('/settings/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'destroy'])->name('settings.customers.destroy');
+            Route::get('/customers', [\App\Http\Controllers\CustomerController::class, 'index'])->name('customers.index');
+            Route::post('/customers', [\App\Http\Controllers\CustomerController::class, 'store'])->name('customers.store');
+            Route::delete('/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'destroy'])->name('customers.destroy');
+        });
 
-    // Master Foto Rangkai Settings
-    Route::get('/settings/assembly-photos/index', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'auditIndex'])->name('settings.assembly-photos.audit');
-    Route::get('/settings/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'index'])->name('settings.assembly-photos.index');
-    Route::get('/settings/assembly-photos/search', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'search'])->name('settings.assembly-photos.search');
-    Route::get('/settings/assembly-photos/detail', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'detail'])->name('settings.assembly-photos.detail');
-    Route::post('/settings/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'store'])->name('settings.assembly-photos.store');
-
-    // Defect Entry
-    Route::get('/defects/{dept}', [\App\Http\Controllers\DefectController::class, 'index'])->name('defects.index');
-    Route::post('/defects/{item}', [\App\Http\Controllers\DefectController::class, 'store'])->name('defects.store');
-
-    // WIP & Heat Number Management
-    Route::get('/wip', [WipController::class, 'index'])->name('wip.index');
-    Route::get('/wip/{date}', [WipController::class, 'show'])->name('wip.show');
-    Route::post('/wip/update', [WipController::class, 'update'])->name('wip.update');
-    Route::get('/report/wip', [WipController::class, 'report'])->name('wip.report');
+        // Master Foto Rangkai Settings (Planning & Assembly Execution)
+        Route::middleware(['permission:access_planning|access_execution'])->group(function () {
+            Route::get('/assembly-photos/index', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'auditIndex'])->name('assembly-photos.audit');
+            Route::get('/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'index'])->name('assembly-photos.index');
+            Route::get('/assembly-photos/search', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'search'])->name('assembly-photos.search');
+            Route::get('/assembly-photos/detail', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'detail'])->name('assembly-photos.detail');
+            Route::post('/assembly-photos', [\App\Http\Controllers\LostWax\AssemblyPhotoController::class, 'store'])->name('assembly-photos.store');
+        });
+    });
 
     // Lost Wax Routes
     Route::prefix('lost-wax')->name('lost-wax.')->group(function () {
@@ -181,11 +194,6 @@ Route::middleware(['auth'])->group(function () {
             // Dashboard
             Route::get('/dashboard', [LostWaxDashboardController::class, 'index'])->name('dashboard');
 
-            // Production Status
-            Route::get('/production-status', [ProductionStatusController::class, 'index'])->name('production-status');
-            Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
-            Route::get('/production-status/export', [ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
-
             // Rack Monitoring
             Route::get('/rack-monitor', [\App\Http\Controllers\LostWax\RackMonitorController::class, 'index'])->name('rack-monitor.index');
 
@@ -202,6 +210,13 @@ Route::middleware(['auth'])->group(function () {
             // Antrean & Dokumen Barang Siap Oven
             Route::get('/reports/ready-for-oven', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'index'])->name('reports.ready-for-oven.index');
             Route::get('/reports/ready-for-oven/print', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'print'])->name('reports.ready-for-oven.print');
+        });
+
+        // Production Status (Lost Wax Read Model) - accessible with execution or production visibility
+        Route::middleware(['permission:access_execution|access_production_visibility'])->group(function () {
+            Route::get('/production-status', [ProductionStatusController::class, 'index'])->name('production-status');
+            Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
+            Route::get('/production-status/export', [ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
         });
     });
 
@@ -247,7 +262,7 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Operational Kanban Routes (Sand Casting Floor)
-        Route::prefix('kanban')->name('kanban.')->group(function () {
+        Route::prefix('kanban')->name('kanban.')->middleware(['permission:access_execution|access_production_visibility'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'index'])->name('index');
             Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'reorder'])->name('reorder');
             Route::get('/stage/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print'])->name('print');
@@ -259,7 +274,7 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Production Floor Scanner API Endpoints (Sand Casting)
-        Route::prefix('scan')->name('scan.')->group(function () {
+        Route::prefix('scan')->name('scan.')->middleware(['permission:access_execution'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'index'])->name('index');
             Route::get('/netto', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'scanNetto'])->name('netto');
             Route::get('/stage/{stage}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'scanStage'])->name('stage');
@@ -284,22 +299,24 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Production Report Routes (Sand Casting)
-        Route::prefix('report/production')->name('report.production.')->group(function () {
+        Route::prefix('report/production')->name('report.production.')->middleware(['permission:access_planning|access_execution'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'index'])->name('index');
             Route::get('/export/excel', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportExcel'])->name('export.excel');
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportPdf'])->name('export.pdf');
         });
 
         // QC Defect Detail Report Routes (Sand Casting)
-        Route::prefix('report/qc-defects')->name('report.qc-defects.')->group(function () {
+        Route::prefix('report/qc-defects')->name('report.qc-defects.')->middleware(['permission:access_planning|access_execution'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'index'])->name('index');
             Route::get('/export/excel', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'exportExcel'])->name('export.excel');
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'exportPdf'])->name('export.pdf');
         });
 
         // Production Status (Sand Casting Read Model)
-        Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
-        Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');
+        Route::middleware(['permission:access_execution|access_production_visibility'])->group(function () {
+            Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
+            Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');
+        });
 
         // Sand Casting Dashboard (Phase 1 Backend Foundation)
         Route::get('/dashboard', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'index'])->name('dashboard');
@@ -307,7 +324,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // Generic Scanner Endpoints (Direct alias)
-    Route::prefix('scan')->name('scan.')->group(function () {
+    Route::prefix('scan')->name('scan.')->middleware(['permission:access_execution'])->group(function () {
         Route::get('/ktr/{travelerNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupKtr']);
         Route::get('/heat/{heatNumber}', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'lookupHeat']);
         Route::post('/{stage}/execute', [\App\Http\Controllers\SandCasting\ProductionFloorScanController::class, 'execute']);

@@ -15,10 +15,12 @@
                     <span class="sm:hidden">ANTRIAN</span>
                 </button>
             @endif
+            @can('access_execution')
             <a href="{{ $scannerUrl }}" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all min-h-[36px] touch-manipulation" title="Buka Scanner {{ $stageLabel }}">
                 <i class="fas fa-qrcode text-xs"></i>
                 <span>SCAN</span>
             </a>
+            @endcan
             {{-- Tombol Cetak PDF (Hanya Desktop) --}}
             <button type="button"
                 id="btnKanbanPrintPdf"

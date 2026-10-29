@@ -62,7 +62,7 @@ class ProductionFloorKanbanController extends Controller
         }
 
         $user = auth()->user();
-        if (! $this->authorizationService->canAccessStage($user, $targetStage)) {
+        if (! $this->authorizationService->canViewStageKanban($user, $targetStage)) {
             $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
             abort(403, "Anda tidak memiliki hak akses untuk membuka Kanban tahap {$stageLabel}.");
         }
@@ -93,7 +93,7 @@ class ProductionFloorKanbanController extends Controller
         // Determine accessible stages for navigation tabs
         $availableStages = [];
         foreach (SandCastingStageAuthorizationService::VALID_STAGES as $stg) {
-            if ($this->authorizationService->canAccessStage($user, $stg)) {
+            if ($this->authorizationService->canViewStageKanban($user, $stg)) {
                 $availableStages[$stg] = [
                     'stage' => $stg,
                     'slug' => str_replace('_', '-', $stg),
@@ -138,7 +138,7 @@ class ProductionFloorKanbanController extends Controller
         }
 
         $user = auth()->user();
-        if (! $this->authorizationService->canAccessStage($user, $targetStage)) {
+        if (! $this->authorizationService->canViewStageKanban($user, $targetStage)) {
             $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
             abort(403, "Anda tidak memiliki hak akses untuk mencetak Kanban tahap {$stageLabel}.");
         }
@@ -211,7 +211,7 @@ class ProductionFloorKanbanController extends Controller
         }
 
         $user = auth()->user();
-        if (! $this->authorizationService->canAccessStage($user, $targetStage)) {
+        if (! $this->authorizationService->canViewStageKanban($user, $targetStage)) {
             $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
             abort(403, "Anda tidak memiliki hak akses untuk mengekspor Kanban tahap {$stageLabel}.");
         }

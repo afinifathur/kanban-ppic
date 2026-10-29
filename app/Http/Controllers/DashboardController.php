@@ -6,6 +6,10 @@ class DashboardController extends Controller
 {
     public function index()
     {
+        if (auth()->user() && auth()->user()->hasRole('sales')) {
+            return redirect()->route('sand-casting.production-status.index');
+        }
+
         // 1. Live Stock Stats
         $stock = \App\Models\ProductionItem::selectRaw('current_dept, SUM(qty_pcs) as total_pcs, SUM(qty_pcs * weight_kg) as total_kg')
             ->groupBy('current_dept')

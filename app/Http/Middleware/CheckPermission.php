@@ -19,9 +19,13 @@ class CheckPermission
 
         $user = auth()->user();
 
-        // Check permission using Spatie Laravel Permission
-        if ($user->can($permission)) {
-            return $next($request);
+        // Support multiple permissions separated by pipe '|' (e.g., 'access_execution|access_production_visibility')
+        $permissions = explode('|', $permission);
+        foreach ($permissions as $perm) {
+            $trimmed = trim($perm);
+            if ($trimmed !== '' && $user->can($trimmed)) {
+                return $next($request);
+            }
         }
 
         abort(403, 'Unauthorized action. Access denied for your role.');

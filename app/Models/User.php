@@ -59,6 +59,10 @@ class User extends Authenticatable
      */
     public function getOperationalTitle(): string
     {
+        if ($this->hasRole('sales')) {
+            return 'Sales Visibility';
+        }
+
         if ($this->hasRole('spv') && ! empty($this->assigned_stage)) {
             $stageMap = [
                 'netto' => 'SPV NETTO',
@@ -80,6 +84,10 @@ class User extends Authenticatable
      */
     public function getOperationalSubtitle(): string
     {
+        if ($this->hasRole('sales')) {
+            return 'MONITORING';
+        }
+
         if ($this->hasRole('spv')) {
             return 'FLANGE';
         }

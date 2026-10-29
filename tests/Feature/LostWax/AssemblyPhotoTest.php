@@ -309,8 +309,8 @@ class AssemblyPhotoTest extends TestCase
         $response->assertOk();
 
         $queries = DB::getQueryLog();
-        // Zero N+1: Should only execute a bounded minimal number of queries (session/user/photos)
-        $this->assertLessThanOrEqual(5, count($queries), 'Audit index must execute a constant number of queries without N+1.');
+        // Zero N+1: Should only execute a bounded minimal number of queries (session/user/permissions/photos)
+        $this->assertLessThanOrEqual(6, count($queries), 'Audit index must execute a constant number of queries without N+1.');
     }
 
     public function test_image_is_compressed_and_stored(): void
