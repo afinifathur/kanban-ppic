@@ -78,7 +78,8 @@ class SandCastingDashboardController extends Controller
             ]);
         }
 
-        $initialData = $this->dashboardService->getData($zone, $request->user());
+        $mode = $request->query('mode');
+        $initialData = $this->dashboardService->getData($zone, $request->user(), false, $mode);
 
         return view('sand-casting.dashboard.index', [
             'activeZone' => $zone,
@@ -98,6 +99,7 @@ class SandCastingDashboardController extends Controller
         $validator = Validator::make($request->all(), [
             'zone' => 'nullable|string|in:all,1,2,3,4',
             'fresh' => 'nullable|boolean',
+            'mode' => 'nullable|string|in:wip,throughput',
         ], [
             'zone.in' => 'Parameter zone tidak valid. Pilihan: all, 1, 2, 3, 4.',
         ]);
@@ -111,8 +113,9 @@ class SandCastingDashboardController extends Controller
 
         $zone = (string) $request->query('zone', 'all');
         $bypassCache = $request->boolean('fresh', false);
+        $mode = $request->query('mode');
 
-        $payload = $this->dashboardService->getData($zone, $request->user(), $bypassCache);
+        $payload = $this->dashboardService->getData($zone, $request->user(), $bypassCache, $mode);
 
         return response()->json($payload);
     }

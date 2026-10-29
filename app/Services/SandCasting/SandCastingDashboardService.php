@@ -24,12 +24,14 @@ class SandCastingDashboardService
         protected ?SandCastingProductionReportService $reportService = null,
         protected ?SandCastingProductionStatusService $statusService = null,
         protected ?SandCastingProductionFloorQueryService $floorQueryService = null,
-        protected ?SandCastingQuantityResolverService $quantityResolver = null
+        protected ?SandCastingQuantityResolverService $quantityResolver = null,
+        protected ?SandCastingWipSnapshotService $wipSnapshotService = null
     ) {
         $this->quantityResolver = $quantityResolver ?? new SandCastingQuantityResolverService;
         $this->reportService = $reportService ?? new SandCastingProductionReportService($this->quantityResolver);
         $this->statusService = $statusService ?? new SandCastingProductionStatusService($this->quantityResolver);
         $this->floorQueryService = $floorQueryService ?? new SandCastingProductionFloorQueryService(quantityResolver: $this->quantityResolver);
+        $this->wipSnapshotService = $wipSnapshotService ?? new SandCastingWipSnapshotService($this->statusService, $this->quantityResolver);
     }
 
     /**
@@ -39,11 +41,12 @@ class SandCastingDashboardService
      * @param  string  $zone  'all', '1', '2', '3', or '4'
      * @param  User|null  $user  Authenticated user context
      * @param  bool  $bypassCache  If true, forces fresh calculation
+     * @param  string|null  $mode  Optional mode ('wip' or 'throughput')
      * @return array<string, mixed>
      *
      * @throws InvalidArgumentException
      */
-    public function getData(string $zone = 'all', ?User $user = null, bool $bypassCache = false): array
+    public function getData(string $zone = 'all', ?User $user = null, bool $bypassCache = false, ?string $mode = null): array
     {
         $zoneNormalized = strtolower(trim($zone));
         if (! in_array($zoneNormalized, self::VALID_ZONES, true)) {
@@ -53,15 +56,16 @@ class SandCastingDashboardService
         $currentUser = $user ?? auth()->user();
         $scope = ($currentUser && $currentUser->hasRole('ppic')) ? $currentUser->product_scope : null;
         $scopeKey = $scope ?: 'all';
-
-        $cacheKey = "sc_dashboard_data_{$scopeKey}_zone_{$zoneNormalized}";
+        $cacheKey = $mode
+            ? "sc_dashboard_data_{$scopeKey}_zone_{$zoneNormalized}_{$mode}"
+            : "sc_dashboard_data_{$scopeKey}_zone_{$zoneNormalized}";
 
         if ($bypassCache) {
-            return $this->computeDashboardPayload($zoneNormalized, $currentUser, $scope);
+            return $this->computeDashboardPayload($zoneNormalized, $currentUser, $scope, $mode);
         }
 
-        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($zoneNormalized, $currentUser, $scope) {
-            return $this->computeDashboardPayload($zoneNormalized, $currentUser, $scope);
+        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($zoneNormalized, $currentUser, $scope, $mode) {
+            return $this->computeDashboardPayload($zoneNormalized, $currentUser, $scope, $mode);
         });
     }
 
@@ -70,7 +74,7 @@ class SandCastingDashboardService
      *
      * @return array<string, mixed>
      */
-    protected function computeDashboardPayload(string $zone, ?User $user, ?string $scope): array
+    protected function computeDashboardPayload(string $zone, ?User $user, ?string $scope, ?string $mode = null): array
     {
         $now = Carbon::now(self::TIMEZONE);
         $todayStr = $now->toDateString();
@@ -99,10 +103,29 @@ class SandCastingDashboardService
         }
 
         if ($zone === 'all' || $zone === '4') {
-            $payload['zone_4'] = $this->buildZone4DailyThroughputTonnage($todayStr, $user, $scope);
+            $throughputPayload = $this->buildZone4DailyThroughputTonnage($todayStr, $user, $scope);
+            $wipPayload = $this->buildZone4WipSnapshot($todayStr, $user, $scope);
+
+            $throughputPayload['wip_snapshot'] = $wipPayload;
+
+            if ($mode === 'wip') {
+                $payload['zone_4'] = $wipPayload;
+            } else {
+                $payload['zone_4'] = $throughputPayload;
+            }
         }
 
         return $payload;
+    }
+
+    /**
+     * Build Zone 4: Daily WIP Snapshot Trend (30 Calendar Days, 5 Stages: NETTO, BUBUT OD, BUBUT CNC, BOR, QC).
+     *
+     * @return array<string, mixed>
+     */
+    public function buildZone4WipSnapshot(string $todayStr, ?User $user, ?string $scope): array
+    {
+        return $this->wipSnapshotService->getZone4WipSnapshotPayload($todayStr, 30, $scope);
     }
 
     // =========================================================================
@@ -1009,7 +1032,7 @@ class SandCastingDashboardService
      *
      * @return array<string, mixed>
      */
-    protected function buildZone4DailyThroughputTonnage(string $todayStr, ?User $user, ?string $scope): array
+    public function buildZone4DailyThroughputTonnage(string $todayStr, ?User $user, ?string $scope): array
     {
         $today = Carbon::parse($todayStr, self::TIMEZONE);
         $startDate = $today->copy()->subDays(29);

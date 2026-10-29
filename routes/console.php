@@ -10,3 +10,9 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('sand-casting:timeout-unrecorded-defects')
     ->hourly()
     ->name('sand-casting-auto-nihil-defects');
+
+\Illuminate\Support\Facades\Schedule::command('sand-casting:capture-wip-snapshot')
+    ->dailyAt('07:00')
+    ->timezone('Asia/Jakarta')
+    ->name('sand-casting-daily-wip-snapshot')
+    ->withoutOverlapping();

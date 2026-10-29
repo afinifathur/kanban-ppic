@@ -165,7 +165,10 @@
                 const kgVal = Number(item.good_kg ?? barDataset.data[index] ?? 0);
                 const pcsVal = Number(item.good_pcs || 0);
 
-                // For 30-day dense mode (Zona 4), omit labels for days without production (0 kg & 0 pcs)
+                // For 30-day dense mode (Zona 4), omit labels for missing snapshot or days without production (0 kg & 0 pcs)
+                if (item.is_available === false || item.good_kg === null) {
+                    return;
+                }
                 if (isDense && kgVal === 0 && pcsVal === 0) {
                     return;
                 }
@@ -730,7 +733,8 @@
                                     const idx = context[0]?.dataIndex ?? 0;
                                     const currentDaily = context[0]?.chart?.data?.datasets[0]?.dailyData || daily;
                                     const d = currentDaily[idx] || {};
-                                    return d.date ? `${d.day_label} (${d.date})` : context[0]?.label;
+                                    const year = d.year || new Date().getFullYear();
+                                    return d.date ? `${d.day_label} ${year} (${d.date})` : context[0]?.label;
                                 },
                                 label: function(context) {
                                     const currentDaily = context.chart.data.datasets[0].dailyData || daily;
@@ -937,6 +941,105 @@
                 }
             });
         }
+
+        // 8. Zone 4: Daily WIP Snapshot Bar Chart (Cutoff 07.00 WIB, 5 Stages: NETTO, BUBUT OD, BUBUT CNC, BOR, QC)
+        const z4WipCanvas = document.getElementById('chartZone4WipSnapshot');
+        const wipPayload = data.zone_4?.wip_snapshot;
+        if (z4WipCanvas && (wipPayload || DASHBOARD_CONFIG.zone === '4' || DASHBOARD_CONFIG.zone === 'all')) {
+            const wipStagesMap = wipPayload?.stages || {};
+            const selectWipEl = document.getElementById('zone4-wip-stage-select');
+            const activeWipStageKey = selectWipEl?.value || dashboardCharts.currentZone4WipStage || wipPayload?.default_stage || 'qc';
+            dashboardCharts.currentZone4WipStage = activeWipStageKey;
+
+            const stageData = wipStagesMap[activeWipStageKey] || {};
+            const daily = stageData.daily || [];
+            const labels = daily.map(d => d.day_label);
+            const kgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
+            const validKgValues = kgSeries.filter(v => v !== null && !isNaN(v));
+            const maxKg = validKgValues.length > 0 ? Math.max(...validKgValues, 0) : 0;
+            const bgColors = daily.map(d => d.is_reconstructed ? '#f59e0b' : '#0284c7');
+            const hoverBgColors = daily.map(d => d.is_reconstructed ? '#d97706' : '#0369a1');
+
+            const ctxWip = z4WipCanvas.getContext('2d');
+            dashboardCharts.zone4WipSnapshot = new Chart(ctxWip, {
+                type: 'bar',
+                plugins: [directDataLabelsPlugin],
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Posisi WIP (kg)',
+                        data: kgSeries,
+                        dailyData: daily,
+                        backgroundColor: bgColors,
+                        hoverBackgroundColor: hoverBgColors,
+                        borderColor: '#0369a1',
+                        borderWidth: 1,
+                        borderRadius: 3,
+                        maxBarThickness: 24,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: { top: 32, left: 4, right: 4, bottom: 2 }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const idx = context[0]?.dataIndex ?? 0;
+                                    const currentDaily = context[0]?.chart?.data?.datasets[0]?.dailyData || daily;
+                                    const d = currentDaily[idx] || {};
+                                    const year = d.year || new Date().getFullYear();
+                                    return d.date ? `${d.day_label} ${year} (${d.date})` : context[0]?.label;
+                                },
+                                label: function(context) {
+                                    const currentDaily = context.chart.data.datasets[0].dailyData || daily;
+                                    const d = currentDaily[context.dataIndex] || {};
+                                    if (d.is_available === false || d.good_kg === null || d.good_kg === undefined) {
+                                        return ' Data Snapshot Tidak Tersedia';
+                                    }
+                                    const kgVal = Number(d.good_kg || 0);
+                                    const pcsVal = Number(d.good_pcs || 0);
+                                    const ktrVal = Number(d.ktr_count || 0);
+                                    const reconNotice = d.is_reconstructed ? ' (Rekonstruksi Historis)' : '';
+
+                                    return [
+                                        ` Posisi WIP${reconNotice}: ${formatNumber(kgVal, 4)} kg`,
+                                        ` Antrean: ${formatNumber(pcsVal)} PCS`,
+                                        ` Total KTR: ${formatNumber(ktrVal)} KTR`,
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#f8fafc' },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 9 },
+                                autoSkip: true,
+                                maxTicksLimit: 15,
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: maxKg > 0 ? maxKg * 1.35 : 100,
+                            grid: { color: '#f1f5f9' },
+                            title: { display: true, text: 'WIP (KG)', color: '#0369a1', font: { size: 10, weight: 'bold' } },
+                            ticks: {
+                                color: '#475569',
+                                font: { weight: 'bold', size: 10 },
+                                callback: function(value) { return formatNumber(value, 0) + ' kg'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     // In-place Chart update
@@ -1021,6 +1124,8 @@
             dashboardCharts.zone4Throughput.data.labels = daily.map(d => d.day_label);
             dashboardCharts.zone4Throughput.data.datasets[0].data = kgSeries;
             dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
+            dashboardCharts.zone4Throughput.data.datasets[0].backgroundColor = '#0284c7';
+            dashboardCharts.zone4Throughput.data.datasets[0].hoverBackgroundColor = '#0369a1';
             dashboardCharts.zone4Throughput.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
             dashboardCharts.zone4Throughput.update();
         }
@@ -1059,6 +1164,26 @@
             dashboardCharts.zone4Lines.data.datasets[3].pcsData = line4PcsData;
             dashboardCharts.zone4Lines.options.scales.y.suggestedMax = maxLineKg > 0 ? maxLineKg * 1.25 : 50;
             dashboardCharts.zone4Lines.update();
+        }
+
+        // Update Zone 4 WIP Snapshot (30 Days, 5 Stages: NETTO, BUBUT OD, BUBUT CNC, BOR, QC)
+        const wipPayloadUpdate = data.zone_4?.wip_snapshot;
+        if (dashboardCharts.zone4WipSnapshot && wipPayloadUpdate && wipPayloadUpdate.stages) {
+            const selectWipEl = document.getElementById('zone4-wip-stage-select');
+            const activeWipStage = selectWipEl?.value || dashboardCharts.currentZone4WipStage || 'qc';
+            const stageData = wipPayloadUpdate.stages[activeWipStage] || {};
+            const daily = stageData.daily || [];
+            const kgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
+            const validKgValues = kgSeries.filter(v => v !== null && !isNaN(v));
+            const maxKg = validKgValues.length > 0 ? Math.max(...validKgValues, 0) : 0;
+
+            dashboardCharts.zone4WipSnapshot.data.labels = daily.map(d => d.day_label);
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].data = kgSeries;
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].dailyData = daily;
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].backgroundColor = daily.map(d => d.is_reconstructed ? '#f59e0b' : '#0284c7');
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].hoverBackgroundColor = daily.map(d => d.is_reconstructed ? '#d97706' : '#0369a1');
+            dashboardCharts.zone4WipSnapshot.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
+            dashboardCharts.zone4WipSnapshot.update();
         }
     }
 
@@ -1216,6 +1341,44 @@
             if (elLinesPeriod && z4.period_start && z4.period_end) {
                 elLinesPeriod.textContent = `Periode: ${z4.period_start} s/d ${z4.period_end}`;
             }
+
+            // Zone 4 WIP Snapshot DOM
+            const z4Wip = z4.wip_snapshot;
+            if (z4Wip) {
+                const selectWipEl = document.getElementById('zone4-wip-stage-select');
+                const activeWipStage = selectWipEl?.value || dashboardCharts.currentZone4WipStage || 'qc';
+                const stageData = (z4Wip.stages && z4Wip.stages[activeWipStage]) ? z4Wip.stages[activeWipStage] : {};
+
+                const elWipTotalKg = document.getElementById('z4-wip-total-kg');
+                if (elWipTotalKg && stageData.total_weight_kg !== undefined) {
+                    elWipTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
+                }
+
+                const elWipTotalPcs = document.getElementById('z4-wip-total-pcs');
+                if (elWipTotalPcs && stageData.total_good_pcs !== undefined) {
+                    elWipTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+                }
+
+                const elWipTotalKtr = document.getElementById('z4-wip-total-ktr');
+                if (elWipTotalKtr && stageData.total_ktr_count !== undefined) {
+                    elWipTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+                }
+
+                const elWipStageLabel = document.getElementById('z4-wip-stage-label');
+                if (elWipStageLabel && stageData.stage_label) {
+                    elWipStageLabel.textContent = stageData.stage_label;
+                }
+
+                const elWipSummaryStage = document.getElementById('z4-wip-summary-stage-name');
+                if (elWipSummaryStage && stageData.stage_label) {
+                    elWipSummaryStage.textContent = stageData.stage_label;
+                }
+
+                const elWipPeriod = document.getElementById('z4-wip-period-label');
+                if (elWipPeriod && z4Wip.period_start && z4Wip.period_end) {
+                    elWipPeriod.textContent = `Periode: ${z4Wip.period_start} s/d ${z4Wip.period_end}`;
+                }
+            }
         }
     }
 
@@ -1264,6 +1427,8 @@
             dashboardCharts.zone4Throughput.data.labels = daily.map(d => d.day_label);
             dashboardCharts.zone4Throughput.data.datasets[0].data = kgSeries;
             dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
+            dashboardCharts.zone4Throughput.data.datasets[0].backgroundColor = '#0284c7';
+            dashboardCharts.zone4Throughput.data.datasets[0].hoverBackgroundColor = '#0369a1';
             dashboardCharts.zone4Throughput.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
             dashboardCharts.zone4Throughput.update();
         }
@@ -1296,6 +1461,55 @@
             dashboardCharts.zone4Lines.data.datasets[3].pcsData = line4PcsData;
             dashboardCharts.zone4Lines.options.scales.y.suggestedMax = maxLineKg > 0 ? maxLineKg * 1.25 : 50;
             dashboardCharts.zone4Lines.update();
+        }
+    }
+
+    // Switch active stage for Zone 4 WIP Snapshot (Independent dropdown)
+    function switchZone4WipStage(stageKey) {
+        dashboardCharts.currentZone4WipStage = stageKey;
+        const latestData = window.latestDashboardData || DASHBOARD_CONFIG.initialData || {};
+        const z4Wip = latestData.zone_4?.wip_snapshot || {};
+        const stagesMap = z4Wip.stages || {};
+        const stageData = stagesMap[stageKey] || {};
+        const daily = stageData.daily || [];
+
+        const elTotalKg = document.getElementById('z4-wip-total-kg');
+        if (elTotalKg && stageData.total_weight_kg !== undefined) {
+            elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
+        }
+
+        const elTotalPcs = document.getElementById('z4-wip-total-pcs');
+        if (elTotalPcs && stageData.total_good_pcs !== undefined) {
+            elTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+        }
+
+        const elTotalKtr = document.getElementById('z4-wip-total-ktr');
+        if (elTotalKtr && stageData.total_ktr_count !== undefined) {
+            elTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+        }
+
+        const elStageLabel = document.getElementById('z4-wip-stage-label');
+        if (elStageLabel && stageData.stage_label) {
+            elStageLabel.textContent = stageData.stage_label;
+        }
+
+        const elSummaryStage = document.getElementById('z4-wip-summary-stage-name');
+        if (elSummaryStage && stageData.stage_label) {
+            elSummaryStage.textContent = stageData.stage_label;
+        }
+
+        if (dashboardCharts.zone4WipSnapshot) {
+            const kgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
+            const validKgValues = kgSeries.filter(v => v !== null && !isNaN(v));
+            const maxKg = validKgValues.length > 0 ? Math.max(...validKgValues, 0) : 0;
+
+            dashboardCharts.zone4WipSnapshot.data.labels = daily.map(d => d.day_label);
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].data = kgSeries;
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].dailyData = daily;
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].backgroundColor = daily.map(d => d.is_reconstructed ? '#f59e0b' : '#0284c7');
+            dashboardCharts.zone4WipSnapshot.data.datasets[0].hoverBackgroundColor = daily.map(d => d.is_reconstructed ? '#d97706' : '#0369a1');
+            dashboardCharts.zone4WipSnapshot.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
+            dashboardCharts.zone4WipSnapshot.update();
         }
     }
 
