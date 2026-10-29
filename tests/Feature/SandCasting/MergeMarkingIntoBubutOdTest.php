@@ -454,9 +454,9 @@ class MergeMarkingIntoBubutOdTest extends TestCase
 
         $content = $response->getContent();
 
-        // Verify MARKING is still rendered on the physical traveler / Kitir checklist
+        // Verify MARKING is still rendered on the physical traveler / Kitir checklist under parent OD
         $this->assertStringContainsString('MARKING', $content);
-        $this->assertStringContainsString('BUBUT OD', $content);
+        $this->assertStringContainsString('OD FINISH', $content);
         $this->assertStringContainsString('BUBUT CNC', $content);
     }
 }

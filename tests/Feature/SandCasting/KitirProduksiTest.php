@@ -286,26 +286,34 @@ class KitirProduksiTest extends TestCase
         // Check process names in the page content table cells
         $content = $response->getContent();
 
-        $posNetto = strpos($content, '>NETTO (POTONG)<');
-        $posBubutOd = strpos($content, '>BUBUT OD<');
+        $posNetto = strpos($content, '>NETTO<');
+        $posOdDept = strpos($content, '>OD<');
         $posMarking = strpos($content, '>MARKING<');
+        $posOdFinish = strpos($content, '>OD FINISH<');
         $posBubutCnc = strpos($content, '>BUBUT CNC<');
         $posBor = strpos($content, '>BOR<');
-        $posQc = strpos($content, '>QC (FINAL INSPECTION)<');
+        $posQc = strpos($content, '>QC<');
         $posGudang = strpos($content, '>GUDANG JADI<');
 
-        $this->assertNotFalse($posNetto, 'NETTO (POTONG) must be present');
-        $this->assertNotFalse($posBubutOd, 'BUBUT OD must be present');
+        $this->assertNotFalse($posNetto, 'NETTO must be present');
+        $this->assertNotFalse($posOdDept, 'OD parent dept must be present');
         $this->assertNotFalse($posMarking, 'MARKING must be present');
+        $this->assertNotFalse($posOdFinish, 'OD FINISH must be present');
         $this->assertNotFalse($posBubutCnc, 'BUBUT CNC must be present');
         $this->assertNotFalse($posBor, 'BOR must be present');
-        $this->assertNotFalse($posQc, 'QC (FINAL INSPECTION) must be present');
+        $this->assertNotFalse($posQc, 'QC must be present');
         $this->assertNotFalse($posGudang, 'GUDANG JADI must be present');
 
-        // Verify EXACT strict sequence: NETTO -> BUBUT OD -> MARKING -> BUBUT CNC -> BOR -> QC -> GUDANG JADI
-        $this->assertTrue($posNetto < $posBubutOd, 'NETTO must precede BUBUT OD');
-        $this->assertTrue($posBubutOd < $posMarking, 'BUBUT OD must precede MARKING (Bubut OD before Marking rule)');
-        $this->assertTrue($posMarking < $posBubutCnc, 'MARKING must precede BUBUT CNC');
+        // Old verbose labels must no longer appear
+        $this->assertStringNotContainsString('>NETTO (POTONG)<', $content, 'NETTO (POTONG) must be replaced by NETTO');
+        $this->assertStringNotContainsString('>QC (FINAL INSPECTION)<', $content, 'QC (FINAL INSPECTION) must be replaced by QC');
+        $this->assertStringNotContainsString('>BUBUT OD<', $content, 'BUBUT OD must be replaced by OD FINISH under parent OD');
+
+        // Verify EXACT strict sequence: NETTO -> OD (MARKING -> OD FINISH) -> BUBUT CNC -> BOR -> QC -> GUDANG JADI
+        $this->assertTrue($posNetto < $posOdDept, 'NETTO must precede OD');
+        $this->assertTrue($posOdDept < $posMarking, 'OD dept must appear with MARKING');
+        $this->assertTrue($posMarking < $posOdFinish, 'MARKING must precede OD FINISH');
+        $this->assertTrue($posOdFinish < $posBubutCnc, 'OD FINISH must precede BUBUT CNC');
         $this->assertTrue($posBubutCnc < $posBor, 'BUBUT CNC must precede BOR');
         $this->assertTrue($posBor < $posQc, 'BOR must precede QC');
         $this->assertTrue($posQc < $posGudang, 'QC must precede GUDANG JADI');
@@ -638,23 +646,23 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals(8, $rows[1]['hasil']);
-        $this->assertEquals(0, $rows[1]['rusak']);
-        $this->assertEquals('SPV NETTO', $rows[1]['operator']);
-        $this->assertNotNull($rows[1]['tanggal']);
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals(8, $rows['netto']['hasil']);
+        $this->assertEquals(0, $rows['netto']['rusak']);
+        $this->assertEquals('SPV NETTO', $rows['netto']['operator']);
+        $this->assertNotNull($rows['netto']['tanggal']);
 
         // Downstream stages remain blank
-        $this->assertNull($rows[2]['hasil']); // OD
-        $this->assertNull($rows[3]['hasil']); // MARKING
-        $this->assertNull($rows[4]['hasil']); // CNC
+        $this->assertNull($rows['marking']['hasil']);
+        $this->assertNull($rows['bubut_od']['hasil']);
+        $this->assertNull($rows['bubut_cnc']['hasil']);
     }
 
     /**
      * KITIR TEST 3: NETTO defect = 2.
-     * Expected: NETTO HASIL = 6, NETTO RUSAK = 2.
+     * Expected: NETTO HASIL = 8 (processed qty), NETTO RUSAK = 2 (defects).
      */
-    public function test_kitir_test_3_netto_defect_displays_hasil_6_rusak_2(): void
+    public function test_kitir_test_3_netto_defect_displays_hasil_8_rusak_2(): void
     {
         $plan = $this->createPlan();
         $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-T3', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
@@ -683,15 +691,15 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals(6, $rows[1]['hasil']);
-        $this->assertEquals(2, $rows[1]['rusak']);
-        $this->assertEquals('SPV NETTO', $rows[1]['operator']);
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals(8, $rows['netto']['hasil']);
+        $this->assertEquals(2, $rows['netto']['rusak']);
+        $this->assertEquals('SPV NETTO', $rows['netto']['operator']);
     }
 
     /**
      * KITIR TEST 4: NETTO physical + OD physical, kemudian late NETTO defect = 2.
-     * Expected: NETTO = 6/2, OD = 6/0.
+     * Expected: NETTO = 8 input / 2 defect, OD = 6 input / 0 defect.
      * Historical OD execution snapshot remains 8.
      */
     public function test_kitir_test_4_late_netto_defect_propagates_to_od_reprint(): void
@@ -747,15 +755,15 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
 
-        // Netto: 6 / 2
-        $this->assertEquals(6, $rows[1]['hasil']);
-        $this->assertEquals(2, $rows[1]['rusak']);
+        // Netto: 8 input / 2 defect
+        $this->assertEquals(8, $rows['netto']['hasil']);
+        $this->assertEquals(2, $rows['netto']['rusak']);
 
-        // OD: 6 / 0
-        $this->assertEquals(6, $rows[2]['hasil']);
-        $this->assertEquals(0, $rows[2]['rusak']);
+        // OD: received 8 - 2 = 6, 0 defect
+        $this->assertEquals(6, $rows['bubut_od']['hasil']);
+        $this->assertEquals(0, $rows['bubut_od']['rusak']);
 
         // Historical OD snapshot remains 8
         $odExec->refresh();
@@ -765,7 +773,7 @@ class KitirProduksiTest extends TestCase
 
     /**
      * KITIR TEST 5: NETTO defect = 2 + CNC defect = 1.
-     * Expected: NETTO = 6/2, OD = 6/0, CNC = 5/1, BOR = 5/0.
+     * Expected: NETTO = 8/2, OD = 6/0, CNC = 6/1, BOR = 5/0.
      */
     public function test_kitir_test_5_multi_stage_defects_propagate_properly(): void
     {
@@ -832,26 +840,26 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
 
-        // NETTO: 6 / 2
-        $this->assertEquals(6, $rows[1]['hasil']);
-        $this->assertEquals(2, $rows[1]['rusak']);
+        // NETTO: 8 input / 2 defect
+        $this->assertEquals(8, $rows['netto']['hasil']);
+        $this->assertEquals(2, $rows['netto']['rusak']);
 
-        // OD: 6 / 0
-        $this->assertEquals(6, $rows[2]['hasil']);
-        $this->assertEquals(0, $rows[2]['rusak']);
+        // OD: received 8 - 2 = 6, 0 defect
+        $this->assertEquals(6, $rows['bubut_od']['hasil']);
+        $this->assertEquals(0, $rows['bubut_od']['rusak']);
 
         // MARKING: null
-        $this->assertNull($rows[3]['hasil']);
+        $this->assertNull($rows['marking']['hasil']);
 
-        // CNC: 5 / 1
-        $this->assertEquals(5, $rows[4]['hasil']);
-        $this->assertEquals(1, $rows[4]['rusak']);
+        // CNC: received 6 - 0 = 6, 1 defect
+        $this->assertEquals(6, $rows['bubut_cnc']['hasil']);
+        $this->assertEquals(1, $rows['bubut_cnc']['rusak']);
 
-        // BOR: 5 / 0
-        $this->assertEquals(5, $rows[5]['hasil']);
-        $this->assertEquals(0, $rows[5]['rusak']);
+        // BOR: received 6 - 1 = 5, 0 defect
+        $this->assertEquals(5, $rows['bor']['hasil']);
+        $this->assertEquals(0, $rows['bor']['rusak']);
     }
 
     /**
@@ -891,9 +899,9 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals('01/09/2026', $rows[1]['tanggal']);
-        $this->assertNotEquals('03/09/2026', $rows[1]['tanggal']);
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals('01/09/2026', $rows['netto']['tanggal']);
+        $this->assertNotEquals('03/09/2026', $rows['netto']['tanggal']);
     }
 
     /**
@@ -931,18 +939,18 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals('SPV NETTO', $rows[1]['operator']);
-        $this->assertEquals('SPV OD', $rows[2]['operator']);
-        $this->assertNull($rows[3]['operator']); // MARKING
-        $this->assertEquals('SPV CNC', $rows[4]['operator']);
-        $this->assertEquals('SPV BOR', $rows[5]['operator']);
-        $this->assertEquals('SPV QC', $rows[6]['operator']);
-        $this->assertEquals('SPV GUDANG', $rows[7]['operator']);
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals('SPV NETTO', $rows['netto']['operator']);
+        $this->assertEquals('SPV OD', $rows['bubut_od']['operator']);
+        $this->assertNull($rows['marking']['operator']); // MARKING
+        $this->assertEquals('SPV CNC', $rows['bubut_cnc']['operator']);
+        $this->assertEquals('SPV BOR', $rows['bor']['operator']);
+        $this->assertEquals('SPV QC', $rows['qc']['operator']);
+        $this->assertEquals('SPV GUDANG', $rows['gudang_jadi']['operator']);
     }
 
     /**
-     * KITIR TEST 8: MARKING remains on row 3 without digital checkpoint.
+     * KITIR TEST 8: MARKING remains on row 2 as sub-process under OD without digital checkpoint.
      */
     public function test_kitir_test_8_marking_remains_physical_checklist_row(): void
     {
@@ -961,13 +969,14 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals(3, $rows[3]['no']);
-        $this->assertEquals('MARKING', $rows[3]['label']);
-        $this->assertNull($rows[3]['hasil']);
-        $this->assertNull($rows[3]['rusak']);
-        $this->assertNull($rows[3]['tanggal']);
-        $this->assertNull($rows[3]['operator']);
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals(2, $rows['marking']['no']);
+        $this->assertEquals('MARKING', $rows['marking']['label']);
+        $this->assertEquals('OD', $rows['marking']['dept']);
+        $this->assertNull($rows['marking']['hasil']);
+        $this->assertNull($rows['marking']['rusak']);
+        $this->assertNull($rows['marking']['tanggal']);
+        $this->assertNull($rows['marking']['operator']);
     }
 
     /**
@@ -1025,12 +1034,12 @@ class KitirProduksiTest extends TestCase
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
         $response->assertOk();
 
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
 
-        // CNC: HASIL = 6 (8 - 2), RUSAK = 2 (1 + 1)
-        $this->assertEquals(6, $rows[4]['hasil']);
-        $this->assertEquals(2, $rows[4]['rusak']);
-        $this->assertEquals('SPV CNC', $rows[4]['operator']);
+        // CNC: HASIL = 8 (Input quantity processed by CNC), RUSAK = 2 (1 + 1)
+        $this->assertEquals(8, $rows['bubut_cnc']['hasil']);
+        $this->assertEquals(2, $rows['bubut_cnc']['rusak']);
+        $this->assertEquals('SPV CNC', $rows['bubut_cnc']['operator']);
     }
 
     /**
@@ -1133,14 +1142,14 @@ class KitirProduksiTest extends TestCase
         ]);
 
         $resA = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $lineA]));
-        $rowsA = collect($resA->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals(6, $rowsA[1]['hasil']);
-        $this->assertEquals(2, $rowsA[1]['rusak']);
+        $rowsA = collect($resA->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals(8, $rowsA['netto']['hasil']);
+        $this->assertEquals(2, $rowsA['netto']['rusak']);
 
         $resB = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $lineB]));
-        $rowsB = collect($resB->viewData('kitirRows'))->keyBy('no');
-        $this->assertEquals(12, $rowsB[1]['hasil']);
-        $this->assertEquals(0, $rowsB[1]['rusak']);
+        $rowsB = collect($resB->viewData('kitirRows'))->keyBy('stage');
+        $this->assertEquals(12, $rowsB['netto']['hasil']);
+        $this->assertEquals(0, $rowsB['netto']['rusak']);
     }
 
     /**
@@ -1172,12 +1181,369 @@ class KitirProduksiTest extends TestCase
         ]);
 
         $resolver = app(\App\Services\SandCasting\SandCastingQuantityResolverService::class);
-        $expectedEffectiveGood = $resolver->resolveEffectiveGoodQty($line, 'netto');
+        $expectedEffectiveInput = $resolver->resolveEffectiveInputQty($line, 'netto');
 
         $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
-        $rows = collect($response->viewData('kitirRows'))->keyBy('no');
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
 
-        $this->assertEquals($expectedEffectiveGood, $rows[1]['hasil']);
-        $this->assertEquals(5, $rows[1]['hasil']);
+        $this->assertEquals($expectedEffectiveInput, $rows['netto']['hasil']);
+        $this->assertEquals(8, $rows['netto']['hasil']);
+        $this->assertEquals(3, $rows['netto']['rusak']);
+    }
+
+    /**
+     * KITIR TEST 13: Reference scenario full pipeline reconciliation & downstream defect isolation.
+     * Scenario:
+     * - Hasil Cor: 100 PCS
+     * - Netto: HASIL 100, RUSAK 2 (98 forward)
+     * - Marking: blank/null
+     * - OD Finish: HASIL 98, RUSAK 5 (93 forward)
+     * - CNC: HASIL 93, RUSAK 20 (73 forward)
+     * - Bor: HASIL 73, RUSAK 0 (73 forward)
+     * - QC: HASIL 73, RUSAK 5 (68 forward to Gudang)
+     * - Gudang Jadi: HASIL 68, RUSAK 0
+     * Reconciliation: 100 awal = 32 cacat + 68 diterima.
+     */
+    public function test_kitir_reference_scenario_exact_quantities_and_reconciliation(): void
+    {
+        $plan = $this->createPlan(['qty_planned' => 100, 'qty_remaining' => 100]);
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-REF-100',
+            'scheduled_date' => '2026-09-14',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'qty_ordered' => 100,
+            'code' => $plan->code,
+            'item_name' => $plan->item_name,
+        ]);
+        $result = SandCastingCastingResult::create([
+            'heat_number' => 'H-REF-100',
+            'cast_date' => '2026-09-14',
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-REF-100',
+            'qty_good' => 100,
+            'qty_reject' => 0,
+        ]);
+
+        // Netto: input 100, defect 2, good 98
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 2,
+            'good_qty' => 98,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 08:00:00',
+            'executed_at' => '2026-09-14 08:00:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        // Bubut OD (OD Finish): input 98, defect 5, good 93
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_od',
+            'checkpoint_code' => 'BUBUT_OD_FINISH',
+            'input_qty' => 98,
+            'defect_qty' => 5,
+            'good_qty' => 93,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 09:30:00',
+            'executed_at' => '2026-09-14 09:30:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        // CNC: input 93, defect 20, good 73
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_MACHINING',
+            'input_qty' => 93,
+            'defect_qty' => 20,
+            'good_qty' => 73,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 11:00:00',
+            'executed_at' => '2026-09-14 11:00:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        // Bor: input 73, defect 0, good 73
+        $line->stageExecutions()->create([
+            'stage' => 'bor',
+            'checkpoint_code' => 'BOR_DRILLING',
+            'input_qty' => 73,
+            'defect_qty' => 0,
+            'good_qty' => 73,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 13:00:00',
+            'executed_at' => '2026-09-14 13:00:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        // QC: input 73, defect 5, good 68
+        $qcExec = $line->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_FINAL',
+            'input_qty' => 73,
+            'defect_qty' => 5,
+            'good_qty' => 68,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 14:30:00',
+            'executed_at' => '2026-09-14 14:30:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        // Gudang Jadi: received 68, defect 0
+        $line->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 68,
+            'defect_qty' => 0,
+            'good_qty' => 68,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 16:00:00',
+            'executed_at' => '2026-09-14 16:00:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
+        $response->assertOk();
+
+        // Header check: Hasil Cor = 100 PCS
+        $response->assertSee('100 PCS');
+
+        $rows = collect($response->viewData('kitirRows'))->keyBy('stage');
+
+        // Netto: HASIL 100, RUSAK 2
+        $this->assertEquals(100, $rows['netto']['hasil']);
+        $this->assertEquals(2, $rows['netto']['rusak']);
+        $this->assertEquals('SPV NETTO', $rows['netto']['operator']);
+        $this->assertEquals('14/09/2026', $rows['netto']['tanggal']);
+
+        // Marking: blank / null
+        $this->assertNull($rows['marking']['hasil']);
+        $this->assertNull($rows['marking']['rusak']);
+        $this->assertNull($rows['marking']['tanggal']);
+        $this->assertNull($rows['marking']['operator']);
+
+        // OD Finish: HASIL 98, RUSAK 5
+        $this->assertEquals(98, $rows['bubut_od']['hasil']);
+        $this->assertEquals(5, $rows['bubut_od']['rusak']);
+        $this->assertEquals('SPV OD', $rows['bubut_od']['operator']);
+        $this->assertEquals('14/09/2026', $rows['bubut_od']['tanggal']);
+
+        // CNC: HASIL 93, RUSAK 20
+        $this->assertEquals(93, $rows['bubut_cnc']['hasil']);
+        $this->assertEquals(20, $rows['bubut_cnc']['rusak']);
+        $this->assertEquals('SPV CNC', $rows['bubut_cnc']['operator']);
+
+        // Bor: HASIL 73, RUSAK 0
+        $this->assertEquals(73, $rows['bor']['hasil']);
+        $this->assertEquals(0, $rows['bor']['rusak']);
+        $this->assertEquals('SPV BOR', $rows['bor']['operator']);
+
+        // QC: HASIL 73, RUSAK 5
+        $this->assertEquals(73, $rows['qc']['hasil']);
+        $this->assertEquals(5, $rows['qc']['rusak']);
+        $this->assertEquals('SPV QC', $rows['qc']['operator']);
+
+        // Gudang Jadi: HASIL 68 (accepted good), RUSAK 0
+        $this->assertEquals(68, $rows['gudang_jadi']['hasil']);
+        $this->assertEquals(0, $rows['gudang_jadi']['rusak']);
+        $this->assertEquals('SPV GUDANG', $rows['gudang_jadi']['operator']);
+
+        // Downstream defect isolation test:
+        // Update QC defect from 5 to 10 (good 63)
+        $qcExec->update([
+            'defect_qty' => 10,
+            'good_qty' => 63,
+        ]);
+
+        $response2 = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
+        $rows2 = collect($response2->viewData('kitirRows'))->keyBy('stage');
+
+        // Upstream stages must remain completely unchanged!
+        $this->assertEquals(100, $rows2['netto']['hasil']);
+        $this->assertEquals(2, $rows2['netto']['rusak']);
+        $this->assertEquals(98, $rows2['bubut_od']['hasil']);
+        $this->assertEquals(5, $rows2['bubut_od']['rusak']);
+        $this->assertEquals(93, $rows2['bubut_cnc']['hasil']);
+        $this->assertEquals(20, $rows2['bubut_cnc']['rusak']);
+        $this->assertEquals(73, $rows2['bor']['hasil']);
+        $this->assertEquals(0, $rows2['bor']['rusak']);
+
+        // QC input remains 73, defect becomes 10
+        $this->assertEquals(73, $rows2['qc']['hasil']);
+        $this->assertEquals(10, $rows2['qc']['rusak']);
+
+        // Gudang Jadi received good becomes 63
+        $this->assertEquals(63, $rows2['gudang_jadi']['hasil']);
+    }
+
+    /**
+     * KITIR TEST 14: ISO Document Code FR/PPIC/11-01/09/26-00-01 in footer.
+     */
+    public function test_kitir_displays_iso_document_code_footer(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-ISO', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 10, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+        $result = SandCastingCastingResult::create(['heat_number' => 'H-ISO', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-ISO',
+            'qty_good' => 10,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
+        $response->assertOk();
+
+        $content = $response->getContent();
+        $isoCode = 'FR/PPIC/11-01/09/26-00-01';
+
+        // 1. Must contain the exact ISO document code
+        $this->assertStringContainsString($isoCode, $content);
+
+        // 2. Must appear exactly once in the document
+        $this->assertEquals(1, substr_count($content, $isoCode), 'ISO document code must appear exactly once');
+
+        // 3. Must be placed in the footer outside the main kitir-border div
+        $posKitirBorderEnd = strrpos($content, '<!-- ISO Document Code Footer');
+        $posIsoCode = strpos($content, $isoCode);
+        $this->assertTrue($posIsoCode > $posKitirBorderEnd, 'ISO code must be situated in footer section outside table');
+    }
+
+    /**
+     * KITIR TEST 15: OD department redesign structure with numbers 1 to 6 and Marking + OD Finish sub-processes.
+     */
+    public function test_kitir_od_department_redesign_structure(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-DES', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 10, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+        $result = SandCastingCastingResult::create(['heat_number' => 'H-DES', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-DES',
+            'qty_good' => 10,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
+        $response->assertOk();
+
+        $rows = $response->viewData('kitirRows');
+        $this->assertCount(7, $rows);
+
+        // Check 1-6 numbering structure in rows data
+        $this->assertEquals(1, $rows[0]['no']); // Netto
+        $this->assertEquals('NETTO', $rows[0]['label']);
+
+        $this->assertEquals(2, $rows[1]['no']); // Marking under OD
+        $this->assertEquals('MARKING', $rows[1]['label']);
+        $this->assertEquals('OD', $rows[1]['dept']);
+
+        $this->assertEquals(2, $rows[2]['no']); // OD Finish under OD
+        $this->assertEquals('OD FINISH', $rows[2]['label']);
+        $this->assertEquals('OD', $rows[2]['dept']);
+
+        $this->assertEquals(3, $rows[3]['no']); // Bubut CNC
+        $this->assertEquals('BUBUT CNC', $rows[3]['label']);
+
+        $this->assertEquals(4, $rows[4]['no']); // Bor
+        $this->assertEquals('BOR', $rows[4]['label']);
+
+        $this->assertEquals(5, $rows[5]['no']); // QC
+        $this->assertEquals('QC', $rows[5]['label']);
+
+        $this->assertEquals(6, $rows[6]['no']); // Gudang Jadi
+        $this->assertEquals('GUDANG JADI', $rows[6]['label']);
+
+        // Check HTML content for table structure
+        $content = $response->getContent();
+        $this->assertStringContainsString('rowspan="2"', $content);
+        $this->assertStringContainsString('>OD<', $content);
+        $this->assertStringContainsString('>MARKING<', $content);
+        $this->assertStringContainsString('>OD FINISH<', $content);
+        $this->assertStringNotContainsString('>BUBUT OD<', $content);
+    }
+
+    /**
+     * KITIR TEST 16: KPI column presence, exact position between TANGGAL and OPERATOR, and completely empty cells.
+     */
+    public function test_kitir_table_kpi_column_order_and_empty_cells(): void
+    {
+        $plan = $this->createPlan();
+        $order = SandCastingCastingOrder::create(['casting_order_number' => 'PCOR-KPI', 'scheduled_date' => '2026-09-14', 'status' => 'ISSUED', 'created_by' => $this->ppicUser->id]);
+        $orderLine = $order->lines()->create(['production_plan_id' => $plan->id, 'qty_ordered' => 10, 'code' => $plan->code, 'item_name' => $plan->item_name]);
+        $result = SandCastingCastingResult::create(['heat_number' => 'H-KPI', 'cast_date' => '2026-09-14', 'recorded_by' => $this->ppicUser->id]);
+        $line = $result->lines()->create([
+            'sand_casting_casting_order_line_id' => $orderLine->id,
+            'production_plan_id' => $plan->id,
+            'traveler_number' => 'KTR-KPI',
+            'qty_good' => 10,
+        ]);
+
+        // Execute Netto with 1 defect to ensure non-empty row still has empty KPI
+        $line->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 10,
+            'defect_qty' => 1,
+            'good_qty' => 9,
+            'status' => \App\Models\SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => '2026-09-14 08:30:00',
+            'executed_at' => '2026-09-14 08:30:00',
+            'operator_id' => $this->ppicUser->id,
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)->get(route('sand-casting.casting-results.kitir', [$result, $line]));
+        $response->assertOk();
+
+        $content = $response->getContent();
+
+        // 1. Column header sequence: TANGGAL -> KPI -> OPERATOR / SPV
+        $posTanggal = strpos($content, '>TANGGAL</th>');
+        $posKpi = strpos($content, '>KPI</th>');
+        $posOperator = strpos($content, '>OPERATOR / SPV</th>');
+
+        $this->assertNotFalse($posTanggal, 'TANGGAL header must be present');
+        $this->assertNotFalse($posKpi, 'KPI header must be present');
+        $this->assertNotFalse($posOperator, 'OPERATOR / SPV header must be present');
+
+        $this->assertTrue($posTanggal < $posKpi, 'TANGGAL header must precede KPI header');
+        $this->assertTrue($posKpi < $posOperator, 'KPI header must precede OPERATOR / SPV header');
+
+        // 2. Header KPI appears exactly once with widened column w-32
+        $this->assertEquals(1, substr_count($content, '>KPI</th>'), 'KPI header must appear exactly once in the table');
+        $this->assertStringContainsString('w-32 border-r-black-solid">KPI</th>', $content);
+
+        // 3. Compacted columns for PROSES / DEPT and OPERATOR / SPV
+        $this->assertStringContainsString('w-28 border-r-black-solid" colspan="2">PROSES / DEPT</th>', $content);
+        $this->assertStringContainsString('w-28">OPERATOR / SPV</th>', $content);
+
+        // 4. Every row in viewData has 'kpi' => null
+        $rows = $response->viewData('kitirRows');
+        $this->assertCount(7, $rows);
+        foreach ($rows as $row) {
+            $this->assertArrayHasKey('kpi', $row);
+            $this->assertNull($row['kpi'], "KPI value for {$row['label']} must be null");
+        }
+
+        // 5. Symbol '×' (&#215;) appears exactly 6 times (NETTO, MARKING, OD FINISH, BOR, QC, GUDANG JADI)
+        // BUBUT CNC KPI cell is strictly blank
+        $this->assertEquals(6, substr_count($content, '&#215;'), 'Small multiplication sign × must appear exactly 6 times for non-CNC processes');
+
+        // Verify BUBUT CNC row specifically has empty KPI cell
+        $this->assertMatchesRegularExpression('/>BUBUT CNC<\/td>\s*<td[^>]*><\/td>\s*<td[^>]*><\/td>\s*<td[^>]*><\/td>\s*<td[^>]*>\s*<\/td>/', $content);
+
+        // 6. Verify no verbose labels appear anywhere
+        $this->assertStringNotContainsString('NETTO (POTONG)', $content);
+        $this->assertStringNotContainsString('QC (FINAL INSPECTION)', $content);
     }
 }

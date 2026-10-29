@@ -388,8 +388,10 @@ class CastingResultController extends Controller
     /**
      * Build the 7-row dynamic process state for Kitir Produksi.
      * Uses SandCastingQuantityResolverService as the single source of truth for effective quantities.
+     * Process stages display effective input quantity (before current stage defect).
+     * Gudang Jadi displays final approved good quantity received.
      *
-     * @return array<int, array{no: int, label: string, hasil: int|null, rusak: int|null, tanggal: string|null, operator: string|null}>
+     * @return array<int, array{no: int, stage: string, dept: string|null, label: string, hasil: int|null, rusak: int|null, tanggal: string|null, kpi: null, operator: string|null}>
      */
     protected function buildKitirProcessRows(SandCastingCastingResultLine $line): array
     {
@@ -397,48 +399,55 @@ class CastingResultController extends Controller
             [
                 'no' => 1,
                 'stage' => 'netto',
-                'label' => 'NETTO (POTONG)',
+                'dept' => null,
+                'label' => 'NETTO',
                 'spv_label' => 'SPV NETTO',
                 'is_digital' => true,
             ],
             [
                 'no' => 2,
-                'stage' => 'bubut_od',
-                'label' => 'BUBUT OD',
-                'spv_label' => 'SPV OD',
-                'is_digital' => true,
-            ],
-            [
-                'no' => 3,
                 'stage' => 'marking',
+                'dept' => 'OD',
                 'label' => 'MARKING',
                 'spv_label' => null,
                 'is_digital' => false,
             ],
             [
-                'no' => 4,
+                'no' => 2,
+                'stage' => 'bubut_od',
+                'dept' => 'OD',
+                'label' => 'OD FINISH',
+                'spv_label' => 'SPV OD',
+                'is_digital' => true,
+            ],
+            [
+                'no' => 3,
                 'stage' => 'bubut_cnc',
+                'dept' => null,
                 'label' => 'BUBUT CNC',
                 'spv_label' => 'SPV CNC',
                 'is_digital' => true,
             ],
             [
-                'no' => 5,
+                'no' => 4,
                 'stage' => 'bor',
+                'dept' => null,
                 'label' => 'BOR',
                 'spv_label' => 'SPV BOR',
                 'is_digital' => true,
             ],
             [
-                'no' => 6,
+                'no' => 5,
                 'stage' => 'qc',
-                'label' => 'QC (FINAL INSPECTION)',
+                'dept' => null,
+                'label' => 'QC',
                 'spv_label' => 'SPV QC',
                 'is_digital' => true,
             ],
             [
-                'no' => 7,
+                'no' => 6,
                 'stage' => 'gudang_jadi',
+                'dept' => null,
                 'label' => 'GUDANG JADI',
                 'spv_label' => 'SPV GUDANG',
                 'is_digital' => true,
@@ -453,10 +462,13 @@ class CastingResultController extends Controller
                 // Physical checklist only (e.g. MARKING)
                 $rows[] = [
                     'no' => $cfg['no'],
+                    'stage' => $cfg['stage'],
+                    'dept' => $cfg['dept'] ?? null,
                     'label' => $cfg['label'],
                     'hasil' => null,
                     'rusak' => null,
                     'tanggal' => null,
+                    'kpi' => null,
                     'operator' => null,
                 ];
 
@@ -469,26 +481,36 @@ class CastingResultController extends Controller
                 // Not yet physically executed
                 $rows[] = [
                     'no' => $cfg['no'],
+                    'stage' => $cfg['stage'],
+                    'dept' => $cfg['dept'] ?? null,
                     'label' => $cfg['label'],
                     'hasil' => null,
                     'rusak' => null,
                     'tanggal' => null,
+                    'kpi' => null,
                     'operator' => null,
                 ];
 
                 continue;
             }
 
-            $effectiveGood = $this->quantityResolver->resolveEffectiveGoodQty($line, $cfg['stage']);
+            // Digital process stages show actual input processed/inspected; Gudang Jadi shows net good accepted
+            $effectiveHasil = $cfg['stage'] === 'gudang_jadi'
+                ? $this->quantityResolver->resolveEffectiveGoodQty($line, $cfg['stage'])
+                : $this->quantityResolver->resolveEffectiveInputQty($line, $cfg['stage']);
+
             $stageDefect = (int) $stageExecs->sum('defect_qty');
             $latestDoneAt = $stageExecs->sortByDesc('physical_done_at')->first()?->physical_done_at;
 
             $rows[] = [
                 'no' => $cfg['no'],
+                'stage' => $cfg['stage'],
+                'dept' => $cfg['dept'] ?? null,
                 'label' => $cfg['label'],
-                'hasil' => $effectiveGood,
+                'hasil' => $effectiveHasil,
                 'rusak' => $stageDefect,
                 'tanggal' => $latestDoneAt ? $latestDoneAt->format('d/m/Y') : null,
+                'kpi' => null,
                 'operator' => $cfg['spv_label'],
             ];
         }

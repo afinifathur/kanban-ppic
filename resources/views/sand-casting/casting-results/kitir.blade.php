@@ -204,94 +204,113 @@
                     <table class="w-full text-xs text-left border-collapse h-full">
                         <thead>
                             <tr class="bg-slate-100 text-black font-black uppercase text-[10px] tracking-wider border-b-black-solid">
-                                <th class="p-2 text-center w-10 border-r-black-solid">NO.</th>
-                                <th class="p-2 text-left w-48 border-r-black-solid">PROSES / DEPT</th>
-                                <th class="p-2 text-center w-28 border-r-black-solid">HASIL (PCS)</th>
-                                <th class="p-2 text-center w-28 border-r-black-solid">RUSAK (PCS)</th>
-                                <th class="p-2 text-center w-32 border-r-black-solid">TANGGAL</th>
-                                <th class="p-2 text-center">OPERATOR / SPV</th>
+                                <th class="p-2 text-center w-9 border-r-black-solid">NO.</th>
+                                <th class="p-2 text-left w-28 border-r-black-solid" colspan="2">PROSES / DEPT</th>
+                                <th class="p-2 text-center w-22 border-r-black-solid">HASIL (PCS)</th>
+                                <th class="p-2 text-center w-22 border-r-black-solid">RUSAK (PCS)</th>
+                                <th class="p-2 text-center w-24 border-r-black-solid">TANGGAL</th>
+                                <th class="p-2 text-center w-32 border-r-black-solid">KPI</th>
+                                <th class="p-2 text-center w-28">OPERATOR / SPV</th>
                             </tr>
                         </thead>
                         <tbody class="text-black font-mono">
                             @if(isset($kitirRows) && count($kitirRows) > 0)
                                 @foreach($kitirRows as $row)
                                     <tr class="process-row {{ !$loop->last ? 'border-b-black-solid' : '' }}">
-                                        <td class="text-center font-bold border-r-black-solid font-mono text-sm">{{ $row['no'] }}</td>
-                                        <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">{{ $row['label'] }}</td>
+                                        @if($row['stage'] === 'marking')
+                                            <td rowspan="2" class="text-center font-bold border-r-black-solid font-mono text-sm align-middle bg-white">2</td>
+                                            <td rowspan="2" class="font-black border-r-black-solid text-center text-xs font-sans w-10 bg-slate-50/60 align-middle">OD</td>
+                                            <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">MARKING</td>
+                                        @elseif($row['stage'] === 'bubut_od')
+                                            <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">OD FINISH</td>
+                                        @else
+                                            <td class="text-center font-bold border-r-black-solid font-mono text-sm">{{ $row['no'] }}</td>
+                                            <td colspan="2" class="font-black border-r-black-solid pl-2 text-[11px] font-sans">{{ $row['label'] }}</td>
+                                        @endif
                                         <td class="border-r-black-solid text-center font-bold font-mono text-sm">{{ $row['hasil'] !== null ? $row['hasil'] : '' }}</td>
                                         <td class="border-r-black-solid text-center font-bold font-mono text-sm">{{ $row['rusak'] !== null ? $row['rusak'] : '' }}</td>
                                         <td class="border-r-black-solid text-center font-bold font-mono text-xs">{{ $row['tanggal'] ?? '' }}</td>
+                                        <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">
+                                            @if(($row['stage'] ?? '') !== 'bubut_cnc')
+                                                &#215;
+                                            @endif
+                                        </td>
                                         <td class="text-center font-bold font-sans text-xs">{{ $row['operator'] ?? '' }}</td>
                                     </tr>
                                 @endforeach
                             @else
-                                <!-- 1. NETTO (POTONG) -->
+                                <!-- 1. NETTO -->
                                 <tr class="process-row border-b-black-solid">
                                     <td class="text-center font-bold border-r-black-solid font-mono text-sm">1</td>
-                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">NETTO (POTONG)</td>
+                                    <td colspan="2" class="font-black border-r-black-solid pl-2 text-[11px] font-sans">NETTO</td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">&#215;</td>
                                     <td></td>
                                 </tr>
 
-                                <!-- 2. BUBUT OD -->
+                                <!-- 2. OD (Marking & OD Finish) -->
                                 <tr class="process-row border-b-black-solid">
-                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">2</td>
-                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT OD</td>
-                                    <td class="border-r-black-solid"></td>
-                                    <td class="border-r-black-solid"></td>
-                                    <td class="border-r-black-solid"></td>
-                                    <td></td>
-                                </tr>
-
-                                <!-- 3. MARKING -->
-                                <tr class="process-row border-b-black-solid">
-                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">3</td>
+                                    <td rowspan="2" class="text-center font-bold border-r-black-solid font-mono text-sm align-middle bg-white">2</td>
+                                    <td rowspan="2" class="font-black border-r-black-solid text-center text-xs font-sans w-10 bg-slate-50/60 align-middle">OD</td>
                                     <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">MARKING</td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">&#215;</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">OD FINISH</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">&#215;</td>
                                     <td></td>
                                 </tr>
 
-                                <!-- 4. BUBUT CNC -->
+                                <!-- 3. BUBUT CNC -->
+                                <tr class="process-row border-b-black-solid">
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">3</td>
+                                    <td colspan="2" class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT CNC</td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800"></td>
+                                    <td></td>
+                                </tr>
+
+                                <!-- 4. BOR -->
                                 <tr class="process-row border-b-black-solid">
                                     <td class="text-center font-bold border-r-black-solid font-mono text-sm">4</td>
-                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BUBUT CNC</td>
+                                    <td colspan="2" class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BOR</td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">&#215;</td>
                                     <td></td>
                                 </tr>
 
-                                <!-- 5. BOR -->
+                                <!-- 5. QC -->
                                 <tr class="process-row border-b-black-solid">
                                     <td class="text-center font-bold border-r-black-solid font-mono text-sm">5</td>
-                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">BOR</td>
+                                    <td colspan="2" class="font-black border-r-black-solid pl-2 text-[11px] font-sans">QC</td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">&#215;</td>
                                     <td></td>
                                 </tr>
 
-                                <!-- 6. QC (FINAL INSPECTION) -->
-                                <tr class="process-row border-b-black-solid">
-                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">6</td>
-                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">QC (FINAL INSPECTION)</td>
-                                    <td class="border-r-black-solid"></td>
-                                    <td class="border-r-black-solid"></td>
-                                    <td class="border-r-black-solid"></td>
-                                    <td></td>
-                                </tr>
-
-                                <!-- 7. GUDANG JADI -->
+                                <!-- 6. GUDANG JADI -->
                                 <tr class="process-row">
-                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">7</td>
-                                    <td class="font-black border-r-black-solid pl-2 text-[11px] font-sans">GUDANG JADI</td>
+                                    <td class="text-center font-bold border-r-black-solid font-mono text-sm">6</td>
+                                    <td colspan="2" class="font-black border-r-black-solid pl-2 text-[11px] font-sans">GUDANG JADI</td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
                                     <td class="border-r-black-solid"></td>
+                                    <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">&#215;</td>
                                     <td></td>
                                 </tr>
                             @endif
@@ -301,6 +320,11 @@
 
             </div>
 
+        </div>
+
+        <!-- ISO Document Code Footer (Outside Main Form Border, Bottom Left) -->
+        <div class="mt-1.5 text-left">
+            <span class="font-mono text-[9pt] font-bold text-gray-800 tracking-wider">FR/PPIC/11-01/09/26-00-01</span>
         </div>
     </div>
 

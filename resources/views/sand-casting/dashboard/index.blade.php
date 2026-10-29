@@ -1348,20 +1348,45 @@
                 const selectWipEl = document.getElementById('zone4-wip-stage-select');
                 const activeWipStage = selectWipEl?.value || dashboardCharts.currentZone4WipStage || 'qc';
                 const stageData = (z4Wip.stages && z4Wip.stages[activeWipStage]) ? z4Wip.stages[activeWipStage] : {};
+                const latestSnap = stageData.latest_snapshot || {};
+                const isAvail = !!latestSnap.is_available;
 
-                const elWipTotalKg = document.getElementById('z4-wip-total-kg');
-                if (elWipTotalKg && stageData.total_weight_kg !== undefined) {
-                    elWipTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
-                }
+                const summaryContentEl = document.getElementById('z4-wip-summary-content');
+                if (summaryContentEl) {
+                    if (isAvail) {
+                        const kgVal = stageData.total_weight_kg ?? latestSnap.weight_kg ?? 0;
+                        const pcsVal = stageData.total_good_pcs ?? latestSnap.qty_pcs ?? 0;
+                        const ktrVal = stageData.total_ktr_count ?? latestSnap.ktr_count ?? 0;
+                        summaryContentEl.innerHTML = `
+                            <span class="font-black text-slate-950" id="z4-wip-total-kg">${formatNumber(kgVal, 0)}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                            <span class="text-slate-300 font-bold">|</span>
+                            <span class="font-bold text-slate-800" id="z4-wip-total-pcs">${formatNumber(pcsVal)}</span> <span class="text-slate-500 text-[10px]">PCS</span>
+                            <span class="text-slate-300 font-bold">|</span>
+                            <span class="font-bold text-slate-800" id="z4-wip-total-ktr">${formatNumber(ktrVal)}</span> <span class="text-slate-500 text-[10px]">KTR</span>
+                        `;
+                    } else {
+                        summaryContentEl.innerHTML = `
+                            <span class="text-slate-400 italic font-sans text-[11px]" id="z4-wip-unavailable-label">Data Snapshot Tidak Tersedia</span>
+                            <span class="hidden" id="z4-wip-total-kg">0</span>
+                            <span class="hidden" id="z4-wip-total-pcs">0</span>
+                            <span class="hidden" id="z4-wip-total-ktr">0</span>
+                        `;
+                    }
+                } else {
+                    const elWipTotalKg = document.getElementById('z4-wip-total-kg');
+                    if (elWipTotalKg && stageData.total_weight_kg !== undefined) {
+                        elWipTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
+                    }
 
-                const elWipTotalPcs = document.getElementById('z4-wip-total-pcs');
-                if (elWipTotalPcs && stageData.total_good_pcs !== undefined) {
-                    elWipTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
-                }
+                    const elWipTotalPcs = document.getElementById('z4-wip-total-pcs');
+                    if (elWipTotalPcs && stageData.total_good_pcs !== undefined) {
+                        elWipTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+                    }
 
-                const elWipTotalKtr = document.getElementById('z4-wip-total-ktr');
-                if (elWipTotalKtr && stageData.total_ktr_count !== undefined) {
-                    elWipTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+                    const elWipTotalKtr = document.getElementById('z4-wip-total-ktr');
+                    if (elWipTotalKtr && stageData.total_ktr_count !== undefined) {
+                        elWipTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+                    }
                 }
 
                 const elWipStageLabel = document.getElementById('z4-wip-stage-label');
@@ -1472,20 +1497,45 @@
         const stagesMap = z4Wip.stages || {};
         const stageData = stagesMap[stageKey] || {};
         const daily = stageData.daily || [];
+        const latestSnap = stageData.latest_snapshot || {};
+        const isAvail = !!latestSnap.is_available;
 
-        const elTotalKg = document.getElementById('z4-wip-total-kg');
-        if (elTotalKg && stageData.total_weight_kg !== undefined) {
-            elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
-        }
+        const summaryContentEl = document.getElementById('z4-wip-summary-content');
+        if (summaryContentEl) {
+            if (isAvail) {
+                const kgVal = stageData.total_weight_kg ?? latestSnap.weight_kg ?? 0;
+                const pcsVal = stageData.total_good_pcs ?? latestSnap.qty_pcs ?? 0;
+                const ktrVal = stageData.total_ktr_count ?? latestSnap.ktr_count ?? 0;
+                summaryContentEl.innerHTML = `
+                    <span class="font-black text-slate-950" id="z4-wip-total-kg">${formatNumber(kgVal, 0)}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                    <span class="text-slate-300 font-bold">|</span>
+                    <span class="font-bold text-slate-800" id="z4-wip-total-pcs">${formatNumber(pcsVal)}</span> <span class="text-slate-500 text-[10px]">PCS</span>
+                    <span class="text-slate-300 font-bold">|</span>
+                    <span class="font-bold text-slate-800" id="z4-wip-total-ktr">${formatNumber(ktrVal)}</span> <span class="text-slate-500 text-[10px]">KTR</span>
+                `;
+            } else {
+                summaryContentEl.innerHTML = `
+                    <span class="text-slate-400 italic font-sans text-[11px]" id="z4-wip-unavailable-label">Data Snapshot Tidak Tersedia</span>
+                    <span class="hidden" id="z4-wip-total-kg">0</span>
+                    <span class="hidden" id="z4-wip-total-pcs">0</span>
+                    <span class="hidden" id="z4-wip-total-ktr">0</span>
+                `;
+            }
+        } else {
+            const elTotalKg = document.getElementById('z4-wip-total-kg');
+            if (elTotalKg && stageData.total_weight_kg !== undefined) {
+                elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
+            }
 
-        const elTotalPcs = document.getElementById('z4-wip-total-pcs');
-        if (elTotalPcs && stageData.total_good_pcs !== undefined) {
-            elTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
-        }
+            const elTotalPcs = document.getElementById('z4-wip-total-pcs');
+            if (elTotalPcs && stageData.total_good_pcs !== undefined) {
+                elTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+            }
 
-        const elTotalKtr = document.getElementById('z4-wip-total-ktr');
-        if (elTotalKtr && stageData.total_ktr_count !== undefined) {
-            elTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+            const elTotalKtr = document.getElementById('z4-wip-total-ktr');
+            if (elTotalKtr && stageData.total_ktr_count !== undefined) {
+                elTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+            }
         }
 
         const elStageLabel = document.getElementById('z4-wip-stage-label');

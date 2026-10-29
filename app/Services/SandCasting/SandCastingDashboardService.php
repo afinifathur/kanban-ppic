@@ -3,6 +3,7 @@
 namespace App\Services\SandCasting;
 
 use App\Models\DefectType;
+use App\Models\ProductionPlan;
 use App\Models\SandCastingCastingResultLine;
 use App\Models\SandCastingStageExecution;
 use App\Models\User;
@@ -296,11 +297,35 @@ class SandCastingDashboardService
     // =========================================================================
 
     /**
-     * Build Zone 2 payload: Pipeline stages, physical WIP donut data, and FIFO aging watchlist.
+     * Compute official active WIP pipeline metrics for the 5 active stages (NETTO, BUBUT OD, BUBUT CNC, BOR, QC).
+     * Single Source of Truth for both Zone 2 and Zone 4 WIP Snapshots.
      *
-     * @return array<string, mixed>
+     * @param  string|null  $scope  Optional product scope (e.g. 'FLANGE_STAINLESS', null/'all' for unscoped)
+     * @return array{
+     *     stages: array<string, array{
+     *         stage: string,
+     *         label: string,
+     *         order: int,
+     *         qty_pcs: int,
+     *         wip_pcs: int,
+     *         weight_kg: float,
+     *         wip_ton: float,
+     *         ktr_count: int,
+     *         percentage: float,
+     *         details: array{
+     *             stage: string,
+     *             stage_label: string,
+     *             scope: string,
+     *             lines_count: int,
+     *             sample_ktrs: array
+     *         }
+     *     }>,
+     *     total_active_wip_pcs: int,
+     *     total_active_wip_ton: float,
+     *     watchlist_candidates: array
+     * }
      */
-    protected function buildZone2WipAndFlow(string $todayStr, ?User $user, ?string $scope): array
+    public function getZone2ActiveWipPipelineData(?string $scope = null): array
     {
         $wipStagesMap = [
             'netto' => ['label' => 'Netto', 'order' => 2],
@@ -319,7 +344,7 @@ class SandCastingDashboardService
                 'stageExecutions' => fn ($q) => $q->orderBy('executed_at', 'asc')->orderBy('id', 'asc'),
             ]);
 
-        if ($scope) {
+        if ($scope && $scope !== 'all') {
             $linesQuery->whereHas('productionPlan', function ($p) use ($scope) {
                 $p->where('product_scope', $scope);
             });
@@ -328,13 +353,15 @@ class SandCastingDashboardService
         $activeLines = $linesQuery->get();
 
         $stagePcs = [];
-        $stageTon = [];
+        $stageKg = [];
         $stageKtrCount = [];
+        $stageKtrDetails = [];
 
         foreach (array_keys($wipStagesMap) as $stgKey) {
             $stagePcs[$stgKey] = 0;
-            $stageTon[$stgKey] = 0.0;
+            $stageKg[$stgKey] = 0.0;
             $stageKtrCount[$stgKey] = 0;
+            $stageKtrDetails[$stgKey] = [];
         }
 
         $watchlistCandidates = [];
@@ -352,9 +379,21 @@ class SandCastingDashboardService
             }
 
             $w = $this->resolveEffectiveUnitWeight($line);
+            $lineWeight = ($usableQty * $w);
+
             $stagePcs[$stage] += $usableQty;
-            $stageTon[$stage] += ($usableQty * $w);
+            $stageKg[$stage] += $lineWeight;
             $stageKtrCount[$stage]++;
+
+            $stageKtrDetails[$stage][] = [
+                'ktr_id' => $line->id,
+                'traveler_number' => (string) $line->traveler_number,
+                'heat_number' => (string) ($line->castingResult?->heat_number ?? '-'),
+                'production_code' => (string) ($line->productionPlan?->code ?? $line->castingOrderLine?->code ?? '-'),
+                'usable_pcs' => $usableQty,
+                'unit_weight_kg' => $w,
+                'total_kg' => round($lineWeight, 4),
+            ];
 
             // Calculate aging for FIFO watchlist candidate
             $aging = $this->floorQueryService->calculateAging($line);
@@ -375,30 +414,84 @@ class SandCastingDashboardService
             ];
         }
 
+        $stages = [];
         $totalActiveWipTon = 0.0;
         $totalActiveWipPcs = 0;
-        foreach (array_keys($wipStagesMap) as $stgKey) {
-            $stageTon[$stgKey] = round($stageTon[$stgKey] / 1000, 2);
-            $totalActiveWipTon += $stageTon[$stgKey];
-            $totalActiveWipPcs += $stagePcs[$stgKey];
-        }
-        $totalActiveWipTon = round($totalActiveWipTon, 2);
 
-        $wipDistribution = [];
         foreach ($wipStagesMap as $stgKey => $info) {
-            $ton = $stageTon[$stgKey];
-            $pct = $totalActiveWipTon > 0 ? round(($ton / $totalActiveWipTon) * 100, 1) : 0.0;
+            $kg = $stageKg[$stgKey];
+            $ton = round($kg / 1000, 2);
+            $pcs = $stagePcs[$stgKey];
+            $ktr = $stageKtrCount[$stgKey];
 
-            $wipDistribution[] = [
+            $totalActiveWipTon += $ton;
+            $totalActiveWipPcs += $pcs;
+
+            $stages[$stgKey] = [
                 'stage' => $stgKey,
                 'label' => $info['label'],
                 'order' => $info['order'],
-                'wip_pcs' => $stagePcs[$stgKey],
+                'qty_pcs' => $pcs,
+                'wip_pcs' => $pcs,
+                'weight_kg' => round($kg, 4),
                 'wip_ton' => $ton,
-                'percentage' => $pct,
-                'ktr_count' => $stageKtrCount[$stgKey],
+                'ktr_count' => $ktr,
+                'percentage' => 0.0,
+                'details' => [
+                    'stage' => $stgKey,
+                    'stage_label' => $info['label'],
+                    'scope' => $scope ?: 'all',
+                    'lines_count' => count($stageKtrDetails[$stgKey]),
+                    'sample_ktrs' => array_slice($stageKtrDetails[$stgKey], 0, 10),
+                ],
             ];
         }
+
+        $totalActiveWipTon = round($totalActiveWipTon, 2);
+
+        foreach ($stages as $stgKey => &$stg) {
+            $stg['percentage'] = $totalActiveWipTon > 0 ? round(($stg['wip_ton'] / $totalActiveWipTon) * 100, 1) : 0.0;
+        }
+        unset($stg);
+
+        return [
+            'stages' => $stages,
+            'total_active_wip_pcs' => $totalActiveWipPcs,
+            'total_active_wip_ton' => $totalActiveWipTon,
+            'watchlist_candidates' => $watchlistCandidates,
+        ];
+    }
+
+    /**
+     * Get all distinct product scopes available in Sand Casting for snapshot capture.
+     *
+     * @return array<string>
+     */
+    public function getDistinctProductScopesForSnapshot(): array
+    {
+        $planScopes = ProductionPlan::query()
+            ->where('production_domain', ProductionPlan::DOMAIN_SAND_CASTING)
+            ->whereNotNull('product_scope')
+            ->where('product_scope', '!=', '')
+            ->distinct()
+            ->pluck('product_scope')
+            ->all();
+
+        $allScopes = array_unique(array_filter($planScopes));
+        sort($allScopes);
+
+        return array_values($allScopes);
+    }
+
+    /**
+     * Build Zone 2 payload: Pipeline stages, physical WIP donut data, and FIFO aging watchlist.
+     *
+     * @return array<string, mixed>
+     */
+    protected function buildZone2WipAndFlow(string $todayStr, ?User $user, ?string $scope): array
+    {
+        $pipelineData = $this->getZone2ActiveWipPipelineData($scope);
+        $watchlistCandidates = $pipelineData['watchlist_candidates'];
 
         // Sort watchlist by oldest stage aging (descending)
         usort($watchlistCandidates, function ($a, $b) {
@@ -412,9 +505,9 @@ class SandCastingDashboardService
         $top5Watchlist = array_slice($watchlistCandidates, 0, 5);
 
         return [
-            'total_active_wip_pcs' => $totalActiveWipPcs,
-            'total_active_wip_ton' => $totalActiveWipTon,
-            'wip_distribution' => $wipDistribution,
+            'total_active_wip_pcs' => $pipelineData['total_active_wip_pcs'],
+            'total_active_wip_ton' => $pipelineData['total_active_wip_ton'],
+            'wip_distribution' => array_values($pipelineData['stages']),
             'terminal_stage' => [
                 'stage' => 'gudang_jadi',
                 'label' => 'Gudang Jadi (Terminal)',

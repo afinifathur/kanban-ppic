@@ -26,10 +26,23 @@ class SandCastingWipSnapshotService
 
     public function __construct(
         protected ?SandCastingProductionStatusService $statusService = null,
-        protected ?SandCastingQuantityResolverService $quantityResolver = null
+        protected ?SandCastingQuantityResolverService $quantityResolver = null,
+        protected ?SandCastingDashboardService $dashboardService = null
     ) {
         $this->quantityResolver = $quantityResolver ?? new SandCastingQuantityResolverService;
         $this->statusService = $statusService ?? new SandCastingProductionStatusService($this->quantityResolver);
+    }
+
+    public function getDashboardService(): SandCastingDashboardService
+    {
+        return $this->dashboardService ??= app(SandCastingDashboardService::class);
+    }
+
+    public function setDashboardService(SandCastingDashboardService $dashboardService): self
+    {
+        $this->dashboardService = $dashboardService;
+
+        return $this;
     }
 
     /**
@@ -50,7 +63,7 @@ class SandCastingWipSnapshotService
 
     /**
      * Calculate live active WIP metrics for a specific stage and optional scope.
-     * Uses official WIP formula: KTR current_stage, usableQty > 0, unitWeight, distinct KTR count.
+     * Reuses the official Zone 2 pipeline aggregation as the single source of truth.
      *
      * @return array{qty_pcs: int, weight_kg: float, ktr_count: int, details: array}
      */
@@ -61,72 +74,28 @@ class SandCastingWipSnapshotService
             throw new InvalidArgumentException("Tahap '{$stage}' bukan tahap WIP aktif Sand Casting.");
         }
 
-        $linesQuery = SandCastingCastingResultLine::query()
-            ->where('current_stage', $normalizedStage)
-            ->with([
-                'castingResult',
-                'productionPlan',
-                'stageExecutions' => fn ($q) => $q->orderBy('executed_at', 'asc')->orderBy('id', 'asc'),
-            ]);
+        $pipeline = $this->getDashboardService()->getZone2ActiveWipPipelineData($scope);
+        $stageData = $pipeline['stages'][$normalizedStage] ?? null;
 
-        if ($scope && $scope !== 'all') {
-            $linesQuery->whereHas('productionPlan', function ($p) use ($scope) {
-                $p->where('product_scope', $scope);
-            });
-        }
-
-        $activeLines = $linesQuery->get();
-
-        $totalPcs = 0;
-        $totalWeightKg = 0.0;
-        $ktrCount = 0;
-        $ktrDetails = [];
-
-        foreach ($activeLines as $line) {
-            $usableQty = $this->statusService->resolveKtrUsableQty($line);
-            if ($usableQty <= 0) {
-                // Halted KTRs or 0-good KTRs are excluded from active WIP
-                continue;
-            }
-
-            $w = $this->resolveUnitWeightKg($line);
-            $lineWeight = ($usableQty * $w);
-
-            $totalPcs += $usableQty;
-            $totalWeightKg += $lineWeight;
-            $ktrCount++;
-
-            $ktrDetails[] = [
-                'ktr_id' => $line->id,
-                'traveler_number' => (string) $line->traveler_number,
-                'heat_number' => (string) ($line->castingResult?->heat_number ?? '-'),
-                'production_code' => (string) ($line->productionPlan?->code ?? '-'),
-                'usable_pcs' => $usableQty,
-                'unit_weight_kg' => $w,
-                'total_kg' => round($lineWeight, 4),
-            ];
+        if (! $stageData) {
+            throw new InvalidArgumentException("Tahap '{$stage}' tidak ditemukan di pipeline resmi Zona 2.");
         }
 
         return [
-            'qty_pcs' => $totalPcs,
-            'weight_kg' => round($totalWeightKg, 4),
-            'ktr_count' => $ktrCount,
-            'details' => [
-                'stage' => $normalizedStage,
-                'stage_label' => self::WIP_STAGES[$normalizedStage],
-                'scope' => $scope ?: 'all',
-                'lines_count' => count($ktrDetails),
-                'sample_ktrs' => array_slice($ktrDetails, 0, 10),
-            ],
+            'qty_pcs' => (int) $stageData['qty_pcs'],
+            'weight_kg' => (float) $stageData['weight_kg'],
+            'ktr_count' => (int) $stageData['ktr_count'],
+            'details' => $stageData['details'],
         ];
     }
 
     /**
      * Capture daily WIP snapshot for a specific cutoff date/time.
      * Guaranteed idempotent and protects valid actual snapshots from being overwritten.
+     * Reuses official Zone 2 pipeline metrics.
      *
      * @param  Carbon|string|null  $date  Operational snapshot date (Y-m-d)
-     * @param  string|null  $scope  Product scope (e.g. 'FLANGE_BESI' or 'all')
+     * @param  string|null  $scope  Product scope (e.g. 'FLANGE_BESI', 'FLANGE_STAINLESS', or 'all')
      * @param  bool  $force  If true, forces overwrite of existing snapshot
      * @param  string  $sourceType  'actual' or 'reconstructed'
      * @return Collection<int, SandCastingWipSnapshot>
@@ -142,7 +111,13 @@ class SandCastingWipSnapshotService
         $cutoffScheduled = Carbon::parse("{$snapshotDate} ".self::CUTOFF_TIME, self::TIMEZONE);
         $scopeKey = ($scope && $scope !== '') ? $scope : 'all';
 
+        // Check explicit lateness relative to 07:00:00 cutoff (+30m grace)
+        $todayStr = $now->toDateString();
+        $isDelayed = ($snapshotDate < $todayStr) || ($snapshotDate === $todayStr && $now->greaterThan($cutoffScheduled->copy()->addMinutes(30)));
+        $delayMinutes = $isDelayed ? (int) $cutoffScheduled->diffInMinutes($now, false) : 0;
+
         $savedSnapshots = collect();
+        $pipelineData = $this->getDashboardService()->getZone2ActiveWipPipelineData($scopeKey);
 
         foreach (array_keys(self::WIP_STAGES) as $stage) {
             $existing = SandCastingWipSnapshot::where('snapshot_date', $snapshotDate)
@@ -159,7 +134,17 @@ class SandCastingWipSnapshotService
             }
 
             try {
-                $computed = $this->computeLiveActiveWip($stage, $scopeKey);
+                $stageData = $pipelineData['stages'][$stage] ?? null;
+                if (! $stageData) {
+                    throw new InvalidArgumentException("Data tahap {$stage} tidak ditemukan di pipeline Zona 2.");
+                }
+
+                $stageDetails = $stageData['details'];
+                if ($isDelayed && $sourceType === SandCastingWipSnapshot::SOURCE_ACTUAL) {
+                    $stageDetails['delayed_capture'] = true;
+                    $stageDetails['delay_minutes'] = $delayMinutes;
+                    $stageDetails['observation_note'] = "Observasi aktual diambil pada {$now->format('H:i:s')} WIB (terlambat {$delayMinutes} menit dari jadwal cutoff 07:00 WIB).";
+                }
 
                 $snapshot = SandCastingWipSnapshot::updateOrCreate(
                     [
@@ -170,12 +155,12 @@ class SandCastingWipSnapshotService
                     [
                         'scheduled_cutoff_at' => $cutoffScheduled,
                         'captured_at' => $now,
-                        'qty_pcs' => $computed['qty_pcs'],
-                        'weight_kg' => $computed['weight_kg'],
-                        'ktr_count' => $computed['ktr_count'],
+                        'qty_pcs' => (int) $stageData['qty_pcs'],
+                        'weight_kg' => (float) $stageData['weight_kg'],
+                        'ktr_count' => (int) $stageData['ktr_count'],
                         'source_type' => $sourceType,
                         'status' => SandCastingWipSnapshot::STATUS_SUCCESS,
-                        'details' => $computed['details'],
+                        'details' => $stageDetails,
                     ]
                 );
 
@@ -204,6 +189,27 @@ class SandCastingWipSnapshotService
         }
 
         return $savedSnapshots;
+    }
+
+    /**
+     * Capture snapshots for all relevant scopes ('all' + distinct Sand Casting scopes).
+     *
+     * @return Collection<int, SandCastingWipSnapshot>
+     */
+    public function captureAllScopesSnapshot(
+        Carbon|string|null $date = null,
+        bool $force = false,
+        string $sourceType = SandCastingWipSnapshot::SOURCE_ACTUAL
+    ): Collection {
+        $scopes = array_unique(array_merge(['all'], $this->getDashboardService()->getDistinctProductScopesForSnapshot()));
+        $allSnapshots = collect();
+
+        foreach ($scopes as $sc) {
+            $snaps = $this->captureSnapshot($date, $sc, $force, $sourceType);
+            $allSnapshots = $allSnapshots->merge($snaps);
+        }
+
+        return $allSnapshots;
     }
 
     /**
@@ -354,6 +360,26 @@ class SandCastingWipSnapshotService
         }
 
         return $savedSnapshots;
+    }
+
+    /**
+     * Reconstruct historical snapshots for all relevant scopes ('all' + distinct Sand Casting scopes).
+     *
+     * @return Collection<int, SandCastingWipSnapshot>
+     */
+    public function reconstructAllScopesHistoricalSnapshot(
+        Carbon|string $targetDate,
+        bool $force = false
+    ): Collection {
+        $scopes = array_unique(array_merge(['all'], $this->getDashboardService()->getDistinctProductScopesForSnapshot()));
+        $allSnapshots = collect();
+
+        foreach ($scopes as $sc) {
+            $snaps = $this->reconstructHistoricalSnapshot($targetDate, $sc, $force);
+            $allSnapshots = $allSnapshots->merge($snaps);
+        }
+
+        return $allSnapshots;
     }
 
     /**

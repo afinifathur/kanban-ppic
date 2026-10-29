@@ -175,11 +175,23 @@
         <div class="flex items-center justify-between mb-2 text-[11px] font-mono">
             <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 border border-slate-200/70 text-slate-700">
                 <span class="font-black text-slate-800 uppercase tracking-wider text-[10px]">TOTAL SNAPSHOT TERBARU (<span id="z4-wip-summary-stage-name" class="text-sky-700">{{ $currentWipStageData['stage_label'] ?? 'QC' }}</span>):</span>
-                <span class="font-black text-slate-950" id="z4-wip-total-kg">{{ number_format($initialWipTotalKg, 0, ',', '.') }}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
-                <span class="text-slate-300 font-bold">|</span>
-                <span class="font-bold text-slate-800" id="z4-wip-total-pcs">{{ number_format($initialWipTotalPcs, 0, ',', '.') }}</span> <span class="text-slate-500 text-[10px]">PCS</span>
-                <span class="text-slate-300 font-bold">|</span>
-                <span class="font-bold text-slate-800" id="z4-wip-total-ktr">{{ number_format($initialWipTotalKtr, 0, ',', '.') }}</span> <span class="text-slate-500 text-[10px]">KTR</span>
+                @php
+                    $isSnapAvailable = (bool) ($currentWipStageData['latest_snapshot']['is_available'] ?? false);
+                @endphp
+                <span id="z4-wip-summary-content" class="inline-flex items-center gap-1.5">
+                    @if($isSnapAvailable)
+                        <span class="font-black text-slate-950" id="z4-wip-total-kg">{{ number_format($initialWipTotalKg, 0, ',', '.') }}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                        <span class="text-slate-300 font-bold">|</span>
+                        <span class="font-bold text-slate-800" id="z4-wip-total-pcs">{{ number_format($initialWipTotalPcs, 0, ',', '.') }}</span> <span class="text-slate-500 text-[10px]">PCS</span>
+                        <span class="text-slate-300 font-bold">|</span>
+                        <span class="font-bold text-slate-800" id="z4-wip-total-ktr">{{ number_format($initialWipTotalKtr, 0, ',', '.') }}</span> <span class="text-slate-500 text-[10px]">KTR</span>
+                    @else
+                        <span class="text-slate-400 italic font-sans text-[11px]" id="z4-wip-unavailable-label">Data Snapshot Tidak Tersedia</span>
+                        <span class="hidden" id="z4-wip-total-kg">0</span>
+                        <span class="hidden" id="z4-wip-total-pcs">0</span>
+                        <span class="hidden" id="z4-wip-total-ktr">0</span>
+                    @endif
+                </span>
             </div>
             <div class="flex items-center gap-2 text-[10px] font-sans hidden sm:flex">
                 <span class="inline-flex items-center gap-1 text-slate-600">

@@ -304,7 +304,7 @@ class SpvOperationalIdentityAndSidebarTest extends TestCase
 
         $content = $response->getContent();
         $this->assertStringContainsString('MARKING', $content);
-        $this->assertStringContainsString('BUBUT OD', $content);
+        $this->assertStringContainsString('OD FINISH', $content);
         $this->assertStringContainsString('BUBUT CNC', $content);
     }
 }
