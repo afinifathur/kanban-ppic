@@ -71,6 +71,35 @@ class SandCastingDashboardService
     }
 
     /**
+     * Get today's throughput (completed output) for a specific stage from Zone 1.
+     * Reuses Zone 1 calculation and caching for complete consistency with the dashboard.
+     *
+     * @param  string  $stage  Stage name or slug (e.g. 'bubut_cnc', 'bubut-cnc', 'qc')
+     * @param  User|null  $user  Authenticated user context
+     * @return array{good_pcs: int, weight_kg: float}
+     */
+    public function getTodayStageOutput(string $stage, ?User $user = null): array
+    {
+        $zone1 = $this->getData('1', $user);
+        $stages = $zone1['zone_1']['daily_throughput_stages'] ?? [];
+        $stageKey = SandCastingStageAuthorizationService::normalizeStage($stage) ?? strtolower(trim($stage));
+
+        foreach ($stages as $stg) {
+            if (($stg['stage'] ?? '') === $stageKey) {
+                return [
+                    'good_pcs' => (int) ($stg['good_pcs'] ?? 0),
+                    'weight_kg' => (float) ($stg['weight_kg'] ?? 0.0),
+                ];
+            }
+        }
+
+        return [
+            'good_pcs' => 0,
+            'weight_kg' => 0.0,
+        ];
+    }
+
+    /**
      * Compute raw dashboard payload without cache wrapper.
      *
      * @return array<string, mixed>

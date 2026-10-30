@@ -262,7 +262,7 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Operational Kanban Routes (Sand Casting Floor)
-        Route::prefix('kanban')->name('kanban.')->middleware(['permission:access_execution|access_production_visibility'])->group(function () {
+        Route::prefix('kanban')->name('kanban.')->middleware(['permission:access_execution|access_production_visibility|access_all_sand_casting_kanban'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'index'])->name('index');
             Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'reorder'])->name('reorder');
             Route::get('/stage/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print'])->name('print');
@@ -313,7 +313,7 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Production Status (Sand Casting Read Model)
-        Route::middleware(['permission:access_execution|access_production_visibility'])->group(function () {
+        Route::middleware(['permission:access_planning|access_production_visibility'])->group(function () {
             Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
             Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');
         });

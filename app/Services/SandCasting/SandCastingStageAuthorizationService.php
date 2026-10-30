@@ -52,8 +52,36 @@ class SandCastingStageAuthorizationService
     }
 
     /**
+     * Check if user has full read-only visibility across all Sand Casting Kanban stages.
+     * Allowed: Sales role, access_production_visibility, access_all_sand_casting_kanban permission, or spvgdfl@peroniks.com.
+     */
+    public static function hasFullKanbanVisibility(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole('sales')) {
+            return true;
+        }
+
+        try {
+            if ($user->hasPermissionTo('access_production_visibility') || $user->hasPermissionTo('access_all_sand_casting_kanban')) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        if (strtolower(trim((string) $user->email)) === 'spvgdfl@peroniks.com') {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Check if a user is authorized to view a specific Kanban stage board.
-     * Allowed: Admin, PPIC, SPV (for their assigned stage), and users with access_production_visibility or role sales.
+     * Allowed: Admin, PPIC, SPV (for their assigned stage), and users with full Kanban visibility.
      */
     public function canViewStageKanban(?User $user, string $stage): bool
     {
@@ -84,17 +112,9 @@ class SandCastingStageAuthorizationService
             throw new \Illuminate\Auth\Access\AuthorizationException('User belum terautentikasi.');
         }
 
-        // 1. Sales visibility role / access_production_visibility permission: can view all valid Kanban stages (read-only)
-        if ($user->hasRole('sales')) {
+        // 1. Full Sand Casting Kanban visibility (read-only)
+        if (self::hasFullKanbanVisibility($user)) {
             return;
-        }
-
-        try {
-            if ($user->hasPermissionTo('access_production_visibility')) {
-                return;
-            }
-        } catch (\Throwable $e) {
-            // Permission does not exist or unassigned
         }
 
         // 2. Otherwise fallback to execution access rules (admin, ppic, spv for assigned stage)

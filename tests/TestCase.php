@@ -13,7 +13,7 @@ abstract class TestCase extends BaseTestCase
         $testClass = static::class;
         // Bypass gates/permissions in tests, except for RBAC/Scope security tests
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) use ($testClass) {
-            if (str_contains($testClass, 'RbacScope') || str_contains($testClass, 'SalesVisibility')) {
+            if (str_contains($testClass, 'RbacScope') || str_contains($testClass, 'SalesVisibility') || str_contains($testClass, 'SpvGudangJadi')) {
                 return null;
             }
 
@@ -28,6 +28,8 @@ abstract class TestCase extends BaseTestCase
                 if (\Schema::hasTable('permissions')) {
                     \Spatie\Permission\Models\Permission::findOrCreate('access_planning');
                     \Spatie\Permission\Models\Permission::findOrCreate('access_execution');
+                    \Spatie\Permission\Models\Permission::findOrCreate('access_production_visibility');
+                    \Spatie\Permission\Models\Permission::findOrCreate('access_all_sand_casting_kanban');
                 }
                 if (\Schema::hasTable('roles')) {
                     \Spatie\Permission\Models\Role::findOrCreate('admin');

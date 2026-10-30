@@ -225,8 +225,11 @@
                 @if(Auth::user() && Auth::user()->hasRole('spv') && Auth::user()->assigned_stage)
                     <!-- OPERASIONAL (SPV SAND CASTING) -->
                     @php
+                        $hasAllKanbanAccess = \App\Services\SandCasting\SandCastingStageAuthorizationService::hasFullKanbanVisibility(Auth::user());
                         $spvStageSlug = str_replace('_', '-', Auth::user()->assigned_stage);
-                        $spvKanbanUrl = route('sand-casting.kanban.show', $spvStageSlug);
+                        $spvKanbanUrl = $hasAllKanbanAccess 
+                            ? route('sand-casting.kanban.index') 
+                            : route('sand-casting.kanban.show', $spvStageSlug);
                         $spvScanUrl = route('sand-casting.scan.stage', $spvStageSlug);
                     @endphp
                     <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">

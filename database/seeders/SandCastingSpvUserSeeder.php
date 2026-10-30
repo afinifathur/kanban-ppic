@@ -59,6 +59,7 @@ class SandCastingSpvUserSeeder extends Seeder
     {
         // 1. Ensure permissions and SPV role exist
         $accessExecution = Permission::firstOrCreate(['name' => 'access_execution']);
+        $accessAllKanban = Permission::firstOrCreate(['name' => 'access_all_sand_casting_kanban']);
         $spvRole = Role::firstOrCreate(['name' => 'spv']);
         $spvRole->givePermissionTo($accessExecution);
 
@@ -83,6 +84,10 @@ class SandCastingSpvUserSeeder extends Seeder
             }
 
             $user->syncRoles(['spv']);
+
+            if ($account['email'] === 'spvgdfl@peroniks.com') {
+                $user->givePermissionTo($accessAllKanban);
+            }
         }
     }
 }

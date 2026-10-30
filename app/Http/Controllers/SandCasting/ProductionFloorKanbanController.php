@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\SandCasting;
 
 use App\Http\Controllers\Controller;
+use App\Services\SandCasting\SandCastingDashboardService;
 use App\Services\SandCasting\SandCastingProductionFloorQueryService;
 use App\Services\SandCasting\SandCastingStageAuthorizationService;
 use Illuminate\Http\JsonResponse;
@@ -30,8 +31,11 @@ class ProductionFloorKanbanController extends Controller
 
     public function __construct(
         protected SandCastingProductionFloorQueryService $queryService,
-        protected SandCastingStageAuthorizationService $authorizationService
-    ) {}
+        protected SandCastingStageAuthorizationService $authorizationService,
+        protected ?SandCastingDashboardService $dashboardService = null
+    ) {
+        $this->dashboardService = $dashboardService ?? app(SandCastingDashboardService::class);
+    }
 
     /**
      * Entry route for Sand Casting Operational Kanban:
@@ -41,6 +45,10 @@ class ProductionFloorKanbanController extends Controller
     public function index(Request $request): View|JsonResponse
     {
         $user = auth()->user();
+
+        if (SandCastingStageAuthorizationService::hasFullKanbanVisibility($user)) {
+            return $this->show($request, 'netto');
+        }
 
         if ($user && $user->hasRole('spv') && ! empty($user->assigned_stage)) {
             return $this->show($request, $user->assigned_stage);
@@ -69,6 +77,18 @@ class ProductionFloorKanbanController extends Controller
 
         $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
 
+        // Output today widget data for Bubut CNC and QC
+        $todayOutput = null;
+        if (in_array($targetStage, ['bubut_cnc', 'qc'], true)) {
+            $stageOutput = $this->dashboardService->getTodayStageOutput($targetStage, $user);
+            $todayOutput = [
+                'title' => $targetStage === 'bubut_cnc' ? 'HASIL CNC HARI INI' : 'HASIL QC HARI INI',
+                'good_pcs' => (int) ($stageOutput['good_pcs'] ?? 0),
+                'weight_kg' => (float) ($stageOutput['weight_kg'] ?? 0.0),
+                'stage' => $targetStage,
+            ];
+        }
+
         // Extract and clean filters
         $filters = [];
         if ($request->filled('search')) {
@@ -87,6 +107,10 @@ class ProductionFloorKanbanController extends Controller
         $kanbanData = $this->queryService->getStageKanbanData($targetStage, $filters);
 
         if ($request->wantsJson()) {
+            if ($todayOutput !== null) {
+                $kanbanData['today_output'] = $todayOutput;
+            }
+
             return response()->json($kanbanData);
         }
 
@@ -109,6 +133,14 @@ class ProductionFloorKanbanController extends Controller
 
         $canReorder = $this->authorizationService->canReorderQueue($user);
 
+        $isReadOnlyKanbanUser = SandCastingStageAuthorizationService::hasFullKanbanVisibility($user);
+
+        $canScan = $user
+            && ! $isReadOnlyKanbanUser
+            && $this->authorizationService->canAccessStage($user, $targetStage);
+
+        $showQueueNumbers = ! $isReadOnlyKanbanUser;
+
         return view('sand-casting.kanban.index', [
             'stage' => $targetStage,
             'stageSlug' => $scannerSlug,
@@ -120,7 +152,10 @@ class ProductionFloorKanbanController extends Controller
             'filters' => $filters,
             'availableStages' => $availableStages,
             'scannerUrl' => $scannerUrl,
+            'canScan' => $canScan,
             'canReorder' => $canReorder,
+            'showQueueNumbers' => $showQueueNumbers,
+            'todayOutput' => $todayOutput,
             'lastRefreshedAt' => now()->format('H:i:s'),
         ]);
     }
@@ -183,6 +218,9 @@ class ProductionFloorKanbanController extends Controller
         // Generated timestamp in WIB (UTC+7)
         $printedAtWib = now()->setTimezone('Asia/Jakarta')->translatedFormat('d/m/Y H:i:s').' WIB';
 
+        $isReadOnlyKanbanUser = SandCastingStageAuthorizationService::hasFullKanbanVisibility($user);
+        $showQueueNumbers = ! $isReadOnlyKanbanUser;
+
         return view('sand-casting.kanban.print', [
             'stage' => $targetStage,
             'stageSlug' => str_replace('_', '-', $targetStage),
@@ -195,6 +233,7 @@ class ProductionFloorKanbanController extends Controller
             'totalPcs' => $totalPcs,
             'totalWeightKg' => $totalWeightKg,
             'printedAtWib' => $printedAtWib,
+            'showQueueNumbers' => $showQueueNumbers,
         ]);
     }
 

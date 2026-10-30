@@ -17,8 +17,18 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ProductionStatusController extends Controller
 {
+    protected function authorizeAccess(Request $request): void
+    {
+        $user = $request->user();
+        if ($user && ! empty($user->assigned_stage)) {
+            abort(403, 'Akses ditolak. Halaman status produksi ini khusus untuk lini Lost Wax.');
+        }
+    }
+
     public function index(Request $request)
     {
+        $this->authorizeAccess($request);
+
         $search = trim($request->input('search', ''));
         $filter = $request->input('filter', 'active');
 
@@ -68,6 +78,8 @@ class ProductionStatusController extends Controller
 
     public function trees(Request $request)
     {
+        $this->authorizeAccess($request);
+
         $woId = $request->input('work_order_id');
         $lineId = $request->input('print_order_line_id');
 
@@ -150,6 +162,8 @@ class ProductionStatusController extends Controller
 
     public function exportXlsx(Request $request)
     {
+        $this->authorizeAccess($request);
+
         $search = trim($request->input('search', ''));
         $filter = $request->input('filter', 'active');
 

@@ -204,6 +204,7 @@ class ScanController extends Controller
             'current_stage' => $tree->current_stage,
             'current_stage_label' => $tree->current_stage_label,
             'last_scan_at' => $tree->last_scan_at?->format('H:i:s'),
+            'heat_number' => $tree->heat_number ?? $tree->printOrderLine?->productionPlan?->heat_number ?? null,
         ];
     }
 }

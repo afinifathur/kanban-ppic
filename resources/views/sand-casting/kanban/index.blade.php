@@ -15,12 +15,12 @@
                     <span class="sm:hidden">ANTRIAN</span>
                 </button>
             @endif
-            @can('access_execution')
+            @if(!empty($canScan))
             <a href="{{ $scannerUrl }}" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all min-h-[36px] touch-manipulation" title="Buka Scanner {{ $stageLabel }}">
                 <i class="fas fa-qrcode text-xs"></i>
                 <span>SCAN</span>
             </a>
-            @endcan
+            @endif
             {{-- Tombol Cetak PDF (Hanya Desktop) --}}
             <button type="button"
                 id="btnKanbanPrintPdf"
@@ -154,11 +154,34 @@
                     BELUM SELESAI (READY)
                 </div>
             </div>
-            <div class="mt-1 flex items-baseline justify-between gap-4 font-mono">
-                <div class="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <div class="mt-1 flex items-baseline lg:items-center justify-between gap-4 font-mono">
+                <div class="text-xl sm:text-2xl font-black text-white tracking-tight shrink-0">
                     {{ number_format($totalBacklogPcs, 0, ',', '.') }} <span class="text-xs sm:text-sm font-bold text-slate-400">PCS</span>
                 </div>
-                <div class="text-xl sm:text-2xl font-black text-emerald-400 tracking-tight">
+
+                @if (!empty($todayOutput))
+                    <div class="hidden lg:flex flex-col items-center justify-center px-4 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/60 shadow-inner">
+                        <div class="text-[10px] font-bold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
+                            <i class="fas fa-chart-line text-[10px] text-emerald-400"></i>
+                            <span>{{ $todayOutput['title'] }}</span>
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-3 text-sm sm:text-base font-black text-slate-100 font-mono">
+                            <span class="flex items-center gap-1.5" title="Output Selesai (PCS)">
+                                <i class="fas fa-cube text-xs text-slate-400"></i>
+                                <span>{{ number_format($todayOutput['good_pcs'], 0, ',', '.') }}</span>
+                                <span class="text-[10px] font-bold text-slate-400">PCS</span>
+                            </span>
+                            <span class="text-slate-600 font-normal">|</span>
+                            <span class="flex items-center gap-1.5 text-emerald-400" title="Output Selesai (KG)">
+                                <i class="fas fa-weight-hanging text-xs text-emerald-400/80"></i>
+                                <span>{{ number_format($todayOutput['weight_kg'], $todayOutput['weight_kg'] == (int)$todayOutput['weight_kg'] ? 0 : 1, ',', '.') }}</span>
+                                <span class="text-[10px] font-bold text-emerald-300/80">KG</span>
+                            </span>
+                        </div>
+                    </div>
+                @endif
+
+                <div class="text-xl sm:text-2xl font-black text-emerald-400 tracking-tight shrink-0 text-right">
                     {{ number_format($totalBacklogKg, 0, ',', '.') }} <span class="text-xs sm:text-sm font-bold text-emerald-300/80">KG</span>
                 </div>
             </div>
@@ -322,9 +345,11 @@
                                                 <div class="font-bold text-slate-900 text-xs sm:text-sm leading-snug tracking-tight line-clamp-2">
                                                     {{ $card['item_name'] ?? '-' }}
                                                 </div>
+                                                @if($showQueueNumbers ?? true)
                                                 <span class="font-mono text-[11px] font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0" title="Nomor Antrian">
                                                     {{ $card['queue_number'] ?? '#--' }}
                                                 </span>
+                                                @endif
                                             </div>
 
                                             {{-- 2. Heat Number --}}
@@ -423,9 +448,11 @@
                                                 <div class="font-bold text-slate-900 text-xs sm:text-sm leading-snug tracking-tight line-clamp-2">
                                                     {{ $card['item_name'] ?? '-' }}
                                                 </div>
+                                                @if($showQueueNumbers ?? true)
                                                 <span class="font-mono text-[11px] font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0" title="Nomor Antrian">
                                                     {{ $card['queue_number'] ?? '#--' }}
                                                 </span>
+                                                @endif
                                             </div>
 
                                             {{-- 2. Heat Number --}}

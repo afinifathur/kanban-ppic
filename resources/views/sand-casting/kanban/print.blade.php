@@ -567,7 +567,9 @@
                                     <div class="item-card {{ !empty($item['is_urgent']) ? 'is-urgent' : '' }}">
                                         {{-- Row 1: Antrian #, Nama Item, Urgent tag --}}
                                         <div class="item-row-1">
+                                            @if($showQueueNumbers ?? true)
                                             <span class="queue-badge">{{ $item['queue_number'] ?? '#--' }}</span>
+                                            @endif
                                             <span class="item-title">{{ $item['item_name'] ?? '-' }}</span>
                                             @if(!empty($item['is_urgent']))
                                                 <span class="urgent-tag">URGENT</span>
