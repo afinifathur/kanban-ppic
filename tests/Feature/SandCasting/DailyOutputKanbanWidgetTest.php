@@ -328,4 +328,105 @@ class DailyOutputKanbanWidgetTest extends TestCase
         $nettoRes->assertStatus(200);
         $this->assertArrayNotHasKey('today_output', $nettoRes->json());
     }
+
+    public function test_spv_with_different_product_scope_sees_actual_stage_output_when_production_is_under_another_scope(): void
+    {
+        Cache::flush();
+
+        // SPV user has product_scope = FLANGE_BESI, but actual production plan today is FLANGE_STAINLESS
+        [$plan, $line] = $this->createPlanWithKtrLine([
+            'qty_good' => 100,
+            'unit_weight_kg' => 4.0,
+            'current_stage' => 'bubut_cnc',
+        ], [
+            'product_scope' => 'FLANGE_STAINLESS',
+            'item_name' => 'FLANGE STAINLESS 304 3"',
+        ]);
+
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_FINISH',
+            'input_qty' => 100,
+            'good_qty' => 90,
+            'defect_qty' => 10,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => Carbon::now('Asia/Jakarta'),
+            'executed_at' => Carbon::now('Asia/Jakarta'),
+            'operator_id' => $this->spvCncUser->id,
+        ]);
+
+        Cache::flush();
+
+        // SPV CNC must see 90 pcs / 360 kg even though user's product_scope is FLANGE_BESI
+        $zone1Output = $this->dashboardService->getTodayStageOutput('bubut_cnc', $this->spvCncUser);
+        $this->assertSame(90, $zone1Output['good_pcs']);
+        $this->assertEquals(360.0, (float) $zone1Output['weight_kg']);
+
+        $response = $this->actingAs($this->spvCncUser)
+            ->get('/sand-casting/kanban/stage/bubut-cnc');
+
+        $response->assertStatus(200);
+        $response->assertSee('HASIL CNC HARI INI');
+        $response->assertSee('90');
+        $response->assertSee('360');
+
+        // Sales user (scope null) must also see the same data from cache or fresh calculation
+        $roleSales = Role::firstOrCreate(['name' => 'sales']);
+        $permVisibility = Permission::firstOrCreate(['name' => 'access_production_visibility']);
+        $roleSales->givePermissionTo($permVisibility);
+
+        $salesUser = User::factory()->create([
+            'name' => 'Sales Staff',
+            'email' => 'sales_test@peroniks.com',
+            'product_scope' => null,
+        ]);
+        $salesUser->assignRole('sales');
+
+        $salesResponse = $this->actingAs($salesUser)
+            ->get('/sand-casting/kanban/stage/bubut-cnc');
+
+        $salesResponse->assertStatus(200);
+        $salesResponse->assertSee('HASIL CNC HARI INI');
+        $salesResponse->assertSee('90');
+        $salesResponse->assertSee('360');
+    }
+
+    public function test_spv_initial_load_does_not_pollute_unscoped_cache(): void
+    {
+        Cache::flush();
+
+        [$plan, $line] = $this->createPlanWithKtrLine([
+            'qty_good' => 50,
+            'unit_weight_kg' => 2.0,
+            'current_stage' => 'qc',
+        ], [
+            'product_scope' => 'FLANGE_STAINLESS',
+        ]);
+
+        $line->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_FINAL',
+            'input_qty' => 50,
+            'good_qty' => 45,
+            'defect_qty' => 5,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => Carbon::now('Asia/Jakarta'),
+            'executed_at' => Carbon::now('Asia/Jakarta'),
+            'operator_id' => $this->spvQcUser->id,
+        ]);
+
+        Cache::flush();
+
+        // SPV QC loads first, populating sc_dashboard_data_all_zone_1 cache
+        $spvRes = $this->actingAs($this->spvQcUser)
+            ->get('/sand-casting/kanban/stage/qc');
+        $spvRes->assertStatus(200);
+        $spvRes->assertSee('45');
+
+        // Admin loads next - must see 45 pcs from cached or fresh data, not 0
+        $adminRes = $this->actingAs($this->adminUser)
+            ->get('/sand-casting/kanban/stage/qc');
+        $adminRes->assertStatus(200);
+        $adminRes->assertSee('45');
+    }
 }

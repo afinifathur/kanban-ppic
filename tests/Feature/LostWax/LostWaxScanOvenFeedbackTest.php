@@ -243,4 +243,3 @@ class LostWaxScanOvenFeedbackTest extends TestCase
         $this->assertStringNotContainsString('motionarray', strtolower($content));
     }
 }
-

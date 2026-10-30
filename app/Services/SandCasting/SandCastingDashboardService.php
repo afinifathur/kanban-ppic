@@ -205,7 +205,7 @@ class SandCastingDashboardService
             'stage' => 'all',
         ];
 
-        // Specific access exception for adminqcflange@peroniks.com on Zone 1 throughput chart (Phase 5F)
+        // Specific access exception for adminqcflange@peroniks.com and SPV users on Zone 1 throughput chart
         if (self::shouldBypassZone1ThroughputScope($user)) {
             $reportFilters['scope'] = null;
         }
@@ -1470,7 +1470,15 @@ class SandCastingDashboardService
 
         $email = strtolower(trim((string) $user->email));
 
-        return $email === 'adminqcflange@peroniks.com';
+        if ($email === 'adminqcflange@peroniks.com') {
+            return true;
+        }
+
+        if ($user->hasRole('spv')) {
+            return true;
+        }
+
+        return false;
     }
 
     protected static ?bool $hasAutoNihilColumn = null;
