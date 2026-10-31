@@ -121,11 +121,15 @@ class SandCastingStageExecutionService
         }
 
         // If any confirmed execution has good_qty === 0, KTR is halted (no subsequent physical checkpoint can run)
-        $hasHalted = $line->relationLoaded('stageExecutions')
+        $hasConfirmedHalted = $line->relationLoaded('stageExecutions')
             ? $line->stageExecutions->contains(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0)
             : $line->stageExecutions()->where('status', SandCastingStageExecution::STATUS_CONFIRMED)->where('good_qty', 0)->exists();
 
-        if ($hasHalted) {
+        if ($hasConfirmedHalted) {
+            return null;
+        }
+
+        if ($this->quantityResolver->resolveEffectiveInputQty($line, $line->current_stage) <= 0) {
             return null;
         }
 

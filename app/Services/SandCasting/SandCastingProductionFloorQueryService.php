@@ -187,9 +187,16 @@ class SandCastingProductionFloorQueryService
         }
 
         // Check if halted anywhere in execution chain
-        $haltedExec = $line->stageExecutions
+        $hasPendingQc = $line->stageExecutions->contains(
+            fn ($e) => $e->status === SandCastingStageExecution::STATUS_WAITING_QC
+        );
+        if ($hasPendingQc) {
+            return SandCastingStageExecution::STATUS_WAITING_QC;
+        }
+
+        $confirmedHaltedExec = $line->stageExecutions
             ->firstWhere(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0);
-        if ($haltedExec) {
+        if ($confirmedHaltedExec || ($currentInputQty !== null && $currentInputQty <= 0)) {
             return self::STATUS_HALTED;
         }
 
@@ -338,7 +345,8 @@ class SandCastingProductionFloorQueryService
                     ($card['heat_number'] ?? '').' '.
                     ($card['production_code'] ?? '').' '.
                     ($card['item_name'] ?? '').' '.
-                    ($card['customer'] ?? '')
+                    ($card['customer'] ?? '').' '.
+                    (! empty($card['has_pending_qc']) ? 'menunggu verifikasi qc pending' : '')
                 );
                 if (! str_contains($haystack, $search)) {
                     return false;
@@ -435,43 +443,89 @@ class SandCastingProductionFloorQueryService
             return null;
         }
 
-        // Check if KTR is halted anywhere in execution chain (confirmed with good_qty === 0)
-        $haltedExec = $line->stageExecutions
-            ->firstWhere(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0);
+        // Check if there are any defect reports pending QC verification across the execution chain
+        $hasPendingQc = $line->stageExecutions->contains(
+            fn ($e) => $e->status === SandCastingStageExecution::STATUS_WAITING_QC
+        );
 
-        if ($haltedExec) {
-            $currentInputQty = (int) $haltedExec->input_qty;
+        // Check if KTR is halted anywhere in execution chain with confirmed zero good quantity
+        $confirmedHaltedExec = $line->stageExecutions->firstWhere(
+            fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0
+        );
+
+        $currentInputQty = $this->resolveCurrentInputQty($line);
+
+        // KONDISI C: Verifikasi QC selesai (no pending QC), dan seluruh kuantitas NG (0 PCS remaining)
+        if (! $hasPendingQc && ($confirmedHaltedExec || ($currentInputQty !== null && $currentInputQty <= 0) || (int) $line->qty_good <= 0)) {
+            $execForData = $confirmedHaltedExec ?? $line->stageExecutions->last();
+            $resolvedInput = $currentInputQty ?? ($execForData ? (int) $execForData->input_qty : 0);
             $displayStage = $line->current_stage;
             $displayBucket = self::BUCKET_HALTED;
             $displayStatus = self::STATUS_HALTED;
-            $activeChkCode = $haltedExec->checkpoint_code;
+            $activeChkCode = $execForData?->checkpoint_code;
             $activeChkStatus = self::STATUS_HALTED;
-            $activeExec = $haltedExec;
-            $inputQty = $currentInputQty;
+            $activeExec = $execForData;
+            $inputQty = $resolvedInput;
             $goodQty = 0;
-            $defectQty = (int) $haltedExec->defect_qty;
+            $defectQty = $execForData ? (int) $execForData->defect_qty : 0;
             $effectiveQty = 0;
-        } else {
+            $hasPendingQcFlag = false;
+        }
+        // KONDISI A & D: Terdapat laporan kerusakan yang berstatus WAITING_QC (belum selesai diverifikasi Admin QC)
+        elseif ($hasPendingQc) {
+            $pendingExec = $line->stageExecutions->where('status', SandCastingStageExecution::STATUS_WAITING_QC)->last();
+            $activeExec = $line->stageExecutions->last();
+            $activeCheckpoint = $this->executionService->resolveActiveCheckpoint($line);
+            $chkCode = $activeCheckpoint['code'] ?? $pendingExec?->checkpoint_code ?? $activeExec?->checkpoint_code;
+
+            $displayStage = $line->current_stage;
+            $displayBucket = self::BUCKET_READY; // Tetap tampil di antrean aktif Kanban
+            $inputQty = $currentInputQty ?? (int) $line->qty_good;
+            $goodQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $line->current_stage);
+            $defectQty = (int) ($line->stageExecutions->where('stage', $line->current_stage)->sum('defect_qty'));
+            if ($defectQty === 0 && $pendingExec) {
+                $defectQty = (int) $pendingExec->defect_qty;
+            }
+            $effectiveQty = max(0, $inputQty);
+
+            // Jika seluruh kuantitas sementara adalah 0 PCS, status kartu WAITING_QC (tidak siap diproses operator)
+            // Jika masih ada sisa kuantitas OK (> 0 PCS), status kartu READY namun memiliki penanda has_pending_qc
+            $displayStatus = $effectiveQty <= 0 ? 'WAITING_QC' : self::STATUS_READY;
+            $activeChkCode = $chkCode;
+            $activeChkStatus = $effectiveQty <= 0 ? 'WAITING_QC' : self::STATUS_READY;
+            $hasPendingQcFlag = true;
+        }
+        // KONDISI B: Verifikasi selesai (no pending QC), masih ada kuantitas OK (> 0 PCS), atau kartu normal
+        else {
             $activeCheckpoint = $this->executionService->resolveActiveCheckpoint($line);
             if ($activeCheckpoint === null) {
                 return null;
             }
 
             $chkCode = $activeCheckpoint['code'];
-            $currentInputQty = $this->resolveCurrentInputQty($line);
 
             // Latest execution on this line (if any)
             $activeExec = $line->stageExecutions->last();
 
-            $displayStage = $line->current_stage;
-            $displayBucket = self::BUCKET_READY;
-            $displayStatus = self::STATUS_READY;
-            $activeChkCode = $chkCode;
-            $activeChkStatus = self::STATUS_READY;
             $inputQty = $currentInputQty ?? (int) $line->qty_good;
             $goodQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $line->current_stage);
             $defectQty = (int) ($line->stageExecutions->where('stage', $line->current_stage)->sum('defect_qty'));
             $effectiveQty = $inputQty;
+
+            if ($effectiveQty <= 0) {
+                $displayStage = $line->current_stage;
+                $displayBucket = self::BUCKET_HALTED;
+                $displayStatus = self::STATUS_HALTED;
+                $activeChkCode = $chkCode;
+                $activeChkStatus = self::STATUS_HALTED;
+            } else {
+                $displayStage = $line->current_stage;
+                $displayBucket = self::BUCKET_READY;
+                $displayStatus = self::STATUS_READY;
+                $activeChkCode = $chkCode;
+                $activeChkStatus = self::STATUS_READY;
+            }
+            $hasPendingQcFlag = false;
         }
 
         $size = $line->castingOrderLine?->size ?? $line->productionPlan?->size;
@@ -505,6 +559,7 @@ class SandCastingProductionFloorQueryService
             'display_stage' => $displayStage,
             'display_bucket' => $displayBucket,
             'display_status' => $displayStatus,
+            'has_pending_qc' => $hasPendingQcFlag,
             'active_checkpoint' => $activeChkCode,
             'execution_status' => $activeChkStatus,
             'is_urgent' => (bool) $line->is_urgent,
@@ -528,12 +583,17 @@ class SandCastingProductionFloorQueryService
             return null;
         }
 
-        // Check if KTR is halted in previous stage
+        // Check if KTR is confirmed halted in previous stage
         $haltedExec = $line->stageExecutions
             ->firstWhere(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0);
 
         if ($haltedExec) {
             // Halted items in previous stage will NOT arrive at targetStage
+            return null;
+        }
+
+        $effectiveQty = $this->quantityResolver->resolveEffectiveGoodQty($line, $line->current_stage);
+        if ($effectiveQty <= 0) {
             return null;
         }
 
@@ -912,6 +972,7 @@ class SandCastingProductionFloorQueryService
                     $card !== null &&
                     $card['display_stage'] === $canonicalStage &&
                     $card['display_bucket'] === self::BUCKET_READY &&
+                    $card['qty'] > 0 &&
                     (int) $card['line_number'] === (int) $lineNumber
                 ) {
                     $readyItems[] = [

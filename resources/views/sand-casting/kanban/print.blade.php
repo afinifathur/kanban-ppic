@@ -563,6 +563,9 @@
                                     @php
                                         $item = $readyByLine[$l][$r];
                                         $agingInfo = $getAgingBadge($item['aging'] ?? null);
+                                        $itemQty = (int) ($item['qty'] ?? 0);
+                                        $itemWeight = (float) ($item['total_weight_kg'] ?? 0.0);
+                                        $showPendingQcWarning = !empty($item['has_pending_qc']) && $itemQty === 0 && abs($itemWeight) < 0.0001;
                                     @endphp
                                     <div class="item-card {{ !empty($item['is_urgent']) ? 'is-urgent' : '' }}">
                                         {{-- Row 1: Antrian #, Nama Item, Urgent tag --}}
@@ -575,6 +578,14 @@
                                                 <span class="urgent-tag">URGENT</span>
                                             @endif
                                         </div>
+
+                                        @if($showPendingQcWarning)
+                                        <div style="margin: 2px 0;">
+                                            <span style="display: inline-block; font-size: 7.5px; font-weight: 900; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; padding: 1px 3px; border-radius: 2px; text-transform: uppercase;">
+                                                MENUNGGU VERIFIKASI QC
+                                            </span>
+                                        </div>
+                                        @endif
 
                                         {{-- Row 2: KTR, Heat, SPK --}}
                                         <div class="item-row-2">
