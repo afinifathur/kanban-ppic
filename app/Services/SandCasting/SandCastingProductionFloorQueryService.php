@@ -186,14 +186,6 @@ class SandCastingProductionFloorQueryService
             return self::STATUS_COMPLETED;
         }
 
-        // Check if halted anywhere in execution chain
-        $hasPendingQc = $line->stageExecutions->contains(
-            fn ($e) => $e->status === SandCastingStageExecution::STATUS_WAITING_QC
-        );
-        if ($hasPendingQc) {
-            return SandCastingStageExecution::STATUS_WAITING_QC;
-        }
-
         $confirmedHaltedExec = $line->stageExecutions
             ->firstWhere(fn ($e) => $e->status === SandCastingStageExecution::STATUS_CONFIRMED && $e->good_qty === 0);
         if ($confirmedHaltedExec || ($currentInputQty !== null && $currentInputQty <= 0)) {
