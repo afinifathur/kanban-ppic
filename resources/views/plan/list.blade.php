@@ -238,10 +238,10 @@
                                             <i class="fas fa-edit"></i>
                                         </a>
                                         @php
-                                            $isFrozen = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists();
+                                            $isFrozen = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->castingOrderLines()->exists() || $plan->sandCastingResultLines()->exists() || $plan->items()->exists();
                                         @endphp
                                         @if($isFrozen)
-                                            <span class="text-gray-300 cursor-not-allowed" title="{{ $plan->is_closed ? 'Rencana sudah ditutup dan tidak dapat dihapus.' : ($plan->printOrderLines()->exists() ? 'Rencana sudah memiliki SPK cetak dan tidak dapat dihapus.' : 'Rencana sudah memiliki data produksi dan tidak dapat dihapus.') }}">
+                                            <span class="text-gray-300 cursor-not-allowed" title="{{ $plan->is_closed ? 'Rencana sudah ditutup dan tidak dapat dihapus.' : ($plan->printOrderLines()->exists() ? 'Rencana sudah memiliki SPK cetak dan tidak dapat dihapus.' : (($plan->castingOrderLines()->exists() || $plan->sandCastingResultLines()->exists()) ? 'Rencana sudah memiliki Perintah Cor atau Hasil Cor dan tidak dapat dihapus.' : 'Rencana sudah memiliki data produksi dan tidak dapat dihapus.')) }}">
                                                 <i class="fas fa-trash"></i>
                                             </span>
                                         @else

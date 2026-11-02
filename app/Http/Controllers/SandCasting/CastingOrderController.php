@@ -37,13 +37,42 @@ class CastingOrderController extends Controller
         $uniqueCustomers = $uniqueCustomersQuery->distinct()->orderBy('customer')->pluck('customer');
 
         // 2. Rencana Cor (Sand Casting Plan Items)
+        $committedSubquerySql = "COALESCE((
+            SELECT SUM(
+                CASE
+                    WHEN o.status IN ('DRAFT', 'ISSUED') THEN l.qty_ordered
+                    WHEN o.status = 'PARTIALLY_COMPLETED' THEN COALESCE((
+                        SELECT SUM(r.qty_good)
+                        FROM sand_casting_casting_result_lines r
+                        WHERE r.sand_casting_casting_order_line_id = l.id
+                    ), 0)
+                    WHEN o.status = 'COMPLETED' THEN (
+                        CASE
+                            WHEN COALESCE((
+                                SELECT SUM(r.qty_good)
+                                FROM sand_casting_casting_result_lines r
+                                WHERE r.sand_casting_casting_order_line_id = l.id
+                            ), 0) > l.qty_ordered THEN (
+                                SELECT SUM(r.qty_good)
+                                FROM sand_casting_casting_result_lines r
+                                WHERE r.sand_casting_casting_order_line_id = l.id
+                            )
+                            ELSE l.qty_ordered
+                        END
+                    )
+                    ELSE 0
+                END
+            )
+            FROM sand_casting_casting_order_lines l
+            JOIN sand_casting_casting_orders o ON l.sand_casting_casting_order_id = o.id
+            WHERE l.production_plan_id = production_plans.id
+              AND o.status IN ('DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED')
+        ), 0)";
+
         $plansQuery = ProductionPlan::query()
             ->where('production_domain', ProductionPlan::DOMAIN_SAND_CASTING)
-            ->withSum(['castingOrderLines as qty_casting_scheduled' => function ($query) {
-                $query->whereHas('castingOrder', function ($q) {
-                    $q->whereIn('status', ['DRAFT', 'ISSUED']);
-                });
-            }], 'qty_ordered');
+            ->select('production_plans.*')
+            ->selectRaw("{$committedSubquerySql} as qty_casting_scheduled");
 
         if ($isPpic && $scope) {
             $plansQuery->where('product_scope', $scope);
@@ -69,14 +98,7 @@ class CastingOrderController extends Controller
         } else {
             // Default: 'active'
             $plansQuery->where('is_closed', false);
-
-            $subquery = DB::table('sand_casting_casting_order_lines')
-                ->join('sand_casting_casting_orders', 'sand_casting_casting_order_lines.sand_casting_casting_order_id', '=', 'sand_casting_casting_orders.id')
-                ->whereColumn('sand_casting_casting_order_lines.production_plan_id', 'production_plans.id')
-                ->whereIn('sand_casting_casting_orders.status', ['DRAFT', 'ISSUED'])
-                ->selectRaw('COALESCE(SUM(sand_casting_casting_order_lines.qty_ordered), 0)');
-
-            $plansQuery->whereRaw('qty_planned > ('.$subquery->toSql().')', $subquery->getBindings());
+            $plansQuery->whereRaw("qty_planned > ({$committedSubquerySql})");
         }
 
         $plans = $plansQuery->orderBy('id', 'desc')
@@ -84,7 +106,7 @@ class CastingOrderController extends Controller
             ->withQueryString();
 
         // 3. Dokumen Perintah Cor (Casting Orders)
-        $castingOrdersQuery = SandCastingCastingOrder::with(['creator', 'lines']);
+        $castingOrdersQuery = SandCastingCastingOrder::with(['creator', 'lines.productionPlan', 'lines.resultLines']);
 
         if ($isPpic && $scope) {
             $castingOrdersQuery->whereHas('lines.productionPlan', function ($q) use ($scope) {
@@ -94,6 +116,14 @@ class CastingOrderController extends Controller
 
         if ($request->filled('casting_order_number')) {
             $castingOrdersQuery->where('casting_order_number', 'like', '%'.$request->casting_order_number.'%');
+        }
+
+        if ($request->filled('order_status')) {
+            $castingOrdersQuery->where('status', $request->order_status);
+        }
+
+        if ($request->filled('scheduled_date')) {
+            $castingOrdersQuery->whereDate('scheduled_date', $request->scheduled_date);
         }
 
         if ($request->filled('search')) {
@@ -119,12 +149,15 @@ class CastingOrderController extends Controller
             $activeTab = $request->query('orders_page') ? 'orders' : 'plans';
         }
 
+        $customerCategoryMap = \App\Models\Customer::getCategoryMap();
+
         return view('sand-casting.casting-orders.plans', compact(
             'plans',
             'castingOrders',
             'activeTab',
             'uniqueCodes',
-            'uniqueCustomers'
+            'uniqueCustomers',
+            'customerCategoryMap'
         ));
     }
 
@@ -181,8 +214,16 @@ class CastingOrderController extends Controller
 
         $date = $request->input('scheduled_date', date('Y-m-d'));
         $castingOrderNumber = $this->generateNextCastingOrderNumber($date);
+        $selectedQtyMap = is_array($request->input('selected_qty')) ? $request->input('selected_qty') : [];
+        $selectedLineMap = is_array($request->input('selected_line')) ? $request->input('selected_line') : [];
 
-        return view('sand-casting.casting-orders.create', compact('plans', 'castingOrderNumber', 'date'));
+        return view('sand-casting.casting-orders.create', compact(
+            'plans',
+            'castingOrderNumber',
+            'date',
+            'selectedQtyMap',
+            'selectedLineMap'
+        ));
     }
 
     /**
@@ -281,6 +322,7 @@ class CastingOrderController extends Controller
             'items' => 'required|array|min:1',
             'items.*.production_plan_id' => 'required|integer|exists:production_plans,id',
             'items.*.qty_ordered' => 'required|integer|min:1',
+            'items.*.line_number' => 'nullable|integer|min:1|max:4',
             'items.*.notes' => 'nullable|string|max:255',
         ]);
 
@@ -319,8 +361,21 @@ class CastingOrderController extends Controller
             foreach ($request->items as $itemData) {
                 $plan = ProductionPlan::findOrFail($itemData['production_plan_id']);
 
+                $resolvedLine = ! empty($itemData['line_number'])
+                    ? (int) $itemData['line_number']
+                    : (int) ($plan->line_number ?: 1);
+
+                if ($resolvedLine < 1 || $resolvedLine > 4) {
+                    $resolvedLine = 1;
+                }
+
+                if ((int) $plan->line_number !== $resolvedLine) {
+                    $plan->update(['line_number' => $resolvedLine]);
+                }
+
                 $order->lines()->create([
                     'production_plan_id' => $plan->id,
+                    'line_number' => $resolvedLine,
                     'qty_ordered' => $itemData['qty_ordered'],
                     'code' => $plan->code,
                     'customer' => $plan->customer,
@@ -335,6 +390,7 @@ class CastingOrderController extends Controller
         });
 
         return redirect()->route('sand-casting.casting-orders.show', $castingOrder)
+            ->with('clear_pcor_selection', true)
             ->with('success', 'Dokumen Perintah Cor '.$castingOrder->casting_order_number.' berhasil dibuat.');
     }
 
@@ -344,7 +400,7 @@ class CastingOrderController extends Controller
     public function show(SandCastingCastingOrder $castingOrder)
     {
         $this->authorizeCastingOrder($castingOrder);
-        $castingOrder->load(['creator', 'lines.productionPlan']);
+        $castingOrder->load(['creator', 'lines.productionPlan', 'lines.resultLines']);
 
         return view('sand-casting.casting-orders.show', compact('castingOrder'));
     }
@@ -399,6 +455,7 @@ class CastingOrderController extends Controller
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|exists:sand_casting_casting_order_lines,id',
             'items.*.qty_ordered' => 'required|integer|min:1',
+            'items.*.line_number' => 'nullable|integer|min:1|max:4',
             'items.*.notes' => 'nullable|string|max:255',
         ]);
 
@@ -411,19 +468,33 @@ class CastingOrderController extends Controller
 
             foreach ($request->items as $itemData) {
                 $line = $castingOrder->lines()->findOrFail($itemData['id']);
-                $plan = $line->productionPlan;
+                $plan = $line->productionPlan ? ProductionPlan::lockForUpdate()->find($line->production_plan_id) : null;
 
                 if ($plan) {
-                    $otherOrdersSum = (int) $plan->castingOrderLines()
+                    $otherCommitted = (int) $plan->castingOrderLines()
                         ->where('id', '!=', $line->id)
+                        ->with(['castingOrder', 'resultLines'])
                         ->whereHas('castingOrder', function ($q) {
-                            $q->whereIn('status', ['DRAFT', 'ISSUED']);
+                            $q->whereIn('status', ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED']);
                         })
-                        ->sum('qty_ordered');
+                        ->get()
+                        ->sum(function ($l) {
+                            $st = $l->castingOrder ? $l->castingOrder->status : null;
+                            $g = (int) $l->resultLines->sum('qty_good');
+                            $ord = (int) $l->qty_ordered;
+                            if (in_array($st, ['DRAFT', 'ISSUED'], true)) return $ord;
+                            if ($st === 'PARTIALLY_COMPLETED') return $g;
+                            if ($st === 'COMPLETED') return max($ord, $g);
+                            return 0;
+                        });
 
-                    $maxAllowed = max(0, $plan->qty_planned - $otherOrdersSum);
+                    $maxAllowed = max(0, $plan->qty_planned - $otherCommitted);
                     if ($itemData['qty_ordered'] > $maxAllowed) {
                         abort(422, 'Kuantitas untuk '.$line->code.' melebihi kuota rencana (Maks: '.$maxAllowed.' pcs).');
+                    }
+
+                    if (! empty($itemData['line_number']) && (int) $plan->line_number !== (int) $itemData['line_number']) {
+                        $plan->update(['line_number' => (int) $itemData['line_number']]);
                     }
                 }
 
@@ -467,8 +538,11 @@ class CastingOrderController extends Controller
         }
 
         if ($targetStatus === 'DRAFT') {
-            if ($castingOrder->status === 'ISSUED') {
-                return back()->with('error', 'Dokumen yang sudah diterbitkan tidak dapat dikembalikan ke DRAFT.');
+            if ($castingOrder->status !== 'ISSUED') {
+                return back()->with('error', 'Hanya dokumen ISSUED yang dapat dikembalikan ke DRAFT.');
+            }
+            if ($castingOrder->hasRecordedOutcomes()) {
+                return back()->with('error', 'Dokumen yang sudah memiliki hasil cor aktual tidak dapat dikembalikan ke DRAFT.');
             }
         }
 
@@ -483,9 +557,100 @@ class CastingOrderController extends Controller
     public function print(SandCastingCastingOrder $castingOrder)
     {
         $this->authorizeCastingOrder($castingOrder);
-        $castingOrder->load(['creator', 'lines.productionPlan']);
+        $castingOrder->load(['creator', 'lines.productionPlan', 'lines.resultLines']);
 
-        return view('sand-casting.casting-orders.print', compact('castingOrder'));
+        $printableLines = $castingOrder->lines
+            ->filter(fn ($line) => $line->qty_remaining_to_cast > 0)
+            ->values();
+
+        $customerCategoryMap = \App\Models\Customer::getCategoryMap();
+        $balanceSummary = $this->buildPrintBalanceSummary($printableLines, $customerCategoryMap);
+        $printedAt = now();
+
+        return view('sand-casting.casting-orders.print', compact(
+            'castingOrder',
+            'printableLines',
+            'balanceSummary',
+            'printedAt'
+        ));
+    }
+
+    /**
+     * Build category (LOCAL / EXPORT / UNCLASSIFIED) and Line (1..4) balance summary
+     * strictly from printable Outstanding lines (qty_remaining_to_cast > 0).
+     */
+    public function buildPrintBalanceSummary(iterable $printableLines, ?array $customerCategoryMap = null): array
+    {
+        $categoryMap = $customerCategoryMap ?? \App\Models\Customer::getCategoryMap();
+
+        $categories = [
+            \App\Models\Customer::CATEGORY_LOCAL => ['pcs' => 0, 'kg' => 0.0],
+            \App\Models\Customer::CATEGORY_EXPORT => ['pcs' => 0, 'kg' => 0.0],
+            \App\Models\Customer::CATEGORY_UNCLASSIFIED => ['pcs' => 0, 'kg' => 0.0],
+        ];
+
+        $lines = [
+            1 => ['pcs' => 0, 'kg' => 0.0],
+            2 => ['pcs' => 0, 'kg' => 0.0],
+            3 => ['pcs' => 0, 'kg' => 0.0],
+            4 => ['pcs' => 0, 'kg' => 0.0],
+        ];
+
+        $printedTotalPcs = 0;
+        $printedTotalKg = 0.0;
+
+        foreach ($printableLines as $line) {
+            $qtyOutstanding = (int) $line->qty_remaining_to_cast;
+            if ($qtyOutstanding <= 0) {
+                continue;
+            }
+
+            $unitWeight = $line->productionPlan ? (float) ($line->productionPlan->weight ?? 0) : 0.0;
+            $subtotalKg = $qtyOutstanding * $unitWeight;
+
+            $printedTotalPcs += $qtyOutstanding;
+            $printedTotalKg += $subtotalKg;
+
+            $customerName = $line->customer ?: ($line->productionPlan?->customer ?? '');
+            $category = \App\Models\Customer::resolveCategory($customerName, $categoryMap);
+            if (! isset($categories[$category])) {
+                $category = \App\Models\Customer::CATEGORY_UNCLASSIFIED;
+            }
+            $categories[$category]['pcs'] += $qtyOutstanding;
+            $categories[$category]['kg'] += $subtotalKg;
+
+            $lineNo = $line->line_number;
+            if ($lineNo !== null && isset($lines[(int) $lineNo])) {
+                $lines[(int) $lineNo]['pcs'] += $qtyOutstanding;
+                $lines[(int) $lineNo]['kg'] += $subtotalKg;
+            }
+        }
+
+        foreach ($categories as $k => $val) {
+            $categories[$k]['kg'] = round($val['kg'], 2);
+        }
+        foreach ($lines as $k => $val) {
+            $lines[$k]['kg'] = round($val['kg'], 2);
+        }
+
+        $categoryTotalPcs = array_sum(array_column($categories, 'pcs'));
+        $categoryTotalKg = round(array_sum(array_column($categories, 'kg')), 2);
+
+        $lineTotalPcs = array_sum(array_column($lines, 'pcs'));
+        $lineTotalKg = round(array_sum(array_column($lines, 'kg')), 2);
+
+        $printedTotalKg = round($printedTotalKg, 2);
+
+        return [
+            'categories' => $categories,
+            'category_total_pcs' => $categoryTotalPcs,
+            'category_total_kg' => $categoryTotalKg,
+            'lines' => $lines,
+            'line_total_pcs' => $lineTotalPcs,
+            'line_total_kg' => $lineTotalKg,
+            'printed_total_pcs' => $printedTotalPcs,
+            'printed_total_kg' => $printedTotalKg,
+        ];
     }
 
     /**
@@ -519,6 +684,7 @@ class CastingOrderController extends Controller
         $request->validate([
             'production_plan_id' => 'required|integer|exists:production_plans,id',
             'qty_ordered' => 'required|integer|min:1',
+            'line_number' => 'nullable|integer|min:1|max:4',
             'notes' => 'nullable|string|max:255',
         ]);
 
@@ -552,6 +718,10 @@ class CastingOrderController extends Controller
             $remaining = $plan->qty_remaining_casting_scheduled;
             if ($request->qty_ordered > $remaining) {
                 return back()->with('error', 'Kuantitas melebihi sisa yang belum diperintah (Maks: '.number_format($remaining).' pcs).');
+            }
+
+            if ($request->filled('line_number') && (int) $plan->line_number !== (int) $request->line_number) {
+                $plan->update(['line_number' => (int) $request->line_number]);
             }
 
             $castingOrder->lines()->create([

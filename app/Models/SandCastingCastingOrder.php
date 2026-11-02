@@ -65,4 +65,31 @@ class SandCastingCastingOrder extends Model
     {
         return (int) $this->lines->sum('qty_ordered');
     }
+
+    public function getQtyCastGoodAttribute(): int
+    {
+        return (int) $this->lines->sum('qty_cast_good');
+    }
+
+    public function getQtyCastRejectAttribute(): int
+    {
+        return (int) $this->lines->sum('qty_cast_reject');
+    }
+
+    public function getQtyOutstandingAttribute(): int
+    {
+        return (int) $this->lines->sum('qty_remaining_to_cast');
+    }
+
+    public function getProgressPercentAttribute(): float
+    {
+        $ordered = $this->qty_ordered;
+        if ($ordered <= 0) {
+            return 0.0;
+        }
+
+        $fulfilled = max(0, $ordered - $this->qty_outstanding);
+
+        return min(100.0, round(($fulfilled / $ordered) * 100, 1));
+    }
 }

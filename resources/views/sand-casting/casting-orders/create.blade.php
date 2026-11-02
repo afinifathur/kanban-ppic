@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('top_bar')
+    @php
+        $selectionStorageKey = 'sand-casting-casting-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
+    @endphp
     <div class="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-4">
         <div>
             <h1 class="text-lg font-bold text-slate-800 leading-tight">Buat Dokumen Perintah Cor</h1>
@@ -41,6 +44,9 @@
 @endsection
 
 @section('content')
+    @php
+        $selectionStorageKey = 'sand-casting-casting-orders-selection-'.auth()->id().'-'.(auth()->user()->product_scope ?: 'all');
+    @endphp
     <div class="max-w-6xl mx-auto space-y-6">
         <form action="{{ route('sand-casting.casting-orders.store') }}" method="POST" class="space-y-6">
             @csrf
@@ -93,15 +99,18 @@
                     <table class="min-w-full border-collapse border border-slate-200 text-xs">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
                             <tr>
-                                <th class="border border-slate-200 p-3 text-center w-12">No</th>
+                                <th class="border border-slate-200 p-3 text-center w-10">No</th>
                                 <th class="border border-slate-200 p-3 text-left">Kode Cust</th>
                                 <th class="border border-slate-200 p-3 text-left">Customer</th>
                                 <th class="border border-slate-200 p-3 text-left">Nama Produk</th>
                                 <th class="border border-slate-200 p-3 text-center">Ukuran / AISI</th>
+                                <th class="border border-slate-200 p-3 text-center w-24">Line (1-4)</th>
                                 <th class="border border-slate-200 p-3 text-center">Qty Rencana</th>
-                                <th class="border border-slate-200 p-3 text-center">Qty Sudah Diperintah</th>
-                                <th class="border border-slate-200 p-3 text-center">Qty Sisa Dapat Diperintah</th>
-                                <th class="border border-slate-200 p-3 text-center w-36 bg-blue-50 text-blue-800">Qty Perintah</th>
+                                <th class="border border-slate-200 p-3 text-center">Sisa Kuota</th>
+                                <th class="border border-slate-200 p-3 text-center w-32 bg-blue-50 text-blue-800">Qty Perintah</th>
+                                <th class="border border-slate-200 p-3 text-center">Berat / Unit</th>
+                                <th class="border border-slate-200 p-3 text-center">Total Berat</th>
+                                <th class="border border-slate-200 p-3 text-left">Catatan Line</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
@@ -109,8 +118,16 @@
                                 @php
                                     $scheduled = (int) ($plan->qty_casting_scheduled ?? 0);
                                     $available = max(0, $plan->qty_planned - $scheduled);
-                                    $defaultQty = old("items.{$index}.qty_ordered", $available);
+                                    $passedQty = isset($selectedQtyMap[$plan->id]) ? (int) $selectedQtyMap[$plan->id] : $available;
+                                    $passedQty = max(1, min($available, $passedQty));
+                                    $passedLine = isset($selectedLineMap[$plan->id]) ? (int) $selectedLineMap[$plan->id] : (int) ($plan->line_number ?: 1);
+                                    if ($passedLine < 1 || $passedLine > 4) {
+                                        $passedLine = 1;
+                                    }
+                                    $defaultQty = old("items.{$index}.qty_ordered", $passedQty);
+                                    $defaultLine = (int) old("items.{$index}.line_number", $passedLine);
                                     $unitWeight = (float) ($plan->weight ?? 0);
+                                    $initialSubtotal = ((int) $defaultQty) * $unitWeight;
                                 @endphp
                                 <tr class="hover:bg-slate-50 transition">
                                     <td class="border border-slate-200 p-3 text-center font-mono text-slate-400">{{ $index + 1 }}</td>
@@ -123,11 +140,15 @@
                                     <td class="border border-slate-200 p-3 text-center font-mono text-slate-600">
                                         {{ $plan->size ?: '-' }} / {{ $plan->aisi ?: '-' }}
                                     </td>
-                                    <td class="border border-slate-200 p-3 text-center font-bold text-slate-900">{{ number_format($plan->qty_planned) }}</td>
-                                    <td class="border border-slate-200 p-3 text-center font-medium {{ $scheduled > 0 ? 'text-amber-600' : 'text-slate-400' }}">
-                                        {{ number_format($scheduled) }}
+                                    <td class="border border-slate-200 p-2 text-center">
+                                        <select name="items[{{ $index }}][line_number]" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-center text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500">
+                                            @for($ln = 1; $ln <= 4; $ln++)
+                                                <option value="{{ $ln }}" {{ $defaultLine === $ln ? 'selected' : '' }}>Line {{ $ln }}</option>
+                                            @endfor
+                                        </select>
                                     </td>
-                                    <td class="border border-slate-200 p-3 text-center font-bold text-emerald-600">
+                                    <td class="border border-slate-200 p-3 text-center font-bold text-slate-900">{{ number_format($plan->qty_planned) }}</td>
+                                    <td class="border border-slate-200 p-3 text-center font-bold text-emerald-600" data-remaining-qty="{{ $available }}">
                                         {{ number_format($available) }} pcs
                                     </td>
                                     <td class="border border-slate-200 p-2 bg-blue-50/40">
@@ -136,6 +157,18 @@
                                             min="1" max="{{ $available }}" required
                                             data-weight="{{ $unitWeight }}"
                                             class="qty-input w-full bg-white border border-blue-300 rounded-lg px-2.5 py-1.5 text-center text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-mono text-slate-500">
+                                        {{ $unitWeight > 0 ? number_format($unitWeight, 2).' kg' : '-' }}
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-mono font-bold text-emerald-700 row-subtotal-kg">
+                                        {{ $initialSubtotal > 0 ? number_format($initialSubtotal, 2).' kg' : '0.00 kg' }}
+                                    </td>
+                                    <td class="border border-slate-200 p-2">
+                                        <input type="text" name="items[{{ $index }}][notes]"
+                                            value="{{ old("items.{$index}.notes") }}"
+                                            placeholder="Catatan line..."
+                                            class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-500">
                                     </td>
                                 </tr>
                             @endforeach
@@ -158,9 +191,17 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const dateInput = document.getElementById('scheduled_date');
             const qtyInputs = document.querySelectorAll('.qty-input');
             const summaryPcs = document.getElementById('summary-total-pcs');
             const summaryKg = document.getElementById('summary-total-kg');
+
+            function formatKg(val) {
+                return Number(val || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+            }
 
             function recalculateTotals() {
                 let totalPcs = 0;
@@ -169,12 +210,44 @@
                 qtyInputs.forEach(input => {
                     const qty = parseInt(input.value) || 0;
                     const weight = parseFloat(input.getAttribute('data-weight')) || 0;
+                    const subtotal = qty * weight;
                     totalPcs += qty;
-                    totalKg += (qty * weight);
+                    totalKg += subtotal;
+
+                    const tr = input.closest('tr');
+                    if (tr) {
+                        const subtotalCell = tr.querySelector('.row-subtotal-kg');
+                        if (subtotalCell) {
+                            subtotalCell.textContent = formatKg(subtotal) + ' kg';
+                        }
+                    }
                 });
 
-                if (summaryPcs) summaryPcs.textContent = totalPcs.toLocaleString('id-ID') + ' pcs';
-                if (summaryKg) summaryKg.textContent = totalKg.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+                if (summaryPcs) summaryPcs.textContent = Number(totalPcs).toLocaleString('en-US') + ' pcs';
+                if (summaryKg) summaryKg.textContent = formatKg(totalKg) + ' kg';
+            }
+
+            if (dateInput) {
+                dateInput.addEventListener('change', function () {
+                    const selectedDate = dateInput.value;
+                    if (!selectedDate) return;
+
+                    axios.get('{{ route("sand-casting.casting-orders.create") }}', {
+                        params: {
+                            scheduled_date: selectedDate,
+                            plan_ids: {!! json_encode($plans->pluck('id')) !!}
+                        }
+                    }).then(function (response) {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(response.data, 'text/html');
+                        const newNumberInput = doc.querySelector('input[name="casting_order_number"]');
+                        if (newNumberInput) {
+                            document.querySelector('input[name="casting_order_number"]').value = newNumberInput.value;
+                        }
+                    }).catch(function (error) {
+                        console.error('Gagal mengambil nomor sequential dokumen.', error);
+                    });
+                });
             }
 
             qtyInputs.forEach(input => {

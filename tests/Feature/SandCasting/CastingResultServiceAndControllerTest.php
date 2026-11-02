@@ -243,7 +243,7 @@ class CastingResultServiceAndControllerTest extends TestCase
         ], $this->ppicUser->id);
     }
 
-    public function test_completed_order_can_receive_additional_outcomes_if_needed(): void
+    public function test_completed_order_is_rejected(): void
     {
         $plan = $this->createPlan();
 
@@ -261,7 +261,10 @@ class CastingResultServiceAndControllerTest extends TestCase
             'item_name' => $plan->item_name,
         ]);
 
-        $result = $this->service->recordResult([
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Perintah Cor PCOR-20260914-0004 sudah berstatus COMPLETED dan tidak dapat dialokasikan untuk Heat Number baru.');
+
+        $this->service->recordResult([
             'heat_number' => 'A213092601',
             'cast_date' => '2026-09-14',
         ], [
@@ -270,9 +273,6 @@ class CastingResultServiceAndControllerTest extends TestCase
                 'qty_good' => 100,
             ],
         ], $this->ppicUser->id);
-
-        $this->assertNotNull($result->id);
-        $this->assertEquals(100, $result->total_qty_good);
     }
 
     public function test_lost_wax_plan_is_strictly_rejected(): void

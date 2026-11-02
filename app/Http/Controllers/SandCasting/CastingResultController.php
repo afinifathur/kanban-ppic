@@ -88,7 +88,7 @@ class CastingResultController extends Controller
 
         $linesQuery = SandCastingCastingOrderLine::with(['castingOrder', 'productionPlan', 'resultLines'])
             ->whereHas('castingOrder', function ($q) {
-                $q->whereIn('status', ['ISSUED', 'COMPLETED']);
+                $q->whereIn('status', ['ISSUED', 'PARTIALLY_COMPLETED']);
             })
             ->whereHas('productionPlan', function ($q) {
                 $q->where('production_domain', \App\Models\ProductionPlan::DOMAIN_SAND_CASTING);
@@ -232,7 +232,7 @@ class CastingResultController extends Controller
 
         $linesQuery = SandCastingCastingOrderLine::with(['castingOrder', 'productionPlan', 'resultLines'])
             ->whereHas('castingOrder', function ($q) {
-                $q->whereIn('status', ['ISSUED', 'COMPLETED']);
+                $q->whereIn('status', ['ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED']);
             })
             ->whereHas('productionPlan', function ($q) {
                 $q->where('production_domain', \App\Models\ProductionPlan::DOMAIN_SAND_CASTING);

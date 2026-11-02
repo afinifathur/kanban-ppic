@@ -94,11 +94,29 @@ class ProductionPlan extends Model
             return (int) $this->attributes['qty_casting_scheduled'];
         }
 
-        return (int) $this->castingOrderLines()
+        $lines = $this->castingOrderLines()
+            ->with(['castingOrder', 'resultLines'])
             ->whereHas('castingOrder', function ($query) {
-                $query->whereIn('status', ['DRAFT', 'ISSUED']);
+                $query->whereIn('status', ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED']);
             })
-            ->sum('qty_ordered');
+            ->get();
+
+        $totalCommitted = 0;
+        foreach ($lines as $line) {
+            $status = $line->castingOrder ? $line->castingOrder->status : null;
+            $good = (int) $line->resultLines->sum('qty_good');
+            $ordered = (int) $line->qty_ordered;
+
+            if (in_array($status, ['DRAFT', 'ISSUED'], true)) {
+                $totalCommitted += $ordered;
+            } elseif ($status === 'PARTIALLY_COMPLETED') {
+                $totalCommitted += $good;
+            } elseif ($status === 'COMPLETED') {
+                $totalCommitted += max($ordered, $good);
+            }
+        }
+
+        return $totalCommitted;
     }
 
     public function getQtyRemainingCastingScheduledAttribute(): int

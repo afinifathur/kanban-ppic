@@ -86,6 +86,7 @@ Route::middleware(['auth'])->group(function () {
 
             Route::get('/customers', [\App\Http\Controllers\CustomerController::class, 'index'])->name('customers.index');
             Route::post('/customers', [\App\Http\Controllers\CustomerController::class, 'store'])->name('customers.store');
+            Route::put('/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'update'])->name('customers.update');
             Route::delete('/customers/{customer}', [\App\Http\Controllers\CustomerController::class, 'destroy'])->name('customers.destroy');
         });
 

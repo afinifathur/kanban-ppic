@@ -4,6 +4,7 @@ namespace App\Services\SandCasting;
 
 use App\Exceptions\DuplicateCastingResultException;
 use App\Jobs\SyncCastingResultToMasterDataJob;
+use App\Models\SandCastingCastingOrder;
 use App\Models\SandCastingCastingOrderLine;
 use App\Models\SandCastingCastingResult;
 use App\Models\SandCastingCastingResultLine;
@@ -158,7 +159,11 @@ class SandCastingCastingResultService
                     throw new InvalidArgumentException("Tidak dapat mencatat Hasil Cor pada Perintah Cor yang sudah dibatalkan ({$order->casting_order_number}).");
                 }
 
-                if (! in_array($order->status, ['ISSUED', 'COMPLETED'])) {
+                if ($order->status === 'COMPLETED') {
+                    throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} sudah berstatus COMPLETED dan tidak dapat dialokasikan untuk Heat Number baru.");
+                }
+
+                if (! in_array($order->status, ['ISSUED', 'PARTIALLY_COMPLETED'], true)) {
                     throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} tidak dalam status yang valid untuk pencatatan Hasil Cor.");
                 }
 
@@ -214,6 +219,7 @@ class SandCastingCastingResultService
             ]);
 
             // Create Result Lines & generate concurrency-safe Travelers
+            $affectedOrderIds = [];
             foreach ($validLines as $item) {
                 $travelerNumber = TravelerNumberGenerator::generateNext($castDate);
 
@@ -228,6 +234,17 @@ class SandCastingCastingResultService
                     'current_stage' => 'netto',
                     'notes' => $item['notes'],
                 ]);
+
+                if ($item['order_line']->sand_casting_casting_order_id) {
+                    $affectedOrderIds[] = (int) $item['order_line']->sand_casting_casting_order_id;
+                }
+            }
+
+            foreach (array_unique($affectedOrderIds) as $orderId) {
+                $orderModel = SandCastingCastingOrder::lockForUpdate()->find($orderId);
+                if ($orderModel) {
+                    $this->syncCastingOrderStatus($orderModel);
+                }
             }
 
             return $result->load(['lines.castingOrderLine.castingOrder', 'lines.productionPlan', 'recorder']);
@@ -489,7 +506,7 @@ class SandCastingCastingResultService
                 // Verify parent order status if changing order line
                 if (! $lineHasExecution && $newLineOrderLineId !== (int) $line->sand_casting_casting_order_line_id) {
                     $order = $orderLine->castingOrder;
-                    if (! $order || ! in_array($order->status, ['ISSUED', 'COMPLETED'], true)) {
+                    if (! $order || ! in_array($order->status, ['ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED'], true)) {
                         throw new InvalidArgumentException("Perintah Cor {$orderLine->code} tidak dalam status yang valid.");
                     }
                 }
@@ -564,6 +581,9 @@ class SandCastingCastingResultService
                     }
                 }
 
+                $oldOrderId = $line->castingOrderLine ? (int) $line->castingOrderLine->sand_casting_casting_order_id : null;
+                $newOrderId = (int) $orderLine->sand_casting_casting_order_id;
+
                 // Save Line Mutations (traveler_number and current_stage are strictly preserved)
                 $line->sand_casting_casting_order_line_id = $newLineOrderLineId;
                 $line->production_plan_id = $planId;
@@ -573,6 +593,13 @@ class SandCastingCastingResultService
                 $line->total_weight_kg = $newTotalWeight;
                 $line->notes = $newLineNotes !== '' ? $newLineNotes : null;
                 $line->save();
+
+                foreach (array_unique(array_filter([$oldOrderId, $newOrderId])) as $syncOrderId) {
+                    $orderModel = SandCastingCastingOrder::lockForUpdate()->find($syncOrderId);
+                    if ($orderModel) {
+                        $this->syncCastingOrderStatus($orderModel);
+                    }
+                }
             }
 
             return $result->load([
@@ -591,5 +618,43 @@ class SandCastingCastingResultService
         }
 
         return $updatedResult;
+    }
+
+    /**
+     * Synchronize the parent SandCastingCastingOrder status based on recorded outcomes across all lines.
+     */
+    public function syncCastingOrderStatus(SandCastingCastingOrder $order): void
+    {
+        if (in_array($order->status, ['DRAFT', 'CANCELLED'], true)) {
+            return;
+        }
+
+        $order->load('lines.resultLines');
+
+        if ($order->lines->isEmpty()) {
+            return;
+        }
+
+        $allCompleted = $order->lines->every(function (SandCastingCastingOrderLine $line) {
+            return $line->qty_remaining_to_cast <= 0;
+        });
+
+        $hasAnyOutcome = $order->lines->some(function (SandCastingCastingOrderLine $line) {
+            return $line->qty_cast_good > 0 || $line->qty_cast_reject > 0;
+        });
+
+        $newStatus = $order->status;
+        if ($allCompleted) {
+            $newStatus = 'COMPLETED';
+        } elseif ($hasAnyOutcome) {
+            $newStatus = 'PARTIALLY_COMPLETED';
+        } else {
+            $newStatus = 'ISSUED';
+        }
+
+        if ($newStatus !== $order->status) {
+            $order->status = $newStatus;
+            $order->save();
+        }
     }
 }

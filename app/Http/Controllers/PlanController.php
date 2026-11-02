@@ -513,7 +513,12 @@ class PlanController extends Controller
             abort(403, 'Unauthorized.');
         }
 
-        $isDomainLocked = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists() || $plan->status !== 'planning';
+        $isDomainLocked = $plan->is_closed
+            || $plan->printOrderLines()->exists()
+            || $plan->castingOrderLines()->exists()
+            || $plan->sandCastingResultLines()->exists()
+            || $plan->items()->exists()
+            || $plan->status !== 'planning';
 
         return view('plan.edit', compact('plan', 'isDomainLocked'));
     }
@@ -546,7 +551,12 @@ class PlanController extends Controller
 
         // Domain lock guard: prevent changing domain if transactions exist or plan is not in planning
         if (isset($data['production_domain']) && $data['production_domain'] !== $plan->production_domain) {
-            $hasTransactions = $plan->is_closed || $plan->printOrderLines()->exists() || $plan->items()->exists() || $plan->status !== 'planning';
+            $hasTransactions = $plan->is_closed
+                || $plan->printOrderLines()->exists()
+                || $plan->castingOrderLines()->exists()
+                || $plan->sandCastingResultLines()->exists()
+                || $plan->items()->exists()
+                || $plan->status !== 'planning';
             if ($hasTransactions) {
                 return back()->withInput()->with('error', 'Domain produksi tidak dapat diubah karena rencana produksi ini sudah memiliki transaksi atau telah dimulai.');
             }
@@ -579,6 +589,11 @@ class PlanController extends Controller
         // Guard A: Lost Wax Print Order Line exists (Freeze Point)
         if ($plan->printOrderLines()->exists()) {
             return back()->with('error', 'Tidak bisa menghapus rencana yang sudah memiliki SPK cetak.');
+        }
+
+        // Guard D: Sand Casting Order Line or Result Line exists
+        if ($plan->castingOrderLines()->exists() || $plan->sandCastingResultLines()->exists()) {
+            return back()->with('error', 'Tidak bisa menghapus rencana yang sudah memiliki Perintah Cor atau Hasil Cor.');
         }
 
         // Guard C: Legacy Cor ProductionItem exists

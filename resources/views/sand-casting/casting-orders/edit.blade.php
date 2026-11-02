@@ -1,16 +1,43 @@
 @extends('layouts.app')
 
 @section('top_bar')
+    @php
+        $initialTotalPcs = $castingOrder->lines->sum('qty_ordered');
+        $initialTotalKg = $castingOrder->lines->sum(function ($l) {
+            $w = $l->productionPlan ? (float) ($l->productionPlan->weight ?? 0) : 0;
+            return $l->qty_ordered * $w;
+        });
+    @endphp
     <div class="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-4">
         <div>
             <div class="flex items-center gap-3">
                 <h1 class="text-lg font-bold text-slate-800 leading-tight">Edit Draft Perintah Cor</h1>
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">DRAFT</span>
             </div>
-            <p class="text-gray-500 text-[10px]">Ubah kuantitas atau tambahkan item rencana baru ke dalam draft dokumen ini</p>
+            <p class="text-gray-500 text-[10px]">Ubah kuantitas, Line produksi (1–4), atau tambahkan item rencana baru ke dalam draft dokumen ini</p>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Live Summary Bar -->
+            <div class="bg-slate-800 text-white px-4 py-1.5 rounded-lg flex items-center gap-4 text-xs shadow-sm">
+                <div>
+                    <span class="text-slate-400">Item:</span>
+                    <span id="summary-item-count" class="font-bold text-amber-400 ml-1">{{ $castingOrder->lines->count() }}</span>
+                </div>
+                <div class="h-3 w-px bg-slate-600"></div>
+                <div>
+                    <span class="text-slate-400">Total Qty:</span>
+                    <span id="summary-total-pcs" class="font-bold text-emerald-400 ml-1">{{ number_format($initialTotalPcs) }}</span>
+                    <span class="text-[10px] text-slate-300">PCS</span>
+                </div>
+                <div class="h-3 w-px bg-slate-600"></div>
+                <div>
+                    <span class="text-slate-400">Total Berat:</span>
+                    <span id="summary-total-kg" class="font-bold text-sky-400 ml-1">{{ number_format($initialTotalKg, 2) }}</span>
+                    <span class="text-[10px] text-slate-300">KG</span>
+                </div>
+            </div>
+
             <a href="{{ route('sand-casting.casting-orders.show', $castingOrder) }}" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition">
                 <i class="fas fa-arrow-left"></i> Batal & Kembali
             </a>
@@ -93,8 +120,11 @@
                                 <th class="border border-slate-200 p-3 text-left">Customer</th>
                                 <th class="border border-slate-200 p-3 text-left">Nama Produk</th>
                                 <th class="border border-slate-200 p-3 text-center">Ukuran / AISI</th>
+                                <th class="border border-slate-200 p-3 text-center">Berat / Unit</th>
                                 <th class="border border-slate-200 p-3 text-center">Qty Rencana</th>
+                                <th class="border border-slate-200 p-3 text-center w-28 bg-amber-50 text-amber-800">Line (1–4)</th>
                                 <th class="border border-slate-200 p-3 text-center w-36 bg-blue-50 text-blue-800">Qty Perintah</th>
+                                <th class="border border-slate-200 p-3 text-center w-32 bg-emerald-50 text-emerald-800">Total Berat</th>
                                 <th class="border border-slate-200 p-3 text-left">Catatan Line</th>
                                 <th class="border border-slate-200 p-3 text-center w-16">Hapus</th>
                             </tr>
@@ -103,10 +133,14 @@
                             @foreach($castingOrder->lines as $index => $line)
                                 @php
                                     $plan = $line->productionPlan;
-                                    $otherSum = $plan ? (int) $plan->castingOrderLines()->where('id', '!=', $line->id)->whereHas('castingOrder', fn($q) => $q->whereIn('status', ['DRAFT', 'ISSUED']))->sum('qty_ordered') : 0;
+                                    $otherSum = $plan ? (int) $plan->castingOrderLines()->where('id', '!=', $line->id)->whereHas('castingOrder', fn($q) => $q->whereIn('status', ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED']))->sum('qty_ordered') : 0;
                                     $maxAllowed = $plan ? max(1, $plan->qty_planned - $otherSum) : 999999;
+                                    $unitWeight = $plan ? (float) ($plan->weight ?? 0) : 0;
+                                    $currentQty = (int) old("items.{$index}.qty_ordered", $line->qty_ordered);
+                                    $currentLine = (int) old("items.{$index}.line_number", $plan?->line_number ?: 1);
+                                    $initialRowWeight = $currentQty * $unitWeight;
                                 @endphp
-                                <tr class="hover:bg-slate-50 transition">
+                                <tr class="hover:bg-slate-50 transition item-row">
                                     <td class="border border-slate-200 p-3 text-center font-mono text-slate-400">{{ $index + 1 }}</td>
                                     <td class="border border-slate-200 p-3 font-mono font-bold text-blue-700">
                                         {{ $line->code }}
@@ -117,15 +151,31 @@
                                     <td class="border border-slate-200 p-3 text-center font-mono text-slate-600">
                                         {{ $line->size ?: '-' }} / {{ $line->aisi ?: '-' }}
                                     </td>
+                                    <td class="border border-slate-200 p-3 text-center font-mono text-slate-600">
+                                        {{ $unitWeight > 0 ? number_format($unitWeight, 2) . ' kg' : '-' }}
+                                    </td>
                                     <td class="border border-slate-200 p-3 text-center font-bold text-slate-900">
                                         {{ $plan ? number_format($plan->qty_planned) : '-' }}
                                     </td>
+                                    <td class="border border-slate-200 p-2 bg-amber-50/40">
+                                        <select name="items[{{ $index }}][line_number]"
+                                            class="w-full bg-white border border-amber-300 rounded-lg px-2 py-1 text-center text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                                            @for($l = 1; $l <= 4; $l++)
+                                                <option value="{{ $l }}" {{ $currentLine === $l ? 'selected' : '' }}>Line {{ $l }}</option>
+                                            @endfor
+                                        </select>
+                                    </td>
                                     <td class="border border-slate-200 p-2 bg-blue-50/40">
                                         <input type="number" name="items[{{ $index }}][qty_ordered]"
-                                            value="{{ old("items.{$index}.qty_ordered", $line->qty_ordered) }}"
+                                            value="{{ $currentQty }}"
                                             min="1" max="{{ $maxAllowed }}" required
-                                            class="w-full bg-white border border-blue-300 rounded-lg px-2 py-1 text-center text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            data-weight="{{ $unitWeight }}"
+                                            oninput="recalculateTotals()"
+                                            class="qty-input w-full bg-white border border-blue-300 rounded-lg px-2 py-1 text-center text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                         <div class="text-[9px] text-slate-400 text-center mt-0.5">Maks: {{ number_format($maxAllowed) }} pcs</div>
+                                    </td>
+                                    <td class="border border-slate-200 p-3 text-center font-mono font-bold text-emerald-700 bg-emerald-50/30 row-total-weight">
+                                        {{ number_format($initialRowWeight, 2) }} kg
                                     </td>
                                     <td class="border border-slate-200 p-2">
                                         <input type="text" name="items[{{ $index }}][notes]"
@@ -142,6 +192,14 @@
                                 </tr>
                             @endforeach
                         </tbody>
+                        <tfoot class="bg-slate-50 font-bold text-slate-800 border-t border-slate-200">
+                            <tr>
+                                <td colspan="8" class="border border-slate-200 p-3 text-right uppercase tracking-wider text-[11px]">Total Dokumen:</td>
+                                <td class="border border-slate-200 p-3 text-center text-blue-800 text-sm"><span id="table-total-pcs">{{ number_format($initialTotalPcs) }}</span> pcs</td>
+                                <td class="border border-slate-200 p-3 text-center text-emerald-700 font-mono"><span id="table-total-kg">{{ number_format($initialTotalKg, 2) }}</span> kg</td>
+                                <td colspan="2" class="border border-slate-200 p-3"></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
 
@@ -168,7 +226,7 @@
                     <i class="fas fa-plus-circle text-emerald-600"></i> Tambah Item Rencana ke Dokumen
                 </h3>
 
-                <form action="{{ route('sand-casting.casting-orders.lines.store', $castingOrder) }}" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <form action="{{ route('sand-casting.casting-orders.lines.store', $castingOrder) }}" method="POST" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                     @csrf
                     <div class="md:col-span-2">
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Pilih Item Rencana Cor</label>
@@ -176,10 +234,20 @@
                             class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500">
                             <option value="">-- Pilih Item Rencana --</option>
                             @foreach($availablePlans as $plan)
-                                <option value="{{ $plan->id }}" data-remaining="{{ $plan->qty_remaining_casting_scheduled }}">
-                                    {{ $plan->code }} — {{ $plan->item_name }} (Sisa: {{ number_format($plan->qty_remaining_casting_scheduled) }} pcs)
+                                <option value="{{ $plan->id }}" data-remaining="{{ $plan->qty_remaining_casting_scheduled }}" data-line="{{ $plan->line_number ?: 1 }}">
+                                    {{ $plan->code }} — {{ $plan->item_name }} (Sisa: {{ number_format($plan->qty_remaining_casting_scheduled) }} pcs, {{ number_format((float)($plan->weight ?? 0), 2) }} kg/pcs)
                                 </option>
                             @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Line (1–4)</label>
+                        <select name="line_number" id="add_line_number"
+                            class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500">
+                            @for($l = 1; $l <= 4; $l++)
+                                <option value="{{ $l }}">Line {{ $l }}</option>
+                            @endfor
                         </select>
                     </div>
 
@@ -200,6 +268,37 @@
     </div>
 
     <script>
+        function recalculateTotals() {
+            const rows = document.querySelectorAll('.item-row');
+            let totalPcs = 0;
+            let totalKg = 0;
+
+            rows.forEach(row => {
+                const input = row.querySelector('.qty-input');
+                const weightCell = row.querySelector('.row-total-weight');
+                const qty = parseInt(input?.value) || 0;
+                const unitWeight = parseFloat(input?.dataset.weight) || 0;
+                const rowWeight = qty * unitWeight;
+
+                totalPcs += qty;
+                totalKg += rowWeight;
+
+                if (weightCell) {
+                    weightCell.textContent = rowWeight.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+                }
+            });
+
+            const summaryPcs = document.getElementById('summary-total-pcs');
+            const summaryKg = document.getElementById('summary-total-kg');
+            const tablePcs = document.getElementById('table-total-pcs');
+            const tableKg = document.getElementById('table-total-kg');
+
+            if (summaryPcs) summaryPcs.textContent = totalPcs.toLocaleString('en-US');
+            if (summaryKg) summaryKg.textContent = totalKg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (tablePcs) tablePcs.textContent = totalPcs.toLocaleString('en-US');
+            if (tableKg) tableKg.textContent = totalKg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
         function confirmDeleteLine(lineId, code) {
             if (confirm('Hapus item ' + code + ' dari draft Perintah Cor ini? Kuantitas akan dikembalikan ke Rencana Cor.')) {
                 const form = document.getElementById('delete-line-form-' + lineId);
@@ -210,12 +309,17 @@
         function updateMaxAddQty() {
             const select = document.getElementById('add_production_plan_id');
             const qtyInput = document.getElementById('add_qty_ordered');
+            const lineSelect = document.getElementById('add_line_number');
             const selectedOption = select.options[select.selectedIndex];
             const remaining = selectedOption ? parseInt(selectedOption.getAttribute('data-remaining')) || 1 : 1;
+            const defaultLine = selectedOption ? parseInt(selectedOption.getAttribute('data-line')) || 1 : 1;
 
             if (qtyInput) {
                 qtyInput.max = remaining;
                 qtyInput.value = remaining;
+            }
+            if (lineSelect) {
+                lineSelect.value = defaultLine;
             }
         }
     </script>
