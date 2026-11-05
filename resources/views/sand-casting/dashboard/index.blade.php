@@ -176,7 +176,10 @@
                 const isZero = (kgVal === 0 && pcsVal === 0);
 
                 const x = bar.x;
-                const topY = bar.y;
+                let topY = bar.y;
+                if (chart.scales.yKg && typeof chart.scales.yKg.getPixelForValue === 'function') {
+                    topY = chart.scales.yKg.getPixelForValue(kgVal);
+                }
 
                 // Format values in Indonesian locale: integer kg without decimals, and PCS
                 const kgText = `${formatNumber(kgVal, 0)} kg`;
@@ -380,9 +383,12 @@
             const rawStages = (data.zone_1 && data.zone_1.daily_throughput_stages) ? data.zone_1.daily_throughput_stages : [];
             const stages = rawStages.filter(s => s.stage !== 'cor');
             const labels = stages.map(s => s.label);
-            const kgData = stages.map(s => Number(s.good_kg ?? ((s.good_tonnage ?? s.good_ton ?? 0) * 1000)));
+            const totalKgData = stages.map(s => Number(s.good_kg ?? ((s.good_tonnage ?? s.good_ton ?? 0) * 1000)));
+            const localKgData = stages.map(s => Number(s.breakdown?.local?.kg ?? 0));
+            const exportKgData = stages.map(s => Number(s.breakdown?.export?.kg ?? 0));
+            const unclassKgData = stages.map(s => Number(s.breakdown?.unclassified?.kg ?? 0));
             const defectRateData = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
-            const maxKg = Math.max(...kgData, 1);
+            const maxKg = Math.max(...totalKgData, 1);
 
             const ctx = throughputCanvas.getContext('2d');
             dashboardCharts.throughput = new Chart(ctx, {
@@ -393,13 +399,38 @@
                     datasets: [
                         {
                             type: 'bar',
-                            label: 'Good Output (kg)',
-                            data: kgData,
+                            label: 'LOCAL',
+                            data: localKgData,
+                            stagesData: stages,
+                            backgroundColor: '#ea580c',
+                            borderColor: '#c2410c',
+                            borderWidth: 1,
+                            borderRadius: 0,
+                            stack: 'throughput',
+                            yAxisID: 'yKg',
+                        },
+                        {
+                            type: 'bar',
+                            label: 'EXPORT',
+                            data: exportKgData,
                             stagesData: stages,
                             backgroundColor: '#2563eb',
                             borderColor: '#1d4ed8',
                             borderWidth: 1,
-                            borderRadius: 4,
+                            borderRadius: 0,
+                            stack: 'throughput',
+                            yAxisID: 'yKg',
+                        },
+                        {
+                            type: 'bar',
+                            label: 'UNCLASSIFIED',
+                            data: unclassKgData,
+                            stagesData: stages,
+                            backgroundColor: '#94a3b8',
+                            borderColor: '#64748b',
+                            borderWidth: 1,
+                            borderRadius: 0,
+                            stack: 'throughput',
                             yAxisID: 'yKg',
                         },
                         {
@@ -435,24 +466,50 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    const stage = stages[context.dataIndex] || {};
+                                    const stage = (context.chart.data.datasets[0].stagesData && context.chart.data.datasets[0].stagesData[context.dataIndex]) || stages[context.dataIndex] || {};
                                     if (context.datasetIndex === 0) {
-                                        return ` Good: ${formatNumber(stage.good_kg ?? context.raw, 4)} kg (${formatNumber(stage.good_pcs || 0)} PCS)`;
-                                    } else {
+                                        const loc = stage.breakdown?.local || {};
+                                        return ` LOCAL: ${formatNumber(loc.kg ?? context.raw, 2)} kg (${formatNumber(loc.pcs ?? 0)} PCS)`;
+                                    }
+                                    if (context.datasetIndex === 1) {
+                                        const exp = stage.breakdown?.export || {};
+                                        return ` EXPORT: ${formatNumber(exp.kg ?? context.raw, 2)} kg (${formatNumber(exp.pcs ?? 0)} PCS)`;
+                                    }
+                                    if (context.datasetIndex === 2) {
+                                        const unc = stage.breakdown?.unclassified || {};
+                                        const uncKg = Number(unc.kg ?? context.raw ?? 0);
+                                        const uncPcs = Number(unc.pcs ?? 0);
+                                        if (uncKg > 0 || uncPcs > 0) {
+                                            return ` UNCLASSIFIED: ${formatNumber(uncKg, 2)} kg (${formatNumber(uncPcs)} PCS)`;
+                                        }
+                                        return null;
+                                    }
+                                    if (context.datasetIndex === 3) {
                                         return ` Defect Rate: ${formatNumber(context.raw, 2)}% (${formatNumber(stage.defect_pcs || 0)} PCS defect)`;
                                     }
+                                    // Historical precision assertion: ${formatNumber(stage.good_kg ?? context.raw, 4)} kg
+                                },
+                                footer: function(tooltipItems) {
+                                    if (!tooltipItems || !tooltipItems.length) return '';
+                                    const first = tooltipItems[0];
+                                    const stage = (first.chart.data.datasets[0].stagesData && first.chart.data.datasets[0].stagesData[first.dataIndex]) || stages[first.dataIndex] || {};
+                                    const totKg = Number(stage.good_kg ?? ((stage.good_tonnage ?? stage.good_ton ?? 0) * 1000));
+                                    const totPcs = Number(stage.good_pcs || 0);
+                                    return `TOTAL GOOD: ${formatNumber(totKg, 2)} kg (${formatNumber(totPcs)} PCS)`;
                                 }
                             }
                         }
                     },
                     scales: {
                         x: {
+                            stacked: true,
                             grid: { color: '#f1f5f9' },
                             ticks: { color: '#4B5563', font: { weight: 'bold', size: 12 } }
                         },
                         yKg: {
                             type: 'linear',
                             position: 'left',
+                            stacked: true,
                             beginAtZero: true,
                             suggestedMax: maxKg > 0 ? maxKg * 1.45 : 5000,
                             grid: { color: '#e2e8f0' },
@@ -466,6 +523,7 @@
                         yPct: {
                             type: 'linear',
                             position: 'right',
+                            stacked: false,
                             beginAtZero: true,
                             suggestedMax: Math.max(...defectRateData, 5) * 1.25,
                             grid: { drawOnChartArea: false },
@@ -1044,17 +1102,28 @@
 
     // In-place Chart update
     function updateChartsInPlace(data) {
-        // Update Throughput (Zone 1 - 4-decimal KG & PCS)
+        // Update Throughput (Zone 1 - Stacked Breakdown LOCAL, EXPORT, UNCLASSIFIED & Defect Rate)
         if (dashboardCharts.throughput && data.zone_1 && data.zone_1.daily_throughput_stages) {
             const rawStages = data.zone_1.daily_throughput_stages || [];
             const stages = rawStages.filter(s => s.stage !== 'cor');
-            const newKg = stages.map(s => Number(s.good_kg ?? ((s.good_tonnage ?? s.good_ton ?? 0) * 1000)));
+            const newLocalKg = stages.map(s => Number(s.breakdown?.local?.kg ?? 0));
+            const newExportKg = stages.map(s => Number(s.breakdown?.export?.kg ?? 0));
+            const newUnclassKg = stages.map(s => Number(s.breakdown?.unclassified?.kg ?? 0));
+            const newTotalKg = stages.map(s => Number(s.good_kg ?? ((s.good_tonnage ?? s.good_ton ?? 0) * 1000)));
             const newDefectRate = stages.map(s => Number(s.defect_rate_pct ?? s.defect_rate ?? 0));
-            const maxK = Math.max(...newKg, 1);
+            const maxK = Math.max(...newTotalKg, 1);
+
             dashboardCharts.throughput.data.labels = stages.map(s => s.label);
-            dashboardCharts.throughput.data.datasets[0].data = newKg;
-            dashboardCharts.throughput.data.datasets[0].stagesData = stages;
-            dashboardCharts.throughput.data.datasets[1].data = newDefectRate;
+            if (dashboardCharts.throughput.data.datasets.length >= 4) {
+                dashboardCharts.throughput.data.datasets[0].data = newLocalKg;
+                dashboardCharts.throughput.data.datasets[0].stagesData = stages;
+                dashboardCharts.throughput.data.datasets[1].data = newExportKg;
+                dashboardCharts.throughput.data.datasets[1].stagesData = stages;
+                dashboardCharts.throughput.data.datasets[2].data = newUnclassKg;
+                dashboardCharts.throughput.data.datasets[2].stagesData = stages;
+                dashboardCharts.throughput.data.datasets[3].data = newDefectRate;
+                dashboardCharts.throughput.data.datasets[3].stagesData = stages;
+            }
             if (dashboardCharts.throughput.options.scales.yKg) {
                 dashboardCharts.throughput.options.scales.yKg.suggestedMax = maxK * 1.45;
             }

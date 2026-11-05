@@ -80,7 +80,7 @@ class SandCastingProductionReportService
         if ($selectedStage === 'all' || $selectedStage === 'cor') {
             $eagerCor = $includeDetails
                 ? ['castingResult.recorder', 'productionPlan', 'castingOrderLine', 'stageExecutions']
-                : ['castingResult', 'productionPlan', 'stageExecutions'];
+                : ['castingResult', 'productionPlan', 'castingOrderLine', 'stageExecutions'];
 
             $corQuery = SandCastingCastingResultLine::with($eagerCor)
                 ->whereHas('castingResult', function ($q) use ($dateFrom, $dateTo) {
@@ -148,7 +148,7 @@ class SandCastingProductionReportService
         if (! empty($execStages)) {
             $eagerExec = $includeDetails
                 ? ['castingResultLine.castingResult', 'castingResultLine.productionPlan', 'castingResultLine.castingOrderLine', 'castingResultLine.stageExecutions', 'operator', 'defects.defectType']
-                : ['castingResultLine.productionPlan', 'castingResultLine.stageExecutions'];
+                : ['castingResultLine.productionPlan', 'castingResultLine.castingOrderLine', 'castingResultLine.stageExecutions'];
 
             $execQuery = SandCastingStageExecution::with($eagerExec)
                 ->whereIn('stage', $execStages)
@@ -217,6 +217,7 @@ class SandCastingProductionReportService
         // -------------------------------------------------------------
         $stageSummaries = collect();
         $allStageKeys = array_keys(self::STAGES);
+        $categoryMap = \App\Models\Customer::getCategoryMap();
 
         foreach ($allStageKeys as $stgKey) {
             if ($selectedStage !== 'all' && $selectedStage !== $stgKey) {
@@ -230,6 +231,12 @@ class SandCastingProductionReportService
             $goodPcs = 0;
             $weightKg = 0.0;
 
+            $breakdown = [
+                'local' => ['pcs' => 0, 'kg' => 0.0],
+                'export' => ['pcs' => 0, 'kg' => 0.0],
+                'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+            ];
+
             if ($stgKey === 'cor') {
                 // 1. HASIL COR
                 $ktrCount = $corLines->count();
@@ -241,6 +248,19 @@ class SandCastingProductionReportService
 
                     return (int) $l->qty_good * $w;
                 });
+
+                foreach ($corLines as $l) {
+                    $custName = $l->productionPlan?->customer ?: ($l->castingOrderLine?->customer ?? '');
+                    $cat = \App\Models\Customer::resolveCategory($custName, $categoryMap);
+                    $catKey = strtolower($cat);
+                    if (! isset($breakdown[$catKey])) {
+                        $catKey = 'unclassified';
+                    }
+                    $lGood = (int) $l->qty_good;
+                    $w = (float) ($l->unit_weight_kg ?? $l->productionPlan?->weight ?? 0.0);
+                    $breakdown[$catKey]['pcs'] += $lGood;
+                    $breakdown[$catKey]['kg'] += ($lGood * $w);
+                }
             } else {
                 // 2 - 7 (Netto, Bubut OD, Bubut CNC, Bor, QC, Gudang Jadi)
                 // Group by unique KTR line to prevent double counting across checkpoints / multiple executions
@@ -266,10 +286,36 @@ class SandCastingProductionReportService
                     $defectPcs += $totalDefectForLine;
                     $goodPcs += $effectiveGood;
                     $weightKg += ($effectiveGood * $w);
+
+                    $custName = $lineModel?->productionPlan?->customer ?: ($lineModel?->castingOrderLine?->customer ?? '');
+                    $cat = \App\Models\Customer::resolveCategory($custName, $categoryMap);
+                    $catKey = strtolower($cat);
+                    if (! isset($breakdown[$catKey])) {
+                        $catKey = 'unclassified';
+                    }
+                    $breakdown[$catKey]['pcs'] += $effectiveGood;
+                    $breakdown[$catKey]['kg'] += ($effectiveGood * $w);
                 }
             }
 
             $defectRate = $inputPcs > 0 ? round(($defectPcs / $inputPcs) * 100, 2) : 0.0;
+
+            $roundLocalKg = round((float) $breakdown['local']['kg'], 2);
+            $roundExportKg = round((float) $breakdown['export']['kg'], 2);
+            $roundUnclassifiedKg = round((float) $breakdown['unclassified']['kg'], 2);
+            $totalBreakdownKg = round($roundLocalKg + $roundExportKg + $roundUnclassifiedKg, 2);
+            $totalWeightKg = round($weightKg, 2);
+
+            $diff = round($totalWeightKg - $totalBreakdownKg, 2);
+            if ($diff !== 0.0) {
+                if ($roundLocalKg > 0) {
+                    $roundLocalKg = round($roundLocalKg + $diff, 2);
+                } elseif ($roundExportKg > 0) {
+                    $roundExportKg = round($roundExportKg + $diff, 2);
+                } elseif ($roundUnclassifiedKg > 0) {
+                    $roundUnclassifiedKg = round($roundUnclassifiedKg + $diff, 2);
+                }
+            }
 
             $stageSummaries->push([
                 'stage' => $stgKey,
@@ -279,8 +325,22 @@ class SandCastingProductionReportService
                 'input_pcs' => $inputPcs,
                 'defect_pcs' => $defectPcs,
                 'good_pcs' => $goodPcs,
-                'weight_kg' => round($weightKg, 2),
+                'weight_kg' => $totalWeightKg,
                 'defect_rate' => $defectRate,
+                'breakdown' => [
+                    'local' => [
+                        'pcs' => (int) $breakdown['local']['pcs'],
+                        'kg' => $roundLocalKg,
+                    ],
+                    'export' => [
+                        'pcs' => (int) $breakdown['export']['pcs'],
+                        'kg' => $roundExportKg,
+                    ],
+                    'unclassified' => [
+                        'pcs' => (int) $breakdown['unclassified']['pcs'],
+                        'kg' => $roundUnclassifiedKg,
+                    ],
+                ],
             ]);
         }
 

@@ -65,11 +65,17 @@
                 <i class="fas fa-chart-bar text-blue-600"></i>
                 THROUGHPUT 6 TAHAP PROSES (KG & PCS)
             </h3>
-            <div class="flex items-center gap-2 text-xs font-bold">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px]">
-                    <span class="w-2.5 h-2.5 rounded bg-blue-600"></span> Output Baik (KG & PCS langsung di atas batang)
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-bold">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-orange-50 text-orange-800 border border-orange-200 text-[11px]">
+                    <span class="w-2.5 h-2.5 rounded bg-orange-600"></span> LOCAL
                 </span>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-50 text-rose-800 border border-rose-200 text-[11px]">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px]">
+                    <span class="w-2.5 h-2.5 rounded bg-blue-600"></span> EXPORT
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-slate-50 text-slate-700 border border-slate-200 text-[11px]">
+                    <span class="w-2.5 h-2.5 rounded bg-slate-400"></span> UNCLASSIFIED
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-rose-50 text-rose-800 border border-rose-200 text-[11px]">
                     <span class="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Defect Rate (%)
                 </span>
             </div>

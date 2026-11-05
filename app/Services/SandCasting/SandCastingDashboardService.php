@@ -236,6 +236,20 @@ class SandCastingDashboardService
                 'defect_pcs' => (int) $stg['defect_pcs'],
                 'defect_rate' => (float) $stg['defect_rate'],
                 'defect_rate_pct' => (float) $stg['defect_rate'],
+                'breakdown' => [
+                    'local' => [
+                        'pcs' => (int) ($stg['breakdown']['local']['pcs'] ?? 0),
+                        'kg' => round((float) ($stg['breakdown']['local']['kg'] ?? 0.0), 4),
+                    ],
+                    'export' => [
+                        'pcs' => (int) ($stg['breakdown']['export']['pcs'] ?? 0),
+                        'kg' => round((float) ($stg['breakdown']['export']['kg'] ?? 0.0), 4),
+                    ],
+                    'unclassified' => [
+                        'pcs' => (int) ($stg['breakdown']['unclassified']['pcs'] ?? 0),
+                        'kg' => round((float) ($stg['breakdown']['unclassified']['kg'] ?? 0.0), 4),
+                    ],
+                ],
             ];
         }
 
