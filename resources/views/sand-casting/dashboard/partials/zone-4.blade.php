@@ -65,9 +65,15 @@
                 <i class="fas fa-chart-column text-blue-600"></i>
                 <span>TREN OUTPUT BAIK HARIAN — <span id="z4-stage-label" class="text-blue-700">{{ $currentStageData['stage_label'] ?? 'QC' }}</span></span>
             </h3>
-            <div class="flex items-center gap-2">
-                <span class="text-[10px] font-black px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase font-mono">
-                    SATUAN: KG & PCS
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-bold">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 text-[10px]">
+                    <span class="w-2 h-2 rounded bg-orange-600"></span> LOCAL
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px]">
+                    <span class="w-2 h-2 rounded bg-blue-600"></span> EXPORT
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-200 text-[10px]">
+                    <span class="w-2 h-2 rounded bg-slate-400"></span> UNCLASSIFIED
                 </span>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase font-mono">
                     30 HARI TERAKHIR
@@ -96,7 +102,7 @@
         </div>
 
         <div class="pt-1.5 mt-1 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between text-[10px] text-slate-500 gap-1 font-sans">
-            <span>Berdasarkan tanggal pengerjaan fisik (physical_done_at). Tanggal tanpa produksi tetap ditampilkan dengan nilai 0,0000 kg.</span>
+            <span>Berdasarkan tanggal pengerjaan fisik (physical_done_at). Tanggal tanpa produksi tetap ditampilkan dengan nilai 0,00 kg.</span>
             <span class="font-bold text-slate-700 font-mono shrink-0" id="z4-period-label">Periode: {{ $periodStart }} s/d {{ $periodEnd }}</span>
         </div>
     </div>
@@ -180,7 +186,7 @@
                 @endphp
                 <span id="z4-wip-summary-content" class="inline-flex items-center gap-1.5">
                     @if($isSnapAvailable)
-                        <span class="font-black text-slate-950" id="z4-wip-total-kg">{{ number_format($initialWipTotalKg, 0, ',', '.') }}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                        <span class="font-black text-slate-950" id="z4-wip-total-kg">{{ number_format($initialWipTotalKg, 2, ',', '.') }}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
                         <span class="text-slate-300 font-bold">|</span>
                         <span class="font-bold text-slate-800" id="z4-wip-total-pcs">{{ number_format($initialWipTotalPcs, 0, ',', '.') }}</span> <span class="text-slate-500 text-[10px]">PCS</span>
                         <span class="text-slate-300 font-bold">|</span>
@@ -193,15 +199,15 @@
                     @endif
                 </span>
             </div>
-            <div class="flex items-center gap-2 text-[10px] font-sans hidden sm:flex">
-                <span class="inline-flex items-center gap-1 text-slate-600">
-                    <span class="w-2.5 h-2.5 rounded-xs bg-[#0284c7] inline-block"></span> Aktual
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-bold">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 text-[10px]">
+                    <span class="w-2 h-2 rounded bg-orange-600"></span> LOCAL
                 </span>
-                <span class="inline-flex items-center gap-1 text-slate-600">
-                    <span class="w-2.5 h-2.5 rounded-xs bg-[#f59e0b] inline-block"></span> Rekonstruksi
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px]">
+                    <span class="w-2 h-2 rounded bg-blue-600"></span> EXPORT
                 </span>
-                <span class="text-slate-400">
-                    Cutoff 07.00 WIB
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-200 text-[10px]">
+                    <span class="w-2 h-2 rounded bg-slate-400"></span> UNCLASSIFIED
                 </span>
             </div>
         </div>

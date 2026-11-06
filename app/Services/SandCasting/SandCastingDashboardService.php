@@ -399,12 +399,19 @@ class SandCastingDashboardService
         $stageKg = [];
         $stageKtrCount = [];
         $stageKtrDetails = [];
+        $stageBreakdown = [];
+        $categoryMap = \App\Models\Customer::getCategoryMap();
 
         foreach (array_keys($wipStagesMap) as $stgKey) {
             $stagePcs[$stgKey] = 0;
             $stageKg[$stgKey] = 0.0;
             $stageKtrCount[$stgKey] = 0;
             $stageKtrDetails[$stgKey] = [];
+            $stageBreakdown[$stgKey] = [
+                'local' => ['pcs' => 0, 'kg' => 0.0],
+                'export' => ['pcs' => 0, 'kg' => 0.0],
+                'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+            ];
         }
 
         $watchlistCandidates = [];
@@ -427,6 +434,16 @@ class SandCastingDashboardService
             $stagePcs[$stage] += $usableQty;
             $stageKg[$stage] += $lineWeight;
             $stageKtrCount[$stage]++;
+
+            $custName = $line->productionPlan?->customer ?: ($line->castingOrderLine?->customer ?? '');
+            $cat = \App\Models\Customer::resolveCategory($custName, $categoryMap);
+            $catKey = strtolower($cat);
+            if (! isset($stageBreakdown[$stage][$catKey])) {
+                $catKey = 'unclassified';
+            }
+
+            $stageBreakdown[$stage][$catKey]['pcs'] += $usableQty;
+            $stageBreakdown[$stage][$catKey]['kg'] += $lineWeight;
 
             $stageKtrDetails[$stage][] = [
                 'ktr_id' => $line->id,
@@ -470,6 +487,37 @@ class SandCastingDashboardService
             $totalActiveWipTon += $ton;
             $totalActiveWipPcs += $pcs;
 
+            $roundLocalKg = round((float) $stageBreakdown[$stgKey]['local']['kg'], 4);
+            $roundExportKg = round((float) $stageBreakdown[$stgKey]['export']['kg'], 4);
+            $roundUnclassKg = round((float) $stageBreakdown[$stgKey]['unclassified']['kg'], 4);
+            $totalStageKg = round($kg, 4);
+
+            $diff = round($totalStageKg - ($roundLocalKg + $roundExportKg + $roundUnclassKg), 4);
+            if ($diff !== 0.0) {
+                if ($roundLocalKg > 0) {
+                    $roundLocalKg = round($roundLocalKg + $diff, 4);
+                } elseif ($roundExportKg > 0) {
+                    $roundExportKg = round($roundExportKg + $diff, 4);
+                } elseif ($roundUnclassKg > 0) {
+                    $roundUnclassKg = round($roundUnclassKg + $diff, 4);
+                }
+            }
+
+            $breakdownFinal = [
+                'local' => [
+                    'pcs' => (int) $stageBreakdown[$stgKey]['local']['pcs'],
+                    'kg' => $roundLocalKg,
+                ],
+                'export' => [
+                    'pcs' => (int) $stageBreakdown[$stgKey]['export']['pcs'],
+                    'kg' => $roundExportKg,
+                ],
+                'unclassified' => [
+                    'pcs' => (int) $stageBreakdown[$stgKey]['unclassified']['pcs'],
+                    'kg' => $roundUnclassKg,
+                ],
+            ];
+
             $stages[$stgKey] = [
                 'stage' => $stgKey,
                 'label' => $info['label'],
@@ -480,10 +528,12 @@ class SandCastingDashboardService
                 'wip_ton' => $ton,
                 'ktr_count' => $ktr,
                 'percentage' => 0.0,
+                'breakdown' => $breakdownFinal,
                 'details' => [
                     'stage' => $stgKey,
                     'stage_label' => $info['label'],
                     'scope' => $scope ?: 'all',
+                    'breakdown' => $breakdownFinal,
                     'lines_count' => count($stageKtrDetails[$stgKey]),
                     'sample_ktrs' => array_slice($stageKtrDetails[$stgKey], 0, 10),
                 ],
@@ -1186,7 +1236,7 @@ class SandCastingDashboardService
 
         // Query all completed stage executions in the 30-day window
         $execQuery = SandCastingStageExecution::query()
-            ->with(['castingResultLine.castingResult', 'castingResultLine.productionPlan'])
+            ->with(['castingResultLine.castingResult', 'castingResultLine.productionPlan', 'castingResultLine.castingOrderLine'])
             ->whereIn('stage', array_keys($targetStages))
             ->whereNotNull('physical_done_at')
             ->whereDate('physical_done_at', '>=', $startDateStr)
@@ -1199,6 +1249,7 @@ class SandCastingDashboardService
         }
 
         $executions = $execQuery->orderBy('physical_done_at', 'asc')->get();
+        $categoryMap = \App\Models\Customer::getCategoryMap();
 
         // Generate 30 consecutive calendar days
         $calendarDays = [];
@@ -1219,6 +1270,12 @@ class SandCastingDashboardService
             $totalStageKg = 0.0;
             $totalStagePcs = 0;
             $totalStageKtr = 0;
+
+            $stageBreakdownTotals = [
+                'local' => ['pcs' => 0, 'kg' => 0.0],
+                'export' => ['pcs' => 0, 'kg' => 0.0],
+                'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+            ];
 
             $stageLineTotals = [
                 1 => ['line_number' => 1, 'label' => 'Line 1', 'total_weight_kg' => 0.0, 'total_good_pcs' => 0, 'total_ktr_count' => 0],
@@ -1250,6 +1307,12 @@ class SandCastingDashboardService
                 $dayGoodPcs = 0;
                 $dayGoodKg = 0.0;
 
+                $dayBreakdown = [
+                    'local' => ['pcs' => 0, 'kg' => 0.0],
+                    'export' => ['pcs' => 0, 'kg' => 0.0],
+                    'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+                ];
+
                 $dayLines = [
                     1 => ['line_number' => 1, 'label' => 'Line 1', 'good_kg' => 0.0, 'good_pcs' => 0, 'ktr_count' => 0],
                     2 => ['line_number' => 2, 'label' => 'Line 2', 'good_kg' => 0.0, 'good_pcs' => 0, 'ktr_count' => 0],
@@ -1271,6 +1334,19 @@ class SandCastingDashboardService
                     $itemKg = ($effectiveGood * $w);
                     $dayGoodPcs += $effectiveGood;
                     $dayGoodKg += $itemKg;
+
+                    $custName = $lineModel?->productionPlan?->customer ?: ($lineModel?->castingOrderLine?->customer ?? '');
+                    $category = \App\Models\Customer::resolveCategory($custName, $categoryMap);
+                    $catKey = strtolower($category);
+                    if (! isset($dayBreakdown[$catKey])) {
+                        $catKey = 'unclassified';
+                    }
+
+                    $dayBreakdown[$catKey]['pcs'] += $effectiveGood;
+                    $dayBreakdown[$catKey]['kg'] += $itemKg;
+
+                    $stageBreakdownTotals[$catKey]['pcs'] += $effectiveGood;
+                    $stageBreakdownTotals[$catKey]['kg'] += $itemKg;
 
                     $planLine = $lineModel?->productionPlan?->line_number;
                     if ($planLine !== null && in_array((int) $planLine, [1, 2, 3, 4], true)) {
@@ -1299,6 +1375,22 @@ class SandCastingDashboardService
                     $seriesByLine[$ln]['pcs_data'][] = (int) $dayLines[$ln]['good_pcs'];
                 }
 
+                $roundLocalKg = round((float) $dayBreakdown['local']['kg'], 4);
+                $roundExportKg = round((float) $dayBreakdown['export']['kg'], 4);
+                $roundUnclassifiedKg = round((float) $dayBreakdown['unclassified']['kg'], 4);
+                $totalDayKg = round($dayGoodKg, 4);
+
+                $diff = round($totalDayKg - ($roundLocalKg + $roundExportKg + $roundUnclassifiedKg), 4);
+                if ($diff !== 0.0) {
+                    if ($roundLocalKg > 0) {
+                        $roundLocalKg = round($roundLocalKg + $diff, 4);
+                    } elseif ($roundExportKg > 0) {
+                        $roundExportKg = round($roundExportKg + $diff, 4);
+                    } elseif ($roundUnclassifiedKg > 0) {
+                        $roundUnclassifiedKg = round($roundUnclassifiedKg + $diff, 4);
+                    }
+                }
+
                 $daily[] = [
                     'date' => $dStr,
                     'day_label' => $dayInfo['day_label'],
@@ -1307,6 +1399,20 @@ class SandCastingDashboardService
                     'good_pcs' => $dayGoodPcs,
                     'ktr_count' => $dayKtrCount,
                     'lines' => $dayLines,
+                    'breakdown' => [
+                        'local' => [
+                            'pcs' => (int) $dayBreakdown['local']['pcs'],
+                            'kg' => $roundLocalKg,
+                        ],
+                        'export' => [
+                            'pcs' => (int) $dayBreakdown['export']['pcs'],
+                            'kg' => $roundExportKg,
+                        ],
+                        'unclassified' => [
+                            'pcs' => (int) $dayBreakdown['unclassified']['pcs'],
+                            'kg' => $roundUnclassifiedKg,
+                        ],
+                    ],
                     'unallocated_kg' => round($dayUnallocatedKg, 4),
                     'unallocated_pcs' => $dayUnallocatedPcs,
                     'is_fully_reconciled' => ($dayUnallocatedKg === 0.0 && $dayUnallocatedPcs === 0),
@@ -1328,6 +1434,20 @@ class SandCastingDashboardService
                 'total_good_pcs' => $totalStagePcs,
                 'total_ktr_count' => $totalStageKtr,
                 'line_totals' => $stageLineTotals,
+                'breakdown_totals' => [
+                    'local' => [
+                        'pcs' => (int) $stageBreakdownTotals['local']['pcs'],
+                        'kg' => round((float) $stageBreakdownTotals['local']['kg'], 4),
+                    ],
+                    'export' => [
+                        'pcs' => (int) $stageBreakdownTotals['export']['pcs'],
+                        'kg' => round((float) $stageBreakdownTotals['export']['kg'], 4),
+                    ],
+                    'unclassified' => [
+                        'pcs' => (int) $stageBreakdownTotals['unclassified']['pcs'],
+                        'kg' => round((float) $stageBreakdownTotals['unclassified']['kg'], 4),
+                    ],
+                ],
                 'total_unallocated_kg' => round($stageUnallocatedKg, 4),
                 'total_unallocated_pcs' => $stageUnallocatedPcs,
                 'is_fully_reconciled' => ($stageUnallocatedKg === 0.0 && $stageUnallocatedPcs === 0),

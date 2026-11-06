@@ -614,8 +614,10 @@ class Zone4DashboardTest extends TestCase
         // Y-axis ticks on both charts use integer formatting (e.g. 0 kg, 500 kg, 1.000 kg)
         $this->assertStringContainsString("callback: function(value) { return formatNumber(value, 0) + ' kg'; }", $content);
 
-        // Detail tooltips: bar chart retains 4 decimals for kg; line chart displays integer kg and PCS
-        $this->assertStringContainsString('` Output Baik: ${formatNumber(kgVal, 4)} kg`', $content);
+        // Detail tooltips: bar chart displays 2 decimals for kg in Indonesian format; line chart displays integer kg and PCS
+        $this->assertStringContainsString('TOTAL OUTPUT BAIK: ${formatNumber(kgVal, 2)} kg', $content);
+        $this->assertStringContainsString('LOCAL: ${formatNumber(locKg, 2)} kg', $content);
+        $this->assertStringContainsString('EXPORT: ${formatNumber(expKg, 2)} kg', $content);
         $this->assertStringContainsString('` ${context.dataset.label}: ${formatNumber(kgVal, 0)} kg | ${formatNumber(pcsVal, 0)} PCS`', $content);
         $this->assertStringContainsString('${d.day_label} ${year}', $content);
     }
@@ -643,5 +645,237 @@ class Zone4DashboardTest extends TestCase
         // Ample headroom provided to prevent label clipping
         $this->assertStringContainsString('maxKg * 1.35', $content);
         $this->assertStringContainsString('padding: { top: 32', $content);
+    }
+
+    /**
+     * 14. Customer breakdown payload (LOCAL, EXPORT, UNCLASSIFIED) across 30 days and strict mathematical reconciliation.
+     */
+    public function test_zone_4_throughput_customer_breakdown_payload_and_reconciliation(): void
+    {
+        \App\Models\Customer::firstOrCreate(['name' => 'PT LOCAL INDONESIA'], ['category' => 'LOCAL', 'is_active' => true]);
+        \App\Models\Customer::firstOrCreate(['name' => 'GLOBAL EXPORT CORP'], ['category' => 'EXPORT', 'is_active' => true]);
+        \App\Models\Customer::firstOrCreate(['name' => 'PAST EXPORT LTD'], ['category' => 'EXPORT', 'is_active' => false]);
+
+        // Line 1: Registered LOCAL (100 pcs, 2.5 kg = 250.0 kg)
+        [$plan1, $line1] = $this->createPlanWithKtrLine(['qty_good' => 100, 'unit_weight_kg' => 2.5], ['customer' => 'PT LOCAL INDONESIA']);
+        $line1->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_INSPECTION',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Line 2: Registered EXPORT (50 pcs, 3.0 kg = 150.0 kg)
+        [$plan2, $line2] = $this->createPlanWithKtrLine(['qty_good' => 50, 'unit_weight_kg' => 3.0], ['customer' => 'GLOBAL EXPORT CORP']);
+        $line2->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_INSPECTION',
+            'input_qty' => 50,
+            'defect_qty' => 0,
+            'good_qty' => 50,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Line 3: STOK NON PO -> LOCAL (20 pcs, 1.0 kg = 20.0 kg)
+        [$plan3, $line3] = $this->createPlanWithKtrLine(['qty_good' => 20, 'unit_weight_kg' => 1.0], ['customer' => 'STOK NON PO']);
+        $line3->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_INSPECTION',
+            'input_qty' => 20,
+            'defect_qty' => 0,
+            'good_qty' => 20,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Line 4: STOK EXP -> EXPORT (10 pcs, 1.5 kg = 15.0 kg)
+        [$plan4, $line4] = $this->createPlanWithKtrLine(['qty_good' => 10, 'unit_weight_kg' => 1.5], ['customer' => 'STOK EXP']);
+        $line4->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_INSPECTION',
+            'input_qty' => 10,
+            'defect_qty' => 0,
+            'good_qty' => 10,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Line 5: Inactive EXPORT maintains category (8 pcs, 2.0 kg = 16.0 kg)
+        [$plan5, $line5] = $this->createPlanWithKtrLine(['qty_good' => 8, 'unit_weight_kg' => 2.0], ['customer' => 'PAST EXPORT LTD']);
+        $line5->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_INSPECTION',
+            'input_qty' => 8,
+            'defect_qty' => 0,
+            'good_qty' => 8,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        // Line 6: Unknown unregistered customer -> UNCLASSIFIED (5 pcs, 4.0 kg = 20.0 kg)
+        [$plan6, $line6] = $this->createPlanWithKtrLine(['qty_good' => 5, 'unit_weight_kg' => 4.0], ['customer' => 'UNREGISTERED CORP']);
+        $line6->stageExecutions()->create([
+            'stage' => 'qc',
+            'checkpoint_code' => 'QC_INSPECTION',
+            'input_qty' => 5,
+            'defect_qty' => 0,
+            'good_qty' => 5,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=4&fresh=1');
+        $res->assertStatus(200);
+
+        $daily = $res->json('zone_4.stages.qc.daily');
+        $this->assertCount(30, $daily);
+
+        foreach ($daily as $d) {
+            $this->assertArrayHasKey('breakdown', $d);
+            $this->assertArrayHasKey('local', $d['breakdown']);
+            $this->assertArrayHasKey('export', $d['breakdown']);
+            $this->assertArrayHasKey('unclassified', $d['breakdown']);
+
+            // Invariant: sum of breakdown pcs equals day good_pcs
+            $sumPcs = $d['breakdown']['local']['pcs'] + $d['breakdown']['export']['pcs'] + $d['breakdown']['unclassified']['pcs'];
+            $this->assertSame($d['good_pcs'], $sumPcs);
+
+            // Invariant: sum of breakdown kg equals day good_kg
+            $sumKg = round($d['breakdown']['local']['kg'] + $d['breakdown']['export']['kg'] + $d['breakdown']['unclassified']['kg'], 4);
+            $this->assertEquals((float) $d['good_kg'], $sumKg);
+        }
+
+        // Today's specific day
+        $todayEntry = collect($daily)->firstWhere('date', now()->toDateString());
+        $this->assertNotNull($todayEntry);
+
+        // Total: 100 + 50 + 20 + 10 + 8 + 5 = 193 pcs
+        $this->assertSame(193, $todayEntry['good_pcs']);
+        // Total weight: 250 + 150 + 20 + 15 + 16 + 20 = 471.0 kg
+        $this->assertEquals(471.0, (float) $todayEntry['good_kg']);
+
+        // LOCAL: 100 + 20 = 120 pcs; 250.0 + 20.0 = 270.0 kg
+        $this->assertSame(120, $todayEntry['breakdown']['local']['pcs']);
+        $this->assertEquals(270.0, (float) $todayEntry['breakdown']['local']['kg']);
+
+        // EXPORT: 50 + 10 + 8 = 68 pcs; 150.0 + 15.0 + 16.0 = 181.0 kg
+        $this->assertSame(68, $todayEntry['breakdown']['export']['pcs']);
+        $this->assertEquals(181.0, (float) $todayEntry['breakdown']['export']['kg']);
+
+        // UNCLASSIFIED: 5 pcs; 20.0 kg
+        $this->assertSame(5, $todayEntry['breakdown']['unclassified']['pcs']);
+        $this->assertEquals(20.0, (float) $todayEntry['breakdown']['unclassified']['kg']);
+    }
+
+    /**
+     * 15. Zone 4 anti-double count and customer fallback from casting order line.
+     */
+    public function test_zone_4_throughput_anti_double_count_and_fallback_customer(): void
+    {
+        \App\Models\Customer::firstOrCreate(['name' => 'FALLBACK EXPORT ZONE4'], ['category' => 'EXPORT', 'is_active' => true]);
+
+        [$plan, $line] = $this->createPlanWithKtrLine(['qty_good' => 60, 'unit_weight_kg' => 3.5], ['customer' => '']);
+        $order = \App\Models\SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261106-0002',
+            'scheduled_date' => now()->toDateString(),
+            'status' => 'APPROVED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $orderLine = $order->lines()->create([
+            'production_plan_id' => $plan->id,
+            'customer' => 'FALLBACK EXPORT ZONE4',
+            'item_code' => 'FB-001',
+            'item_name' => 'Fallback Item',
+            'qty_ordered' => 60,
+            'target_weight' => 3.5,
+            'status' => 'PENDING',
+        ]);
+        $line->update(['sand_casting_casting_order_line_id' => $orderLine->id]);
+
+        // 2 checkpoints on Bubut CNC on the same date
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_FACING',
+            'input_qty' => 60,
+            'defect_qty' => 2,
+            'good_qty' => 58,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now()->subMinutes(15),
+            'executed_at' => now()->subMinutes(15),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $line->stageExecutions()->create([
+            'stage' => 'bubut_cnc',
+            'checkpoint_code' => 'CNC_BORING',
+            'input_qty' => 58,
+            'defect_qty' => 1,
+            'good_qty' => 57,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => now(),
+            'executed_at' => now(),
+            'operator_id' => $this->spvUser->id,
+        ]);
+
+        $res = $this->actingAs($this->adminUser)->getJson('/sand-casting/dashboard/data?zone=4&fresh=1');
+        $res->assertStatus(200);
+
+        $dailyCnc = $res->json('zone_4.stages.bubut_cnc.daily');
+        $todayEntry = collect($dailyCnc)->firstWhere('date', now()->toDateString());
+
+        // Effective good for line is 57 pcs, weight = 57 * 3.5 = 199.5 kg
+        $this->assertSame(57, $todayEntry['good_pcs']);
+        $this->assertEquals(199.5, (float) $todayEntry['good_kg']);
+
+        // Breakdown matches fallback EXPORT without duplication
+        $this->assertSame(57, $todayEntry['breakdown']['export']['pcs']);
+        $this->assertEquals(199.5, (float) $todayEntry['breakdown']['export']['kg']);
+        $this->assertSame(0, $todayEntry['breakdown']['local']['pcs']);
+        $this->assertSame(0, $todayEntry['breakdown']['unclassified']['pcs']);
+    }
+
+    /**
+     * 16. Zone 4 Blade view stacked chart configuration, legend badges, and 2-decimal formatting.
+     */
+    public function test_zone_4_blade_view_stacked_bar_and_legend_badges(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get('/sand-casting/dashboard?zone=4');
+        $response->assertStatus(200);
+
+        $content = $response->getContent();
+
+        // Legend badges on Zone 4 Card 1
+        $this->assertStringContainsString('LOCAL', $content);
+        $this->assertStringContainsString('EXPORT', $content);
+        $this->assertStringContainsString('UNCLASSIFIED', $content);
+
+        // Stacked dataset configuration in JS
+        $this->assertStringContainsString("stack: 'zone4_throughput'", $content);
+        $this->assertStringContainsString("backgroundColor: '#ea580c'", $content); // LOCAL Orange
+        $this->assertStringContainsString("backgroundColor: '#2563eb'", $content); // EXPORT Blue
+        $this->assertStringContainsString("backgroundColor: '#94a3b8'", $content); // UNCLASSIFIED Gray
+
+        // Stacked scale configuration
+        $this->assertStringContainsString('stacked: true', $content);
+
+        // 2-decimal formatting in tooltips and card footer
+        $this->assertStringContainsString('TOTAL OUTPUT BAIK: ${formatNumber(kgVal, 2)} kg', $content);
+        $this->assertStringContainsString('0,00 kg', $content);
     }
 }

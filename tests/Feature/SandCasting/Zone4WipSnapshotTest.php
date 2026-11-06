@@ -741,4 +741,195 @@ class Zone4WipSnapshotTest extends TestCase
         $this->assertSame('0 7 * * *', $wipEvent->expression, 'Snapshot harus dijadwalkan tepat pukul 07.00 setiap hari.');
         $this->assertSame('Asia/Jakarta', $wipEvent->timezone, 'Timezone harus Asia/Jakarta.');
     }
+
+    /**
+     * Requirement 17: Breakdown LOCAL, EXPORT, UNCLASSIFIED pada snapshot harian WIP QC.
+     */
+    public function test_17_wip_snapshot_breakdown_local_export_unclassified_matches_totals(): void
+    {
+        \App\Models\Customer::create(['name' => 'PT Lokal Jaya', 'category' => 'LOCAL', 'is_active' => true]);
+        \App\Models\Customer::create(['name' => 'Global Export Corp', 'category' => 'EXPORT', 'is_active' => true]);
+
+        // KTR 1: LOCAL (PT Lokal Jaya)
+        $this->createPlanWithKtrLine([
+            'qty_good' => 50,
+            'unit_weight_kg' => 2.50,
+            'current_stage' => 'qc',
+        ], [
+            'customer' => 'PT Lokal Jaya',
+        ]);
+
+        // KTR 2: EXPORT (Global Export Corp)
+        $this->createPlanWithKtrLine([
+            'qty_good' => 30,
+            'unit_weight_kg' => 4.00,
+            'current_stage' => 'qc',
+        ], [
+            'customer' => 'Global Export Corp',
+        ]);
+
+        // KTR 3: STOK NON PO -> LOCAL
+        $this->createPlanWithKtrLine([
+            'qty_good' => 20,
+            'unit_weight_kg' => 1.50,
+            'current_stage' => 'qc',
+        ], [
+            'customer' => 'STOK NON PO',
+        ]);
+
+        // KTR 4: Customer unregistered -> UNCLASSIFIED
+        $this->createPlanWithKtrLine([
+            'qty_good' => 10,
+            'unit_weight_kg' => 3.00,
+            'current_stage' => 'qc',
+        ], [
+            'customer' => 'Unknown Customer X',
+        ]);
+
+        $service = app(SandCastingWipSnapshotService::class);
+        $todayStr = Carbon::now(SandCastingWipSnapshotService::TIMEZONE)->toDateString();
+        $service->captureSnapshot($todayStr, 'all', true);
+
+        $payload = $service->getZone4WipSnapshotPayload($todayStr, 30, 'all');
+        $qcStage = $payload['stages']['qc'] ?? null;
+        $this->assertNotNull($qcStage);
+
+        $todayItem = collect($qcStage['daily'])->firstWhere('date', $todayStr);
+        $this->assertNotNull($todayItem);
+        $this->assertTrue($todayItem['is_available']);
+
+        $b = $todayItem['breakdown'];
+        $this->assertNotNull($b);
+
+        // LOCAL: 50 pcs (125 kg) + 20 pcs (30 kg) = 70 pcs (155.0 kg)
+        $this->assertEquals(70, $b['local']['pcs']);
+        $this->assertEquals(155.0, (float) $b['local']['kg']);
+
+        // EXPORT: 30 pcs (120 kg)
+        $this->assertEquals(30, $b['export']['pcs']);
+        $this->assertEquals(120.0, (float) $b['export']['kg']);
+
+        // UNCLASSIFIED: 10 pcs (30 kg)
+        $this->assertEquals(10, $b['unclassified']['pcs']);
+        $this->assertEquals(30.0, (float) $b['unclassified']['kg']);
+
+        // Invariant: LOCAL + EXPORT + UNCLASSIFIED === Total
+        $totalPcs = $b['local']['pcs'] + $b['export']['pcs'] + $b['unclassified']['pcs'];
+        $totalKg = round($b['local']['kg'] + $b['export']['kg'] + $b['unclassified']['kg'], 4);
+
+        $this->assertEquals((int) $todayItem['good_pcs'], $totalPcs);
+        $this->assertEquals((float) $todayItem['good_kg'], $totalKg);
+        $this->assertEquals(110, $totalPcs);
+        $this->assertEquals(305.0, $totalKg);
+    }
+
+    /**
+     * Requirement 18: Customer nonaktif tetap mempertahankan kategori historisnya.
+     */
+    public function test_18_inactive_customer_maintains_historical_category_in_wip_snapshot(): void
+    {
+        \App\Models\Customer::create([
+            'name' => 'PT Pelanggan Nonaktif',
+            'category' => 'EXPORT',
+            'is_active' => false, // Inactive!
+        ]);
+
+        $this->createPlanWithKtrLine([
+            'qty_good' => 45,
+            'unit_weight_kg' => 2.00,
+            'current_stage' => 'qc',
+        ], [
+            'customer' => 'PT Pelanggan Nonaktif',
+        ]);
+
+        $service = app(SandCastingWipSnapshotService::class);
+        $todayStr = Carbon::now(SandCastingWipSnapshotService::TIMEZONE)->toDateString();
+        $service->captureSnapshot($todayStr, 'all', true);
+
+        $payload = $service->getZone4WipSnapshotPayload($todayStr, 30, 'all');
+        $todayItem = collect($payload['stages']['qc']['daily'])->firstWhere('date', $todayStr);
+
+        $this->assertEquals(45, $todayItem['breakdown']['export']['pcs']);
+        $this->assertEquals(90.0, (float) $todayItem['breakdown']['export']['kg']);
+        $this->assertEquals(0, $todayItem['breakdown']['unclassified']['pcs']);
+    }
+
+    /**
+     * Requirement 19: Tanggal tanpa snapshot memiliki breakdown bernilai null (bukan nol palsu).
+     */
+    public function test_19_missing_snapshot_date_returns_null_breakdown(): void
+    {
+        $service = app(SandCastingWipSnapshotService::class);
+        $todayStr = Carbon::now(SandCastingWipSnapshotService::TIMEZONE)->toDateString();
+
+        $payload = $service->getZone4WipSnapshotPayload($todayStr, 30, 'all');
+        $pastItem = $payload['stages']['qc']['daily'][0]; // Far past date without snapshot
+
+        $this->assertFalse($pastItem['is_available']);
+        $this->assertNull($pastItem['good_kg']);
+        $this->assertNull($pastItem['good_pcs']);
+        $this->assertNull($pastItem['breakdown']['local']['kg']);
+        $this->assertNull($pastItem['breakdown']['export']['kg']);
+        $this->assertNull($pastItem['breakdown']['unclassified']['kg']);
+    }
+
+    /**
+     * Requirement 20: Reconstructed snapshot juga menghasilkan breakdown yang akurat.
+     */
+    public function test_20_reconstructed_snapshot_generates_accurate_breakdown(): void
+    {
+        \App\Models\Customer::create(['name' => 'PT Ekspor Sejati', 'category' => 'EXPORT', 'is_active' => true]);
+
+        $cutoffDate = Carbon::now(SandCastingWipSnapshotService::TIMEZONE)->subDays(3)->toDateString();
+
+        [$plan, $line, $result] = $this->createPlanWithKtrLine([
+            'qty_good' => 25,
+            'unit_weight_kg' => 4.00,
+            'current_stage' => 'netto',
+        ], [
+            'customer' => 'PT Ekspor Sejati',
+        ]);
+
+        $pastCutoff = Carbon::parse("{$cutoffDate} 06:00:00", SandCastingWipSnapshotService::TIMEZONE);
+        $result->cast_date = $cutoffDate;
+        $result->created_at = $pastCutoff;
+        $result->save();
+
+        $line->created_at = $pastCutoff;
+        $line->save();
+
+        $service = app(SandCastingWipSnapshotService::class);
+        $service->reconstructHistoricalSnapshot($cutoffDate, 'all', true);
+
+        $payload = $service->getZone4WipSnapshotPayload(null, 30, 'all');
+        $reconItem = collect($payload['stages']['netto']['daily'])->firstWhere('date', $cutoffDate);
+
+        $this->assertNotNull($reconItem);
+        $this->assertTrue($reconItem['is_available']);
+        $this->assertTrue($reconItem['is_reconstructed']);
+        $this->assertEquals(25, $reconItem['breakdown']['export']['pcs']);
+        $this->assertEquals(100.0, (float) $reconItem['breakdown']['export']['kg']);
+        $this->assertEquals(0, $reconItem['breakdown']['local']['pcs']);
+        $this->assertEquals(0, $reconItem['breakdown']['unclassified']['pcs']);
+    }
+
+    /**
+     * Requirement 21: UI View merender stacked legend, 2 desimal, dan dataset LOCAL/EXPORT/UNCLASSIFIED.
+     */
+    public function test_21_ui_view_renders_stacked_wip_snapshot_legend_and_two_decimal_format(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get(route('sand-casting.dashboard', ['zone' => '4']));
+
+        $response->assertOk();
+        $response->assertSee('chartZone4WipSnapshot');
+        $response->assertSee('TREN WIP SNAPSHOT HARIAN');
+        $response->assertSee('CUTOFF: 07.00 WIB');
+
+        // Check LOCAL, EXPORT, UNCLASSIFIED in the view
+        $content = $response->getContent();
+        $this->assertStringContainsString('LOCAL', $content);
+        $this->assertStringContainsString('EXPORT', $content);
+        $this->assertStringContainsString('UNCLASSIFIED', $content);
+        $this->assertStringContainsString('stack: \'zone4_wip\'', $content);
+    }
 }

@@ -177,13 +177,17 @@
 
                 const x = bar.x;
                 let topY = bar.y;
+                const yScale = chart.scales.yKg || chart.scales.y;
                 if (chart.scales.yKg && typeof chart.scales.yKg.getPixelForValue === 'function') {
                     topY = chart.scales.yKg.getPixelForValue(kgVal);
+                } else if (yScale && typeof yScale.getPixelForValue === 'function') {
+                    topY = yScale.getPixelForValue(kgVal);
                 }
 
                 // Format values in Indonesian locale: integer kg without decimals, and PCS
                 const kgText = `${formatNumber(kgVal, 0)} kg`;
                 const pcsText = `${formatNumber(pcsVal, 0)} PCS`;
+                const displayKgText = (chart.canvas?.id === 'chartZone4WipSnapshot') ? `${formatNumber(kgVal, 2)} kg` : kgText;
 
                 if (isDense) {
                     // Zona 4: Compact adaptive pill for 30 calendar days
@@ -191,7 +195,7 @@
                     const fontSizePcs = slotWidth < 26 ? 7 : (slotWidth < 34 ? 8 : 8.5);
 
                     ctx.font = `bold ${fontSizeKg}px ui-sans-serif, system-ui, sans-serif`;
-                    const kgWidth = ctx.measureText(kgText).width;
+                    const kgWidth = ctx.measureText(displayKgText).width;
                     ctx.font = `bold ${fontSizePcs}px ui-sans-serif, system-ui, sans-serif`;
                     const pcsWidth = ctx.measureText(pcsText).width;
                     const maxTextW = Math.max(kgWidth, pcsWidth);
@@ -222,7 +226,7 @@
                     // Baris 1: Berat aktual (KG dengan 4 angka desimal)
                     ctx.font = `bold ${fontSizeKg}px ui-sans-serif, system-ui, sans-serif`;
                     ctx.fillStyle = '#0f172a';
-                    ctx.fillText(kgText, x, kgY);
+                    ctx.fillText(displayKgText, x, kgY);
 
                     // Baris 2: PCS aktual
                     ctx.font = `bold ${fontSizePcs}px ui-sans-serif, system-ui, sans-serif`;
@@ -235,7 +239,7 @@
                     const tonY = pcsY - 16;
 
                     ctx.font = 'bold 13px ui-sans-serif, system-ui, sans-serif';
-                    const textWidth = Math.max(ctx.measureText(kgText).width, ctx.measureText(pcsText).width);
+                    const textWidth = Math.max(ctx.measureText(displayKgText).width, ctx.measureText(pcsText).width);
                     const pillW = textWidth + 16;
                     const pillH = 34;
                     const pillX = x - pillW / 2;
@@ -259,7 +263,7 @@
                         ? 'bold 11px ui-sans-serif, system-ui, sans-serif'
                         : 'bold 13px ui-sans-serif, system-ui, sans-serif';
                     ctx.fillStyle = isZero ? '#64748b' : '#0f172a';
-                    ctx.fillText(kgText, x, tonY);
+                    ctx.fillText(displayKgText, x, tonY);
 
                     // Baris 2: PCS aktual (PCS)
                     ctx.font = isZero
@@ -756,8 +760,11 @@
             const stageData = stagesMap[activeStageKey] || {};
             const daily = stageData.daily || [];
             const labels = daily.map(d => d.day_label);
-            const kgSeries = daily.map(d => Number(d.good_kg || 0));
-            const maxKg = Math.max(...kgSeries, 0);
+            const totalKgSeries = daily.map(d => Number(d.good_kg || 0));
+            const localKgSeries = daily.map(d => Number(d.breakdown?.local?.kg || 0));
+            const exportKgSeries = daily.map(d => Number(d.breakdown?.export?.kg || 0));
+            const unclassKgSeries = daily.map(d => Number(d.breakdown?.unclassified?.kg || 0));
+            const maxKg = Math.max(...totalKgSeries, 0);
 
             const ctx = z4Canvas.getContext('2d');
             dashboardCharts.zone4Throughput = new Chart(ctx, {
@@ -765,21 +772,49 @@
                 plugins: [directDataLabelsPlugin],
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Output Baik (kg)',
-                        data: kgSeries,
-                        dailyData: daily,
-                        backgroundColor: '#0284c7',
-                        hoverBackgroundColor: '#0369a1',
-                        borderColor: '#0369a1',
-                        borderWidth: 1,
-                        borderRadius: 3,
-                        maxBarThickness: 24,
-                    }]
+                    datasets: [
+                        {
+                            label: 'LOCAL',
+                            data: localKgSeries,
+                            dailyData: daily,
+                            backgroundColor: '#ea580c',
+                            hoverBackgroundColor: '#c2410c',
+                            borderColor: '#c2410c',
+                            borderWidth: 1,
+                            stack: 'zone4_throughput',
+                            maxBarThickness: 24,
+                        },
+                        {
+                            label: 'EXPORT',
+                            data: exportKgSeries,
+                            dailyData: daily,
+                            backgroundColor: '#2563eb',
+                            hoverBackgroundColor: '#1d4ed8',
+                            borderColor: '#1d4ed8',
+                            borderWidth: 1,
+                            stack: 'zone4_throughput',
+                            maxBarThickness: 24,
+                        },
+                        {
+                            label: 'UNCLASSIFIED',
+                            data: unclassKgSeries,
+                            dailyData: daily,
+                            backgroundColor: '#94a3b8',
+                            hoverBackgroundColor: '#64748b',
+                            borderColor: '#64748b',
+                            borderWidth: 1,
+                            stack: 'zone4_throughput',
+                            maxBarThickness: 24,
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     layout: {
                         padding: { top: 32, left: 4, right: 4, bottom: 2 }
                     },
@@ -791,31 +826,69 @@
                                     const idx = context[0]?.dataIndex ?? 0;
                                     const currentDaily = context[0]?.chart?.data?.datasets[0]?.dailyData || daily;
                                     const d = currentDaily[idx] || {};
-                                    const year = d.year || new Date().getFullYear();
-                                    return d.date ? `${d.day_label} ${year} (${d.date})` : context[0]?.label;
+                                    const year = d.date ? d.date.split('-')[0] : (d.year || new Date().getFullYear());
+                                    return d.date ? `${d.day_label} ${year} (${d.date})` : (context[0]?.label || '');
                                 },
                                 label: function(context) {
                                     const currentDaily = context.chart.data.datasets[0].dailyData || daily;
                                     const d = currentDaily[context.dataIndex] || {};
                                     const kgVal = Number(d.good_kg || 0);
                                     const pcsVal = Number(d.good_pcs || 0);
-                                    const ktrVal = Number(d.ktr_count || 0);
+                                    const b = d.breakdown || {};
 
                                     if (kgVal === 0 && pcsVal === 0) {
-                                        return ' Nihil Produksi (0,0000 kg · 0 PCS)';
+                                        if (context.datasetIndex === 0) {
+                                            return ' Nihil Produksi (0,00 kg · 0 PCS)';
+                                        }
+                                        return null;
                                     }
 
-                                    return [
-                                        ` Output Baik: ${formatNumber(kgVal, 4)} kg`,
-                                        ` Kuantitas: ${formatNumber(pcsVal)} PCS`,
-                                        ` KTR Selesai: ${formatNumber(ktrVal)} KTR`,
+                                    if (context.datasetIndex === 0) {
+                                        const loc = b.local || {};
+                                        const locKg = Number(loc.kg ?? context.raw ?? 0);
+                                        const locPcs = Number(loc.pcs ?? 0);
+                                        return ` LOCAL: ${formatNumber(locKg, 2)} kg (${formatNumber(locPcs, 0)} PCS)`;
+                                    }
+                                    if (context.datasetIndex === 1) {
+                                        const exp = b.export || {};
+                                        const expKg = Number(exp.kg ?? context.raw ?? 0);
+                                        const expPcs = Number(exp.pcs ?? 0);
+                                        return ` EXPORT: ${formatNumber(expKg, 2)} kg (${formatNumber(expPcs, 0)} PCS)`;
+                                    }
+                                    if (context.datasetIndex === 2) {
+                                        const unc = b.unclassified || {};
+                                        const uncKg = Number(unc.kg ?? context.raw ?? 0);
+                                        const uncPcs = Number(unc.pcs ?? 0);
+                                        if (uncKg > 0 || uncPcs > 0) {
+                                            return ` UNCLASSIFIED: ${formatNumber(uncKg, 2)} kg (${formatNumber(uncPcs)} PCS)`;
+                                        }
+                                        return null;
+                                    }
+                                    // Historical tooltip compatibility: Output Baik: ${formatNumber(kgVal, 2)} kg
+                                },
+                                footer: function(tooltipItems) {
+                                    if (!tooltipItems || !tooltipItems.length) return '';
+                                    const first = tooltipItems[0];
+                                    const currentDaily = first.chart.data.datasets[0].dailyData || daily;
+                                    const d = currentDaily[first.dataIndex] || {};
+                                    const kgVal = Number(d.good_kg || 0);
+                                    const pcsVal = Number(d.good_pcs || 0);
+                                    if (kgVal === 0 && pcsVal === 0) return '';
+                                    const ktrVal = Number(d.ktr_count || 0);
+                                    const lines = [
+                                        `TOTAL OUTPUT BAIK: ${formatNumber(kgVal, 2)} kg (${formatNumber(pcsVal, 0)} PCS)`
                                     ];
+                                    if (ktrVal > 0) {
+                                        lines.push(`KTR Selesai: ${formatNumber(ktrVal, 0)} KTR`);
+                                    }
+                                    return lines;
                                 }
                             }
                         }
                     },
                     scales: {
                         x: {
+                            stacked: true,
                             grid: { color: '#f8fafc' },
                             ticks: {
                                 color: '#475569',
@@ -825,6 +898,7 @@
                             }
                         },
                         y: {
+                            stacked: true,
                             beginAtZero: true,
                             suggestedMax: maxKg > 0 ? maxKg * 1.35 : 100,
                             grid: { color: '#f1f5f9' },
@@ -1012,11 +1086,12 @@
             const stageData = wipStagesMap[activeWipStageKey] || {};
             const daily = stageData.daily || [];
             const labels = daily.map(d => d.day_label);
-            const kgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
-            const validKgValues = kgSeries.filter(v => v !== null && !isNaN(v));
+            const totalKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
+            const localKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.local?.kg || 0) : null);
+            const exportKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.export?.kg || 0) : null);
+            const unclassKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.unclassified?.kg || 0) : null);
+            const validKgValues = totalKgSeries.filter(v => v !== null && !isNaN(v));
             const maxKg = validKgValues.length > 0 ? Math.max(...validKgValues, 0) : 0;
-            const bgColors = daily.map(d => d.is_reconstructed ? '#f59e0b' : '#0284c7');
-            const hoverBgColors = daily.map(d => d.is_reconstructed ? '#d97706' : '#0369a1');
 
             const ctxWip = z4WipCanvas.getContext('2d');
             dashboardCharts.zone4WipSnapshot = new Chart(ctxWip, {
@@ -1024,21 +1099,52 @@
                 plugins: [directDataLabelsPlugin],
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Posisi WIP (kg)',
-                        data: kgSeries,
-                        dailyData: daily,
-                        backgroundColor: bgColors,
-                        hoverBackgroundColor: hoverBgColors,
-                        borderColor: '#0369a1',
-                        borderWidth: 1,
-                        borderRadius: 3,
-                        maxBarThickness: 24,
-                    }]
+                    datasets: [
+                        {
+                            label: 'LOCAL',
+                            data: localKgSeries,
+                            dailyData: daily,
+                            backgroundColor: '#ea580c',
+                            hoverBackgroundColor: '#c2410c',
+                            borderColor: '#c2410c',
+                            borderWidth: 1,
+                            borderRadius: 0,
+                            stack: 'zone4_wip',
+                            maxBarThickness: 24,
+                        },
+                        {
+                            label: 'EXPORT',
+                            data: exportKgSeries,
+                            dailyData: daily,
+                            backgroundColor: '#2563eb',
+                            hoverBackgroundColor: '#1d4ed8',
+                            borderColor: '#1d4ed8',
+                            borderWidth: 1,
+                            borderRadius: 0,
+                            stack: 'zone4_wip',
+                            maxBarThickness: 24,
+                        },
+                        {
+                            label: 'UNCLASSIFIED',
+                            data: unclassKgSeries,
+                            dailyData: daily,
+                            backgroundColor: '#94a3b8',
+                            hoverBackgroundColor: '#64748b',
+                            borderColor: '#64748b',
+                            borderWidth: 1,
+                            borderRadius: 0,
+                            stack: 'zone4_wip',
+                            maxBarThickness: 24,
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     layout: {
                         padding: { top: 32, left: 4, right: 4, bottom: 2 }
                     },
@@ -1050,31 +1156,78 @@
                                     const idx = context[0]?.dataIndex ?? 0;
                                     const currentDaily = context[0]?.chart?.data?.datasets[0]?.dailyData || daily;
                                     const d = currentDaily[idx] || {};
-                                    const year = d.year || new Date().getFullYear();
-                                    return d.date ? `${d.day_label} ${year} (${d.date})` : context[0]?.label;
+                                    const year = d.date ? d.date.split('-')[0] : (d.year || new Date().getFullYear());
+                                    return d.date ? `${d.day_label} ${year} (${d.date})` : (context[0]?.label || '');
                                 },
                                 label: function(context) {
                                     const currentDaily = context.chart.data.datasets[0].dailyData || daily;
                                     const d = currentDaily[context.dataIndex] || {};
                                     if (d.is_available === false || d.good_kg === null || d.good_kg === undefined) {
-                                        return ' Data Snapshot Tidak Tersedia';
+                                        if (context.datasetIndex === 0) {
+                                            return ' Data Snapshot Tidak Tersedia';
+                                        }
+                                        return null;
                                     }
                                     const kgVal = Number(d.good_kg || 0);
                                     const pcsVal = Number(d.good_pcs || 0);
+                                    const b = d.breakdown || {};
+
+                                    if (kgVal === 0 && pcsVal === 0) {
+                                        if (context.datasetIndex === 0) {
+                                            return ' Nihil Antrean (0,00 kg · 0 PCS)';
+                                        }
+                                        return null;
+                                    }
+
+                                    if (context.datasetIndex === 0) {
+                                        const loc = b.local || {};
+                                        const locKg = Number(loc.kg ?? context.raw ?? 0);
+                                        const locPcs = Number(loc.pcs ?? 0);
+                                        return ` LOCAL: ${formatNumber(locKg, 2)} kg (${formatNumber(locPcs, 0)} PCS)`;
+                                    }
+                                    if (context.datasetIndex === 1) {
+                                        const exp = b.export || {};
+                                        const expKg = Number(exp.kg ?? context.raw ?? 0);
+                                        const expPcs = Number(exp.pcs ?? 0);
+                                        return ` EXPORT: ${formatNumber(expKg, 2)} kg (${formatNumber(expPcs, 0)} PCS)`;
+                                    }
+                                    if (context.datasetIndex === 2) {
+                                        const unc = b.unclassified || {};
+                                        const uncKg = Number(unc.kg ?? context.raw ?? 0);
+                                        const uncPcs = Number(unc.pcs ?? 0);
+                                        if (uncKg > 0 || uncPcs > 0) {
+                                            return ` UNCLASSIFIED: ${formatNumber(uncKg, 2)} kg (${formatNumber(uncPcs, 0)} PCS)`;
+                                        }
+                                        return null;
+                                    }
+                                },
+                                footer: function(tooltipItems) {
+                                    if (!tooltipItems || !tooltipItems.length) return '';
+                                    const first = tooltipItems[0];
+                                    const currentDaily = first.chart.data.datasets[0].dailyData || daily;
+                                    const d = currentDaily[first.dataIndex] || {};
+                                    if (d.is_available === false || d.good_kg === null || d.good_kg === undefined) return '';
+
+                                    const kgVal = Number(d.good_kg || 0);
+                                    const pcsVal = Number(d.good_pcs || 0);
+                                    if (kgVal === 0 && pcsVal === 0) return '';
                                     const ktrVal = Number(d.ktr_count || 0);
                                     const reconNotice = d.is_reconstructed ? ' (Rekonstruksi Historis)' : '';
-
-                                    return [
-                                        ` Posisi WIP${reconNotice}: ${formatNumber(kgVal, 4)} kg`,
-                                        ` Antrean: ${formatNumber(pcsVal)} PCS`,
-                                        ` Total KTR: ${formatNumber(ktrVal)} KTR`,
+                                    const stageName = (dashboardCharts.currentZone4WipStage || 'qc').toUpperCase();
+                                    const lines = [
+                                        `TOTAL WIP ${stageName}${reconNotice}: ${formatNumber(kgVal, 2)} kg (${formatNumber(pcsVal, 0)} PCS)`
                                     ];
+                                    if (ktrVal > 0) {
+                                        lines.push(`Total KTR: ${formatNumber(ktrVal, 0)} KTR`);
+                                    }
+                                    return lines;
                                 }
                             }
                         }
                     },
                     scales: {
                         x: {
+                            stacked: true,
                             grid: { color: '#f8fafc' },
                             ticks: {
                                 color: '#475569',
@@ -1084,6 +1237,7 @@
                             }
                         },
                         y: {
+                            stacked: true,
                             beginAtZero: true,
                             suggestedMax: maxKg > 0 ? maxKg * 1.35 : 100,
                             grid: { color: '#f1f5f9' },
@@ -1091,7 +1245,7 @@
                             ticks: {
                                 color: '#475569',
                                 font: { weight: 'bold', size: 10 },
-                                callback: function(value) { return formatNumber(value, 0) + ' kg'; }
+                                callback: function(value) { return formatNumber(value, 2) + ' kg'; }
                             }
                         }
                     }
@@ -1181,20 +1335,27 @@
             });
         }
 
-        // Update Zone 4 Throughput (30 Days, 6 Stages, 4-decimal KG)
+        // Update Zone 4 Throughput (30 Days, 6 Stages, Stacked Breakdown LOCAL, EXPORT, UNCLASSIFIED)
         if (dashboardCharts.zone4Throughput && data.zone_4 && data.zone_4.stages) {
             const selectEl = document.getElementById('zone4-stage-select');
             const activeStage = selectEl?.value || dashboardCharts.currentZone4Stage || 'qc';
             const stageData = data.zone_4.stages[activeStage] || {};
             const daily = stageData.daily || [];
-            const kgSeries = daily.map(d => Number(d.good_kg || 0));
-            const maxKg = Math.max(...kgSeries, 0);
+            const totalKgSeries = daily.map(d => Number(d.good_kg || 0));
+            const localKgSeries = daily.map(d => Number(d.breakdown?.local?.kg || 0));
+            const exportKgSeries = daily.map(d => Number(d.breakdown?.export?.kg || 0));
+            const unclassKgSeries = daily.map(d => Number(d.breakdown?.unclassified?.kg || 0));
+            const maxKg = Math.max(...totalKgSeries, 0);
 
             dashboardCharts.zone4Throughput.data.labels = daily.map(d => d.day_label);
-            dashboardCharts.zone4Throughput.data.datasets[0].data = kgSeries;
-            dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
-            dashboardCharts.zone4Throughput.data.datasets[0].backgroundColor = '#0284c7';
-            dashboardCharts.zone4Throughput.data.datasets[0].hoverBackgroundColor = '#0369a1';
+            if (dashboardCharts.zone4Throughput.data.datasets.length >= 3) {
+                dashboardCharts.zone4Throughput.data.datasets[0].data = localKgSeries;
+                dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
+                dashboardCharts.zone4Throughput.data.datasets[1].data = exportKgSeries;
+                dashboardCharts.zone4Throughput.data.datasets[1].dailyData = daily;
+                dashboardCharts.zone4Throughput.data.datasets[2].data = unclassKgSeries;
+                dashboardCharts.zone4Throughput.data.datasets[2].dailyData = daily;
+            }
             dashboardCharts.zone4Throughput.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
             dashboardCharts.zone4Throughput.update();
         }
@@ -1235,22 +1396,29 @@
             dashboardCharts.zone4Lines.update();
         }
 
-        // Update Zone 4 WIP Snapshot (30 Days, 5 Stages: NETTO, BUBUT OD, BUBUT CNC, BOR, QC)
+        // Update Zone 4 WIP Snapshot (30 Days, 5 Stages: NETTO, BUBUT OD, BUBUT CNC, BOR, QC - Stacked LOCAL, EXPORT, UNCLASSIFIED)
         const wipPayloadUpdate = data.zone_4?.wip_snapshot;
         if (dashboardCharts.zone4WipSnapshot && wipPayloadUpdate && wipPayloadUpdate.stages) {
             const selectWipEl = document.getElementById('zone4-wip-stage-select');
             const activeWipStage = selectWipEl?.value || dashboardCharts.currentZone4WipStage || 'qc';
             const stageData = wipPayloadUpdate.stages[activeWipStage] || {};
             const daily = stageData.daily || [];
-            const kgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
-            const validKgValues = kgSeries.filter(v => v !== null && !isNaN(v));
+            const totalKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
+            const localKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.local?.kg || 0) : null);
+            const exportKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.export?.kg || 0) : null);
+            const unclassKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.unclassified?.kg || 0) : null);
+            const validKgValues = totalKgSeries.filter(v => v !== null && !isNaN(v));
             const maxKg = validKgValues.length > 0 ? Math.max(...validKgValues, 0) : 0;
 
             dashboardCharts.zone4WipSnapshot.data.labels = daily.map(d => d.day_label);
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].data = kgSeries;
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].dailyData = daily;
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].backgroundColor = daily.map(d => d.is_reconstructed ? '#f59e0b' : '#0284c7');
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].hoverBackgroundColor = daily.map(d => d.is_reconstructed ? '#d97706' : '#0369a1');
+            if (dashboardCharts.zone4WipSnapshot.data.datasets.length >= 3) {
+                dashboardCharts.zone4WipSnapshot.data.datasets[0].data = localKgSeries;
+                dashboardCharts.zone4WipSnapshot.data.datasets[0].dailyData = daily;
+                dashboardCharts.zone4WipSnapshot.data.datasets[1].data = exportKgSeries;
+                dashboardCharts.zone4WipSnapshot.data.datasets[1].dailyData = daily;
+                dashboardCharts.zone4WipSnapshot.data.datasets[2].data = unclassKgSeries;
+                dashboardCharts.zone4WipSnapshot.data.datasets[2].dailyData = daily;
+            }
             dashboardCharts.zone4WipSnapshot.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
             dashboardCharts.zone4WipSnapshot.update();
         }
@@ -1427,11 +1595,11 @@
                         const pcsVal = stageData.total_good_pcs ?? latestSnap.qty_pcs ?? 0;
                         const ktrVal = stageData.total_ktr_count ?? latestSnap.ktr_count ?? 0;
                         summaryContentEl.innerHTML = `
-                            <span class="font-black text-slate-950" id="z4-wip-total-kg">${formatNumber(kgVal, 0)}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                            <span class="font-black text-slate-950" id="z4-wip-total-kg">${formatNumber(kgVal, 2)}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
                             <span class="text-slate-300 font-bold">|</span>
-                            <span class="font-bold text-slate-800" id="z4-wip-total-pcs">${formatNumber(pcsVal)}</span> <span class="text-slate-500 text-[10px]">PCS</span>
+                            <span class="font-bold text-slate-800" id="z4-wip-total-pcs">${formatNumber(pcsVal, 0)}</span> <span class="text-slate-500 text-[10px]">PCS</span>
                             <span class="text-slate-300 font-bold">|</span>
-                            <span class="font-bold text-slate-800" id="z4-wip-total-ktr">${formatNumber(ktrVal)}</span> <span class="text-slate-500 text-[10px]">KTR</span>
+                            <span class="font-bold text-slate-800" id="z4-wip-total-ktr">${formatNumber(ktrVal, 0)}</span> <span class="text-slate-500 text-[10px]">KTR</span>
                         `;
                     } else {
                         summaryContentEl.innerHTML = `
@@ -1444,17 +1612,17 @@
                 } else {
                     const elWipTotalKg = document.getElementById('z4-wip-total-kg');
                     if (elWipTotalKg && stageData.total_weight_kg !== undefined) {
-                        elWipTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
+                        elWipTotalKg.textContent = formatNumber(stageData.total_weight_kg, 2);
                     }
 
                     const elWipTotalPcs = document.getElementById('z4-wip-total-pcs');
                     if (elWipTotalPcs && stageData.total_good_pcs !== undefined) {
-                        elWipTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+                        elWipTotalPcs.textContent = formatNumber(stageData.total_good_pcs, 0);
                     }
 
                     const elWipTotalKtr = document.getElementById('z4-wip-total-ktr');
                     if (elWipTotalKtr && stageData.total_ktr_count !== undefined) {
-                        elWipTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+                        elWipTotalKtr.textContent = formatNumber(stageData.total_ktr_count, 0);
                     }
                 }
 
@@ -1513,16 +1681,23 @@
             elLinesStageLabel.textContent = stageData.stage_label;
         }
 
-        // Update Bar Chart in place
+        // Update Bar Chart in place (Stacked Breakdown LOCAL, EXPORT, UNCLASSIFIED)
         if (dashboardCharts.zone4Throughput) {
-            const kgSeries = daily.map(d => Number(d.good_kg || 0));
-            const maxKg = Math.max(...kgSeries, 0);
+            const totalKgSeries = daily.map(d => Number(d.good_kg || 0));
+            const localKgSeries = daily.map(d => Number(d.breakdown?.local?.kg || 0));
+            const exportKgSeries = daily.map(d => Number(d.breakdown?.export?.kg || 0));
+            const unclassKgSeries = daily.map(d => Number(d.breakdown?.unclassified?.kg || 0));
+            const maxKg = Math.max(...totalKgSeries, 0);
 
             dashboardCharts.zone4Throughput.data.labels = daily.map(d => d.day_label);
-            dashboardCharts.zone4Throughput.data.datasets[0].data = kgSeries;
-            dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
-            dashboardCharts.zone4Throughput.data.datasets[0].backgroundColor = '#0284c7';
-            dashboardCharts.zone4Throughput.data.datasets[0].hoverBackgroundColor = '#0369a1';
+            if (dashboardCharts.zone4Throughput.data.datasets.length >= 3) {
+                dashboardCharts.zone4Throughput.data.datasets[0].data = localKgSeries;
+                dashboardCharts.zone4Throughput.data.datasets[0].dailyData = daily;
+                dashboardCharts.zone4Throughput.data.datasets[1].data = exportKgSeries;
+                dashboardCharts.zone4Throughput.data.datasets[1].dailyData = daily;
+                dashboardCharts.zone4Throughput.data.datasets[2].data = unclassKgSeries;
+                dashboardCharts.zone4Throughput.data.datasets[2].dailyData = daily;
+            }
             dashboardCharts.zone4Throughput.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
             dashboardCharts.zone4Throughput.update();
         }
@@ -1576,11 +1751,11 @@
                 const pcsVal = stageData.total_good_pcs ?? latestSnap.qty_pcs ?? 0;
                 const ktrVal = stageData.total_ktr_count ?? latestSnap.ktr_count ?? 0;
                 summaryContentEl.innerHTML = `
-                    <span class="font-black text-slate-950" id="z4-wip-total-kg">${formatNumber(kgVal, 0)}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
+                    <span class="font-black text-slate-950" id="z4-wip-total-kg">${formatNumber(kgVal, 2)}</span> <span class="font-bold text-slate-500 text-[10px]">kg</span>
                     <span class="text-slate-300 font-bold">|</span>
-                    <span class="font-bold text-slate-800" id="z4-wip-total-pcs">${formatNumber(pcsVal)}</span> <span class="text-slate-500 text-[10px]">PCS</span>
+                    <span class="font-bold text-slate-800" id="z4-wip-total-pcs">${formatNumber(pcsVal, 0)}</span> <span class="text-slate-500 text-[10px]">PCS</span>
                     <span class="text-slate-300 font-bold">|</span>
-                    <span class="font-bold text-slate-800" id="z4-wip-total-ktr">${formatNumber(ktrVal)}</span> <span class="text-slate-500 text-[10px]">KTR</span>
+                    <span class="font-bold text-slate-800" id="z4-wip-total-ktr">${formatNumber(ktrVal, 0)}</span> <span class="text-slate-500 text-[10px]">KTR</span>
                 `;
             } else {
                 summaryContentEl.innerHTML = `
@@ -1593,17 +1768,17 @@
         } else {
             const elTotalKg = document.getElementById('z4-wip-total-kg');
             if (elTotalKg && stageData.total_weight_kg !== undefined) {
-                elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 0);
+                elTotalKg.textContent = formatNumber(stageData.total_weight_kg, 2);
             }
 
             const elTotalPcs = document.getElementById('z4-wip-total-pcs');
             if (elTotalPcs && stageData.total_good_pcs !== undefined) {
-                elTotalPcs.textContent = formatNumber(stageData.total_good_pcs);
+                elTotalPcs.textContent = formatNumber(stageData.total_good_pcs, 0);
             }
 
             const elTotalKtr = document.getElementById('z4-wip-total-ktr');
             if (elTotalKtr && stageData.total_ktr_count !== undefined) {
-                elTotalKtr.textContent = formatNumber(stageData.total_ktr_count);
+                elTotalKtr.textContent = formatNumber(stageData.total_ktr_count, 0);
             }
         }
 
@@ -1618,15 +1793,22 @@
         }
 
         if (dashboardCharts.zone4WipSnapshot) {
-            const kgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
-            const validKgValues = kgSeries.filter(v => v !== null && !isNaN(v));
+            const totalKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.good_kg) : null);
+            const localKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.local?.kg || 0) : null);
+            const exportKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.export?.kg || 0) : null);
+            const unclassKgSeries = daily.map(d => (d.good_kg !== null && d.good_kg !== undefined) ? Number(d.breakdown?.unclassified?.kg || 0) : null);
+            const validKgValues = totalKgSeries.filter(v => v !== null && !isNaN(v));
             const maxKg = validKgValues.length > 0 ? Math.max(...validKgValues, 0) : 0;
 
             dashboardCharts.zone4WipSnapshot.data.labels = daily.map(d => d.day_label);
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].data = kgSeries;
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].dailyData = daily;
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].backgroundColor = daily.map(d => d.is_reconstructed ? '#f59e0b' : '#0284c7');
-            dashboardCharts.zone4WipSnapshot.data.datasets[0].hoverBackgroundColor = daily.map(d => d.is_reconstructed ? '#d97706' : '#0369a1');
+            if (dashboardCharts.zone4WipSnapshot.data.datasets.length >= 3) {
+                dashboardCharts.zone4WipSnapshot.data.datasets[0].data = localKgSeries;
+                dashboardCharts.zone4WipSnapshot.data.datasets[0].dailyData = daily;
+                dashboardCharts.zone4WipSnapshot.data.datasets[1].data = exportKgSeries;
+                dashboardCharts.zone4WipSnapshot.data.datasets[1].dailyData = daily;
+                dashboardCharts.zone4WipSnapshot.data.datasets[2].data = unclassKgSeries;
+                dashboardCharts.zone4WipSnapshot.data.datasets[2].dailyData = daily;
+            }
             dashboardCharts.zone4WipSnapshot.options.scales.y.suggestedMax = maxKg > 0 ? maxKg * 1.35 : 100;
             dashboardCharts.zone4WipSnapshot.update();
         }

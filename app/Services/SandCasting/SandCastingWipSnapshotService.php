@@ -226,6 +226,7 @@ class SandCastingWipSnapshotService
         $scopeKey = ($scope && $scope !== '') ? $scope : 'all';
 
         $savedSnapshots = collect();
+        $categoryMap = \App\Models\Customer::getCategoryMap();
 
         foreach (array_keys(self::WIP_STAGES) as $stage) {
             $existing = SandCastingWipSnapshot::where('snapshot_date', $dateStr)
@@ -245,6 +246,7 @@ class SandCastingWipSnapshotService
                 ->with([
                     'castingResult',
                     'productionPlan',
+                    'castingOrderLine',
                     'stageExecutions' => fn ($q) => $q->orderBy('executed_at', 'asc')->orderBy('id', 'asc'),
                 ]);
 
@@ -259,6 +261,11 @@ class SandCastingWipSnapshotService
             $kg = 0.0;
             $ktrCount = 0;
             $details = [];
+            $reconBreakdown = [
+                'local' => ['pcs' => 0, 'kg' => 0.0],
+                'export' => ['pcs' => 0, 'kg' => 0.0],
+                'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+            ];
 
             foreach ($candidateLines as $line) {
                 $execsAtCutoff = $line->stageExecutions->filter(function (SandCastingStageExecution $e) use ($cutoff) {
@@ -328,12 +335,44 @@ class SandCastingWipSnapshotService
                 $kg += $lineKg;
                 $ktrCount++;
 
+                $custName = $line->productionPlan?->customer ?: ($line->castingOrderLine?->customer ?? '');
+                $cat = \App\Models\Customer::resolveCategory($custName, $categoryMap);
+                $catKey = strtolower($cat);
+                if (! isset($reconBreakdown[$catKey])) {
+                    $catKey = 'unclassified';
+                }
+
+                $reconBreakdown[$catKey]['pcs'] += $historicalUsable;
+                $reconBreakdown[$catKey]['kg'] += $lineKg;
+
                 $details[] = [
                     'traveler_number' => $line->traveler_number,
                     'usable_pcs' => $historicalUsable,
                     'kg' => round($lineKg, 4),
                 ];
             }
+
+            $roundLocalKg = round((float) $reconBreakdown['local']['kg'], 4);
+            $roundExportKg = round((float) $reconBreakdown['export']['kg'], 4);
+            $roundUnclassKg = round((float) $reconBreakdown['unclassified']['kg'], 4);
+            $totalReconKg = round($kg, 4);
+
+            $diff = round($totalReconKg - ($roundLocalKg + $roundExportKg + $roundUnclassKg), 4);
+            if ($diff !== 0.0) {
+                if ($roundLocalKg > 0) {
+                    $roundLocalKg = round($roundLocalKg + $diff, 4);
+                } elseif ($roundExportKg > 0) {
+                    $roundExportKg = round($roundExportKg + $diff, 4);
+                } elseif ($roundUnclassKg > 0) {
+                    $roundUnclassKg = round($roundUnclassKg + $diff, 4);
+                }
+            }
+
+            $breakdownFinal = [
+                'local' => ['pcs' => (int) $reconBreakdown['local']['pcs'], 'kg' => $roundLocalKg],
+                'export' => ['pcs' => (int) $reconBreakdown['export']['pcs'], 'kg' => $roundExportKg],
+                'unclassified' => ['pcs' => (int) $reconBreakdown['unclassified']['pcs'], 'kg' => $roundUnclassKg],
+            ];
 
             $snapshot = SandCastingWipSnapshot::updateOrCreate(
                 [
@@ -351,6 +390,7 @@ class SandCastingWipSnapshotService
                     'status' => SandCastingWipSnapshot::STATUS_SUCCESS,
                     'details' => [
                         'reconstructed' => true,
+                        'breakdown' => $breakdownFinal,
                         'sample_ktrs' => array_slice($details, 0, 10),
                     ],
                 ]
@@ -437,6 +477,7 @@ class SandCastingWipSnapshotService
                     $pcs = (int) $snap->qty_pcs;
                     $ktr = (int) $snap->ktr_count;
                     $isReconstructed = ($snap->source_type === SandCastingWipSnapshot::SOURCE_RECONSTRUCTED);
+                    $breakdown = $this->resolveSnapshotBreakdown($snap, $stageKey, $scopeKey);
 
                     $daily[] = [
                         'date' => $dStr,
@@ -445,6 +486,7 @@ class SandCastingWipSnapshotService
                         'weight_kg' => round($kg, 4),
                         'good_pcs' => $pcs,
                         'ktr_count' => $ktr,
+                        'breakdown' => $breakdown,
                         'is_available' => true,
                         'source_type' => (string) $snap->source_type,
                         'is_reconstructed' => $isReconstructed,
@@ -458,6 +500,11 @@ class SandCastingWipSnapshotService
                         'weight_kg' => null,
                         'good_pcs' => null,
                         'ktr_count' => null,
+                        'breakdown' => [
+                            'local' => ['pcs' => null, 'kg' => null],
+                            'export' => ['pcs' => null, 'kg' => null],
+                            'unclassified' => ['pcs' => null, 'kg' => null],
+                        ],
                         'is_available' => false,
                         'source_type' => null,
                         'is_reconstructed' => false,
@@ -478,6 +525,11 @@ class SandCastingWipSnapshotService
             $latestKtr = $latestValidSnap ? (int) $latestValidSnap->ktr_count : 0;
             $latestDate = $latestValidSnap ? $latestValidSnap->snapshot_date->toDateString() : null;
             $latestIsRecon = $latestValidSnap ? ($latestValidSnap->source_type === SandCastingWipSnapshot::SOURCE_RECONSTRUCTED) : false;
+            $latestBreakdown = $latestValidSnap ? $this->resolveSnapshotBreakdown($latestValidSnap, $stageKey, $scopeKey) : [
+                'local' => ['pcs' => 0, 'kg' => 0.0],
+                'export' => ['pcs' => 0, 'kg' => 0.0],
+                'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+            ];
 
             $stagesData[$stageKey] = [
                 'stage' => $stageKey,
@@ -486,12 +538,14 @@ class SandCastingWipSnapshotService
                 'total_weight_kg' => round($latestKg, 4),
                 'total_good_pcs' => $latestPcs,
                 'total_ktr_count' => $latestKtr,
+                'breakdown' => $latestBreakdown,
                 'latest_snapshot' => [
                     'snapshot_date' => $latestDate,
                     'weight_kg' => round($latestKg, 4),
                     'wip_ton' => round($latestKg / 1000, 2),
                     'qty_pcs' => $latestPcs,
                     'ktr_count' => $latestKtr,
+                    'breakdown' => $latestBreakdown,
                     'is_available' => ($latestValidSnap !== null),
                     'source_type' => $latestValidSnap?->source_type,
                     'is_reconstructed' => $latestIsRecon,
@@ -505,6 +559,201 @@ class SandCastingWipSnapshotService
             'period_start' => $startDateStr,
             'period_end' => $endDateStr,
             'stages' => $stagesData,
+        ];
+    }
+
+    /**
+     * Resolve customer category breakdown for a snapshot row.
+     * Guarantees invariant:
+     * - local.pcs + export.pcs + unclassified.pcs === snap.qty_pcs
+     * - local.kg + export.kg + unclassified.kg === snap.weight_kg
+     *
+     * @return array<string, array{pcs: int, kg: float}>
+     */
+    public function resolveSnapshotBreakdown(SandCastingWipSnapshot $snap, string $stageKey, string $scopeKey): array
+    {
+        $snapPcs = (int) $snap->qty_pcs;
+        $snapKg = round((float) $snap->weight_kg, 4);
+
+        if ($snapPcs <= 0 && $snapKg <= 0.0) {
+            return [
+                'local' => ['pcs' => 0, 'kg' => 0.0],
+                'export' => ['pcs' => 0, 'kg' => 0.0],
+                'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+            ];
+        }
+
+        $details = is_array($snap->details) ? $snap->details : (json_decode($snap->details ?? '[]', true) ?: []);
+
+        if (isset($details['breakdown']) && is_array($details['breakdown'])) {
+            $b = $details['breakdown'];
+            $locPcs = (int) ($b['local']['pcs'] ?? 0);
+            $locKg = round((float) ($b['local']['kg'] ?? 0.0), 4);
+            $expPcs = (int) ($b['export']['pcs'] ?? 0);
+            $expKg = round((float) ($b['export']['kg'] ?? 0.0), 4);
+            $uncPcs = (int) ($b['unclassified']['pcs'] ?? 0);
+            $uncKg = round((float) ($b['unclassified']['kg'] ?? 0.0), 4);
+
+            if (($locPcs + $expPcs + $uncPcs) === $snapPcs) {
+                $diff = round($snapKg - ($locKg + $expKg + $uncKg), 4);
+                if ($diff !== 0.0) {
+                    if ($locKg > 0) {
+                        $locKg = round($locKg + $diff, 4);
+                    } elseif ($expKg > 0) {
+                        $expKg = round($expKg + $diff, 4);
+                    } else {
+                        $uncKg = round($uncKg + $diff, 4);
+                    }
+                }
+
+                return [
+                    'local' => ['pcs' => $locPcs, 'kg' => $locKg],
+                    'export' => ['pcs' => $expPcs, 'kg' => $expKg],
+                    'unclassified' => ['pcs' => $uncPcs, 'kg' => $uncKg],
+                ];
+            }
+        }
+
+        // Fallback: Compute dynamically from historical candidate lines at cutoff
+        return $this->computeBreakdownForSnapshotCutoff($snap, $stageKey, $scopeKey);
+    }
+
+    /**
+     * Reconstruct breakdown at snapshot cutoff when breakdown is missing in stored details.
+     *
+     * @return array<string, array{pcs: int, kg: float}>
+     */
+    protected function computeBreakdownForSnapshotCutoff(SandCastingWipSnapshot $snap, string $stageKey, string $scopeKey): array
+    {
+        $snapPcs = (int) $snap->qty_pcs;
+        $snapKg = round((float) $snap->weight_kg, 4);
+
+        $cutoff = $snap->scheduled_cutoff_at
+            ? Carbon::parse($snap->scheduled_cutoff_at, self::TIMEZONE)
+            : Carbon::parse("{$snap->snapshot_date->toDateString()} ".self::CUTOFF_TIME, self::TIMEZONE);
+
+        $linesQuery = SandCastingCastingResultLine::query()
+            ->where('created_at', '<=', $cutoff)
+            ->with([
+                'castingResult',
+                'productionPlan',
+                'castingOrderLine',
+                'stageExecutions' => fn ($q) => $q->orderBy('executed_at', 'asc')->orderBy('id', 'asc'),
+            ]);
+
+        if ($scopeKey !== 'all') {
+            $linesQuery->whereHas('productionPlan', fn ($p) => $p->where('product_scope', $scopeKey));
+        }
+
+        $candidateLines = $linesQuery->get();
+        $stageOrder = SandCastingQuantityResolverService::STAGE_ORDER[$stageKey] ?? 99;
+        $categoryMap = \App\Models\Customer::getCategoryMap();
+
+        $reconBreakdown = [
+            'local' => ['pcs' => 0, 'kg' => 0.0],
+            'export' => ['pcs' => 0, 'kg' => 0.0],
+            'unclassified' => ['pcs' => 0, 'kg' => 0.0],
+        ];
+
+        foreach ($candidateLines as $line) {
+            $execsAtCutoff = $line->stageExecutions->filter(function (SandCastingStageExecution $e) use ($cutoff) {
+                $ts = $e->physical_done_at ?? $e->executed_at ?? $e->created_at;
+
+                return $ts && $ts <= $cutoff;
+            });
+
+            $hasFinishedThisOrLater = $execsAtCutoff->contains(function (SandCastingStageExecution $e) use ($stageOrder) {
+                $norm = SandCastingQuantityResolverService::normalizeStageName($e->stage);
+                $ord = SandCastingQuantityResolverService::STAGE_ORDER[$norm] ?? 0;
+
+                return $ord >= $stageOrder && $e->physical_done_at !== null;
+            });
+
+            if ($hasFinishedThisOrLater) {
+                continue;
+            }
+
+            $hasReachedStage = false;
+            if ($stageKey === 'netto') {
+                $castDate = $line->castingResult?->cast_date;
+                $hasReachedStage = ($line->created_at <= $cutoff) || ($castDate && $castDate <= $cutoff);
+            } else {
+                $prevOrder = $stageOrder - 1;
+                $hasReachedStage = $execsAtCutoff->contains(function (SandCastingStageExecution $e) use ($prevOrder) {
+                    $norm = SandCastingQuantityResolverService::normalizeStageName($e->stage);
+                    $ord = SandCastingQuantityResolverService::STAGE_ORDER[$norm] ?? 0;
+
+                    return $ord === $prevOrder && $e->physical_done_at !== null;
+                });
+            }
+
+            if (! $hasReachedStage) {
+                continue;
+            }
+
+            $rootGood = (int) ($line->qty_good ?? 0);
+            if ($rootGood <= 0) {
+                continue;
+            }
+
+            $defectsBefore = $execsAtCutoff
+                ->filter(function (SandCastingStageExecution $e) use ($stageOrder) {
+                    $norm = SandCastingQuantityResolverService::normalizeStageName($e->stage);
+                    $ord = SandCastingQuantityResolverService::STAGE_ORDER[$norm] ?? 0;
+
+                    return $ord < $stageOrder;
+                })
+                ->sum('defect_qty');
+
+            $historicalUsable = max(0, $rootGood - (int) $defectsBefore);
+            if ($historicalUsable <= 0) {
+                continue;
+            }
+
+            $w = $this->resolveUnitWeightKg($line);
+            $lineKg = ($historicalUsable * $w);
+
+            $custName = $line->productionPlan?->customer ?: ($line->castingOrderLine?->customer ?? '');
+            $category = \App\Models\Customer::resolveCategory($custName, $categoryMap);
+            $catKey = strtolower($category);
+            if (! isset($reconBreakdown[$catKey])) {
+                $catKey = 'unclassified';
+            }
+
+            $reconBreakdown[$catKey]['pcs'] += $historicalUsable;
+            $reconBreakdown[$catKey]['kg'] += $lineKg;
+        }
+
+        $calcPcs = (int) ($reconBreakdown['local']['pcs'] + $reconBreakdown['export']['pcs'] + $reconBreakdown['unclassified']['pcs']);
+
+        if ($calcPcs === $snapPcs) {
+            $roundLocalKg = round((float) $reconBreakdown['local']['kg'], 4);
+            $roundExportKg = round((float) $reconBreakdown['export']['kg'], 4);
+            $roundUnclassKg = round((float) $reconBreakdown['unclassified']['kg'], 4);
+
+            $diff = round($snapKg - ($roundLocalKg + $roundExportKg + $roundUnclassKg), 4);
+            if ($diff !== 0.0) {
+                if ($roundLocalKg > 0) {
+                    $roundLocalKg = round($roundLocalKg + $diff, 4);
+                } elseif ($roundExportKg > 0) {
+                    $roundExportKg = round($roundExportKg + $diff, 4);
+                } elseif ($roundUnclassKg > 0) {
+                    $roundUnclassKg = round($roundUnclassKg + $diff, 4);
+                }
+            }
+
+            return [
+                'local' => ['pcs' => (int) $reconBreakdown['local']['pcs'], 'kg' => $roundLocalKg],
+                'export' => ['pcs' => (int) $reconBreakdown['export']['pcs'], 'kg' => $roundExportKg],
+                'unclassified' => ['pcs' => (int) $reconBreakdown['unclassified']['pcs'], 'kg' => $roundUnclassKg],
+            ];
+        }
+
+        // Safe fallback: assign to unclassified to preserve mathematical invariants
+        return [
+            'local' => ['pcs' => 0, 'kg' => 0.0],
+            'export' => ['pcs' => 0, 'kg' => 0.0],
+            'unclassified' => ['pcs' => $snapPcs, 'kg' => $snapKg],
         ];
     }
 }
