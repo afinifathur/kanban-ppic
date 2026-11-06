@@ -29,6 +29,8 @@ class CastingResultServiceAndControllerTest extends TestCase
     {
         parent::setUp();
 
+        \Illuminate\Support\Facades\Queue::fake();
+
         $permission = Permission::firstOrCreate(['name' => 'access_planning']);
         $role = Role::firstOrCreate(['name' => 'ppic']);
         $role->givePermissionTo($permission);
@@ -335,7 +337,7 @@ class CastingResultServiceAndControllerTest extends TestCase
         ], $this->ppicUser->id);
     }
 
-    public function test_casting_result_allows_exact_quota_and_over_casting(): void
+    public function test_casting_result_allows_exact_quota_and_rejects_over_casting(): void
     {
         // CASE A: PCOR remaining = 3, qty_good = 3 => PASS
         $planA = $this->createPlan(['qty_planned' => 3, 'qty_remaining' => 3]);
@@ -364,7 +366,7 @@ class CastingResultServiceAndControllerTest extends TestCase
         $this->assertEquals(3, $lineA->fresh()->qty_cast_good);
         $this->assertEquals(0, $lineA->fresh()->qty_remaining_to_cast);
 
-        // CASE B: PCOR remaining = 3, qty_good = 4 => PASS (Over-casting allowed)
+        // CASE B: PCOR remaining = 3, qty_good = 4 => FAIL (Over-casting strictly rejected)
         $planB = $this->createPlan(['qty_planned' => 3, 'qty_remaining' => 3]);
         $orderB = SandCastingCastingOrder::create([
             'casting_order_number' => 'PCOR-20260914-008B',
@@ -378,20 +380,22 @@ class CastingResultServiceAndControllerTest extends TestCase
             'code' => 'LHB01',
             'item_name' => 'FLANGE CASE B',
         ]);
-        $resB = $this->service->recordResult([
-            'heat_number' => 'A21309260B',
-            'cast_date' => '2026-09-14',
-        ], [
-            [
-                'sand_casting_casting_order_line_id' => $lineB->id,
-                'qty_good' => 4,
-            ],
-        ], $this->ppicUser->id);
-        $this->assertNotNull($resB);
-        $this->assertEquals(4, $lineB->fresh()->qty_cast_good);
-        $this->assertEquals(0, $lineB->fresh()->qty_remaining_to_cast);
+        try {
+            $this->service->recordResult([
+                'heat_number' => 'A21309260B',
+                'cast_date' => '2026-09-14',
+            ], [
+                [
+                    'sand_casting_casting_order_line_id' => $lineB->id,
+                    'qty_good' => 4,
+                ],
+            ], $this->ppicUser->id);
+            $this->fail('Expected InvalidArgumentException when over-casting.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('melebihi sisa yang belum dicor', $e->getMessage());
+        }
 
-        // CASE C: PCOR remaining = 3, qty_good = 10 => PASS (Buffer / large overage allowed)
+        // CASE C: PCOR remaining = 3, qty_good = 10 => FAIL (Buffer / large overage rejected)
         $planC = $this->createPlan(['qty_planned' => 3, 'qty_remaining' => 3]);
         $orderC = SandCastingCastingOrder::create([
             'casting_order_number' => 'PCOR-20260914-008C',
@@ -405,18 +409,20 @@ class CastingResultServiceAndControllerTest extends TestCase
             'code' => 'LHC01',
             'item_name' => 'FLANGE CASE C',
         ]);
-        $resC = $this->service->recordResult([
-            'heat_number' => 'A21309260C',
-            'cast_date' => '2026-09-14',
-        ], [
-            [
-                'sand_casting_casting_order_line_id' => $lineC->id,
-                'qty_good' => 10,
-            ],
-        ], $this->ppicUser->id);
-        $this->assertNotNull($resC);
-        $this->assertEquals(10, $lineC->fresh()->qty_cast_good);
-        $this->assertEquals(0, $lineC->fresh()->qty_remaining_to_cast);
+        try {
+            $this->service->recordResult([
+                'heat_number' => 'A21309260C',
+                'cast_date' => '2026-09-14',
+            ], [
+                [
+                    'sand_casting_casting_order_line_id' => $lineC->id,
+                    'qty_good' => 10,
+                ],
+            ], $this->ppicUser->id);
+            $this->fail('Expected InvalidArgumentException when over-casting.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('melebihi sisa yang belum dicor', $e->getMessage());
+        }
 
         // CASE D: qty_good negative => FAIL
         try {
@@ -712,9 +718,9 @@ class CastingResultServiceAndControllerTest extends TestCase
         $this->assertNotEquals($resultLine1->traveler_number, $resultLine2->traveler_number);
     }
 
-    public function test_multi_line_heat_with_over_casting_maintains_accurate_allocations(): void
+    public function test_multi_line_heat_with_over_casting_is_rejected(): void
     {
-        // CASE F: Multi-line / multiple PCOR order lines in one heat with overage
+        // CASE F: Multi-line where one order line exceeds quota (55 > 50) is rejected atomically
         $plan1 = $this->createPlan(['code' => '268ET010', 'item_name' => 'Item 10', 'qty_planned' => 50, 'qty_remaining' => 50]);
         $plan2 = $this->createPlan(['code' => '268AB020', 'item_name' => 'Item 20', 'qty_planned' => 30, 'qty_remaining' => 30]);
 
@@ -746,7 +752,7 @@ class CastingResultServiceAndControllerTest extends TestCase
             'item_name' => 'Item 20',
         ]);
 
-        // Line 1 is over-cast (55 > 50), Line 2 is exact (30 == 30)
+        // Line 1 is over-cast (55 > 50), Line 2 is exact (30 == 30) -> Rejected
         $payload = [
             'heat_number' => 'A214092699',
             'cast_date' => '2026-09-15',
@@ -767,17 +773,9 @@ class CastingResultServiceAndControllerTest extends TestCase
         ];
 
         $response = $this->actingAs($this->ppicUser)->post(route('sand-casting.casting-results.store'), $payload);
-        $heat = SandCastingCastingResult::where('heat_number', 'A214092699')->firstOrFail();
-        $response->assertRedirect(route('sand-casting.casting-results.show', $heat));
-
-        $this->assertEquals(55, $line1->fresh()->qty_cast_good);
-        $this->assertEquals(0, $line1->fresh()->qty_remaining_to_cast);
-
-        $this->assertEquals(30, $line2->fresh()->qty_cast_good);
-        $this->assertEquals(0, $line2->fresh()->qty_remaining_to_cast);
-
-        $this->assertEquals(85, $heat->total_qty_good);
-        $this->assertEquals(3, $heat->total_qty_reject);
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $this->assertNull(SandCastingCastingResult::where('heat_number', 'A214092699')->first());
     }
 
     /**

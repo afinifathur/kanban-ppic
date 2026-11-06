@@ -10,6 +10,10 @@
             <p class="text-slate-500 text-[11px] mt-0.5">Posisi gate fisik dan status shortage per Kode Produksi</p>
         </div>
         <div class="flex items-center gap-2">
+            <a href="{{ route('sand-casting.production-status.export', request()->query()) }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors" title="Download Excel (.xlsx)">
+                <i class="fas fa-file-excel"></i>
+                <span>Download Excel</span>
+            </a>
             <button type="button" onclick="window.print()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-xs transition-colors">
                 <i class="fas fa-print text-slate-500"></i>
                 <span>Print / PDF</span>
@@ -598,7 +602,7 @@
 <div class="production-status-print">
     <!-- Corporate Print Header -->
     <div class="print-header">
-        <div class="company">PT. PERONI KARYA UTAMA</div>
+        <div class="company">PT. PERONI KARYA SENTRA</div>
         <div class="title">SAND CASTING &mdash; PRODUCTION STATUS REPORT</div>
         <div class="subtitle">Physical Gate Custody & Demand Shortage Overview per Production Code</div>
         <div class="meta">

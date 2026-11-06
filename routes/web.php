@@ -316,6 +316,7 @@ Route::middleware(['auth'])->group(function () {
         // Production Status (Sand Casting Read Model)
         Route::middleware(['permission:access_planning|access_production_visibility'])->group(function () {
             Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
+            Route::get('/production-status/export', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
             Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');
         });
 

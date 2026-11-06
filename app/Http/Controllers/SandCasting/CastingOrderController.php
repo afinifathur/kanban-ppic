@@ -40,12 +40,7 @@ class CastingOrderController extends Controller
         $committedSubquerySql = "COALESCE((
             SELECT SUM(
                 CASE
-                    WHEN o.status IN ('DRAFT', 'ISSUED') THEN l.qty_ordered
-                    WHEN o.status = 'PARTIALLY_COMPLETED' THEN COALESCE((
-                        SELECT SUM(r.qty_good)
-                        FROM sand_casting_casting_result_lines r
-                        WHERE r.sand_casting_casting_order_line_id = l.id
-                    ), 0)
+                    WHEN o.status IN ('DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED') THEN l.qty_ordered
                     WHEN o.status = 'COMPLETED' THEN (
                         CASE
                             WHEN COALESCE((
@@ -482,8 +477,7 @@ class CastingOrderController extends Controller
                             $st = $l->castingOrder ? $l->castingOrder->status : null;
                             $g = (int) $l->resultLines->sum('qty_good');
                             $ord = (int) $l->qty_ordered;
-                            if (in_array($st, ['DRAFT', 'ISSUED'], true)) return $ord;
-                            if ($st === 'PARTIALLY_COMPLETED') return $g;
+                            if (in_array($st, ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED'], true)) return $ord;
                             if ($st === 'COMPLETED') return max($ord, $g);
                             return 0;
                         });
@@ -517,38 +511,90 @@ class CastingOrderController extends Controller
         $this->authorizeCastingOrder($castingOrder);
         $targetStatus = $request->input('status');
 
-        if (! in_array($targetStatus, ['DRAFT', 'ISSUED', 'COMPLETED', 'CANCELLED'])) {
+        if (! in_array($targetStatus, ['DRAFT', 'ISSUED', 'COMPLETED', 'CANCELLED'], true)) {
             return back()->with('error', 'Status target tidak valid.');
         }
 
-        if ($castingOrder->status === 'CANCELLED') {
-            return back()->with('error', 'Dokumen yang sudah dibatalkan tidak dapat diubah kembali.');
-        }
+        return DB::transaction(function () use ($castingOrder, $targetStatus) {
+            /** @var SandCastingCastingOrder $order */
+            $order = SandCastingCastingOrder::lockForUpdate()->findOrFail($castingOrder->id);
 
-        if ($targetStatus === 'CANCELLED') {
-            if ($castingOrder->hasRecordedOutcomes()) {
-                return back()->with('error', 'Dokumen tidak dapat dibatalkan karena hasil cor sudah dicatat.');
+            if ($order->status === 'CANCELLED') {
+                return back()->with('error', 'Dokumen yang sudah dibatalkan tidak dapat diubah kembali.');
             }
-        }
 
-        if ($targetStatus === 'ISSUED') {
-            if ($castingOrder->status !== 'DRAFT') {
-                return back()->with('error', 'Hanya dokumen DRAFT yang dapat diterbitkan.');
+            if ($targetStatus === 'CANCELLED') {
+                if ($order->hasRecordedOutcomes()) {
+                    return back()->with('error', 'Dokumen tidak dapat dibatalkan karena hasil cor sudah dicatat.');
+                }
             }
-        }
 
-        if ($targetStatus === 'DRAFT') {
-            if ($castingOrder->status !== 'ISSUED') {
-                return back()->with('error', 'Hanya dokumen ISSUED yang dapat dikembalikan ke DRAFT.');
+            if ($targetStatus === 'ISSUED') {
+                if ($order->status !== 'DRAFT') {
+                    return back()->with('error', 'Hanya dokumen DRAFT yang dapat diterbitkan.');
+                }
+
+                // Re-validate and lock all ProductionPlans to ensure quota validity upon issuance
+                $order->loadMissing('lines.productionPlan');
+                foreach ($order->lines as $line) {
+                    if ($line->production_plan_id) {
+                        /** @var ProductionPlan $plan */
+                        $plan = ProductionPlan::lockForUpdate()->find($line->production_plan_id);
+                        if (! $plan) {
+                            return back()->with('error', "Rencana produksi untuk baris {$line->code} tidak ditemukan.");
+                        }
+
+                        if ($plan->is_closed) {
+                            return back()->with('error', "Rencana produksi {$plan->code} sudah ditutup (CLOSED).");
+                        }
+
+                        $otherCommitted = (int) $plan->castingOrderLines()
+                            ->where('id', '!=', $line->id)
+                            ->with(['castingOrder', 'resultLines'])
+                            ->whereHas('castingOrder', function ($q) {
+                                $q->whereIn('status', ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED']);
+                            })
+                            ->get()
+                            ->sum(function ($l) {
+                                $st = $l->castingOrder ? $l->castingOrder->status : null;
+                                $g = (int) $l->resultLines->sum('qty_good');
+                                $ord = (int) $l->qty_ordered;
+                                if (in_array($st, ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED'], true)) {
+                                    return $ord;
+                                }
+                                if ($st === 'COMPLETED') {
+                                    return max($ord, $g);
+                                }
+                                return 0;
+                            });
+
+                        $available = max(0, $plan->qty_planned - $otherCommitted);
+                        if ($line->qty_ordered > $available) {
+                            return back()->with('error', "Kuantitas untuk {$line->code} ({$line->qty_ordered} pcs) melebihi kuota rencana yang tersedia (Maks: {$available} pcs).");
+                        }
+                    }
+                }
             }
-            if ($castingOrder->hasRecordedOutcomes()) {
-                return back()->with('error', 'Dokumen yang sudah memiliki hasil cor aktual tidak dapat dikembalikan ke DRAFT.');
+
+            if ($targetStatus === 'DRAFT') {
+                if ($order->status !== 'ISSUED') {
+                    return back()->with('error', 'Hanya dokumen ISSUED yang dapat dikembalikan ke DRAFT.');
+                }
+                if ($order->hasRecordedOutcomes()) {
+                    return back()->with('error', 'Dokumen yang sudah memiliki hasil cor aktual tidak dapat dikembalikan ke DRAFT.');
+                }
             }
-        }
 
-        $castingOrder->update(['status' => $targetStatus]);
+            if ($targetStatus === 'COMPLETED') {
+                if ($order->status === 'DRAFT') {
+                    return back()->with('error', 'Dokumen DRAFT harus diterbitkan terlebih dahulu sebelum dapat diselesaikan.');
+                }
+            }
 
-        return back()->with('success', 'Status dokumen berhasil diubah menjadi '.$targetStatus.'.');
+            $order->update(['status' => $targetStatus]);
+
+            return back()->with('success', 'Status dokumen berhasil diubah menjadi '.$targetStatus.'.');
+        });
     }
 
     /**

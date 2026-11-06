@@ -167,6 +167,19 @@ class SandCastingCastingResultService
                     throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} tidak dalam status yang valid untuk pencatatan Hasil Cor.");
                 }
 
+                // Quota validation: cumulative Good cannot exceed qty_ordered on the PCOR line
+                $existingGood = (int) SandCastingCastingResultLine::where('sand_casting_casting_order_line_id', $orderLine->id)
+                    ->sum('qty_good');
+                $ordered = (int) $orderLine->qty_ordered;
+                $remainingQuota = max(0, $ordered - $existingGood);
+
+                if ($qtyGood > $remainingQuota) {
+                    $itemLabel = $planCode.($planItem !== '-' ? " ({$planItem})" : '');
+                    throw new InvalidArgumentException(
+                        "Kuantitas Good ({$qtyGood} pcs) untuk item {$itemLabel} melebihi sisa yang belum dicor pada Perintah Cor {$order->casting_order_number} (Sisa kuota: {$remainingQuota} pcs)."
+                    );
+                }
+
                 // Verify domain on individual plan
                 if ($orderLine->productionPlan && ! $orderLine->productionPlan->isSandCasting()) {
                     throw new InvalidArgumentException("Item {$orderLine->code} bukan bagian dari domain Sand Casting.");
@@ -516,6 +529,21 @@ class SandCastingCastingResultService
                     if ($orderLine->productionPlan && $orderLine->productionPlan->product_scope !== $user->product_scope) {
                         throw new InvalidArgumentException("Unauthorized: Item {$orderLine->code} berada di luar product scope.");
                     }
+                }
+
+                // Quota validation for correction: cumulative Good on target order line cannot exceed qty_ordered
+                $otherGood = (int) SandCastingCastingResultLine::where('sand_casting_casting_order_line_id', $orderLine->id)
+                    ->where('id', '!=', $line->id)
+                    ->sum('qty_good');
+                $ordered = (int) $orderLine->qty_ordered;
+                $maxAllowed = max(0, $ordered - $otherGood);
+
+                if ($newQtyGood > $maxAllowed) {
+                    $itemLabel = $planCode.($planItem !== '-' ? " ({$planItem})" : '');
+                    $orderNum = $orderLine->castingOrder ? $orderLine->castingOrder->casting_order_number : '-';
+                    throw new InvalidArgumentException(
+                        "Koreksi kuantitas Good ({$newQtyGood} pcs) untuk item {$itemLabel} melebihi sisa yang belum dicor pada Perintah Cor {$orderNum} (Maks: {$maxAllowed} pcs)."
+                    );
                 }
 
                 // Weight calculations

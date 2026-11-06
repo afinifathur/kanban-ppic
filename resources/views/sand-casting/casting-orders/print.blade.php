@@ -16,18 +16,27 @@
         .pcor-print-table th,
         .pcor-print-table td {
             border: 1px solid #475569;
-            padding: 4px 5px;
+            padding: 4px 4px;
             vertical-align: middle;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
         }
         .pcor-print-table thead th {
-            font-size: 8pt;
+            font-size: 7.5pt;
             background-color: #f1f5f9;
             color: #0f172a;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.01em;
+            text-align: center;
+            vertical-align: middle;
+            line-height: 1.2;
+            padding: 4px 2px;
+            word-break: normal;
+            overflow-wrap: normal;
+            hyphens: none;
+        }
+        .pcor-print-table tbody td {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         .pcor-print-table .col-product {
             word-break: normal;
@@ -120,7 +129,7 @@
         <div class="border-b-2 border-slate-900 pb-3 mb-4">
             <div class="flex items-start justify-between">
                 <div>
-                    <h1 class="text-lg font-black uppercase tracking-wider text-slate-900">PT. PERONI KARYA UTAMA</h1>
+                    <h1 class="text-lg font-black uppercase tracking-wider text-slate-900">PT. PERONI KARYA SENTRA</h1>
                     <h2 class="text-xs font-bold uppercase tracking-wide text-blue-700 mt-0.5">SURAT PERINTAH COR PASIR (SAND CASTING)</h2>
                 </div>
                 <div class="text-right">
@@ -169,29 +178,29 @@
             <!-- Order Table (10 Columns, Fixed Layout) -->
             <table class="pcor-print-table mb-5">
                 <colgroup>
-                    <col style="width: 4%;">  {{-- 1. No --}}
-                    <col style="width: 9%;">  {{-- 2. Kode Customer --}}
-                    <col style="width: 11%;"> {{-- 3. Customer --}}
-                    <col style="width: 28%;"> {{-- 4. Nama Produk (prioritas lebar) --}}
-                    <col style="width: 7%;">  {{-- 5. Ukuran --}}
-                    <col style="width: 7%;">  {{-- 6. AISI --}}
-                    <col style="width: 8%;">  {{-- 7. Qty Perintah (Sisa) --}}
-                    <col style="width: 7%;">  {{-- 8. Good (manual) --}}
-                    <col style="width: 7%;">  {{-- 9. Reject (manual) --}}
-                    <col style="width: 12%;"> {{-- 10. Keterangan --}}
+                    <col style="width: 3.5%;"> {{-- 1. No --}}
+                    <col style="width: 11%;">   {{-- 2. Kode Customer --}}
+                    <col style="width: 11%;">   {{-- 3. Customer --}}
+                    <col style="width: 26.5%;"> {{-- 4. Nama Produk (prioritas lebar) --}}
+                    <col style="width: 8%;">    {{-- 5. Ukuran --}}
+                    <col style="width: 6%;">    {{-- 6. AISI --}}
+                    <col style="width: 10%;">   {{-- 7. Qty Perintah (Sisa) --}}
+                    <col style="width: 6%;">    {{-- 8. Good (manual) --}}
+                    <col style="width: 6%;">    {{-- 9. Reject (manual) --}}
+                    <col style="width: 12%;">   {{-- 10. Keterangan --}}
                 </colgroup>
                 <thead>
                     <tr>
-                        <th class="text-center">No</th>
-                        <th class="text-left">Kode Customer</th>
-                        <th class="text-left">Customer</th>
-                        <th class="text-left">Nama Produk</th>
-                        <th class="text-center">Ukuran</th>
-                        <th class="text-center">AISI</th>
+                        <th class="text-center whitespace-nowrap">No</th>
+                        <th class="text-center">Kode Customer</th>
+                        <th class="text-center">Customer</th>
+                        <th class="text-center">Nama Produk</th>
+                        <th class="text-center whitespace-nowrap">Ukuran</th>
+                        <th class="text-center whitespace-nowrap">AISI</th>
                         <th class="text-center">Qty Perintah (Sisa)</th>
-                        <th class="text-center">Good</th>
-                        <th class="text-center">Reject</th>
-                        <th class="text-left">Keterangan</th>
+                        <th class="text-center whitespace-nowrap">Good</th>
+                        <th class="text-center whitespace-nowrap">Reject</th>
+                        <th class="text-center">Keterangan</th>
                     </tr>
                 </thead>
                 <tbody>

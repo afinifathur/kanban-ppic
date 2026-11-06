@@ -225,7 +225,7 @@
 
     <!-- Corporate Header -->
     <div class="header">
-        <div class="company-name">PT. PERONI KARYA UTAMA</div>
+        <div class="company-name">PT. PERONI KARYA SENTRA</div>
         <div class="report-title">LAPORAN RINCIAN DEFECT QC — SAND CASTING</div>
         <div class="meta-strip">
             <strong>Periode Laporan:</strong> {{ \Carbon\Carbon::parse($filters['date_from'])->format('d/m/Y') }} s/d {{ \Carbon\Carbon::parse($filters['date_to'])->format('d/m/Y') }}

@@ -875,9 +875,9 @@ class CastingOrderTest extends TestCase
         $this->assertEquals(5, $order->qty_cast_reject);
         $this->assertEquals(20, $order->qty_outstanding);
         $this->assertEquals(80.0, $order->progress_percent);
-        // When order is PARTIALLY_COMPLETED, scheduled committed is actual Good cast (80), releasing uncast outstanding (20) back to planning
-        $this->assertEquals(80, $scPlan->qty_casting_scheduled);
-        $this->assertEquals(20, $scPlan->qty_remaining_casting_scheduled);
+        // Under Model A: When order is PARTIALLY_COMPLETED, scheduled committed is still qty_ordered (100), keeping uncast outstanding locked
+        $this->assertEquals(100, $scPlan->qty_casting_scheduled);
+        $this->assertEquals(0, $scPlan->qty_remaining_casting_scheduled);
 
         // Heat 2: Good 20, Reject 2 -> Total Good 100, Total Reject 7, Outstanding 0 -> Auto COMPLETED
         $heat2 = $service->recordResult([
@@ -1185,27 +1185,35 @@ class CastingOrderTest extends TestCase
         ]);
 
         $service = new \App\Services\SandCasting\SandCastingCastingResultService;
-        $service->recordResult([
+        $res1 = \App\Models\SandCastingCastingResult::create([
             'heat_number' => 'HEAT-MON-01',
             'cast_date' => '2026-10-18',
-        ], [
-            [
-                'sand_casting_casting_order_line_id' => $lineSingle->id,
-                'qty_good' => 54,
-                'qty_reject' => 0,
-            ],
-        ], $this->ppicUser->id);
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $res1->lines()->create([
+            'sand_casting_casting_order_line_id' => $lineSingle->id,
+            'production_plan_id' => $lineSingle->production_plan_id,
+            'traveler_number' => 'KTR-TEST-MON-01',
+            'qty_good' => 54,
+            'qty_reject' => 0,
+            'current_stage' => 'netto',
+        ]);
+        $service->syncCastingOrderStatus($orderSingle);
 
-        $service->recordResult([
+        $res2 = \App\Models\SandCastingCastingResult::create([
             'heat_number' => 'HEAT-MON-02',
             'cast_date' => '2026-10-19',
-        ], [
-            [
-                'sand_casting_casting_order_line_id' => $lineMulti1->id,
-                'qty_good' => 54,
-                'qty_reject' => 0,
-            ],
-        ], $this->ppicUser->id);
+            'recorded_by' => $this->ppicUser->id,
+        ]);
+        $res2->lines()->create([
+            'sand_casting_casting_order_line_id' => $lineMulti1->id,
+            'production_plan_id' => $lineMulti1->production_plan_id,
+            'traveler_number' => 'KTR-TEST-MON-02',
+            'qty_good' => 54,
+            'qty_reject' => 0,
+            'current_stage' => 'netto',
+        ]);
+        $service->syncCastingOrderStatus($orderMulti);
 
         $orderSingle->refresh();
         $orderMulti->refresh();
@@ -1557,16 +1565,16 @@ class CastingOrderTest extends TestCase
 
         // Record Heat 1:
         // Item 1: 60 Good, 0 Defect
-        // Item 2: 44 Good, 0 Defect (over-cast)
-        // Item 3: 40 Good, 0 Defect (over-cast)
-        // Item 4: 22 Good, 0 Defect
+        // Item 2: 22 Good, 0 Defect (reaches quota)
+        // Item 3: 16 Good, 0 Defect (reaches quota)
+        // Item 4: 22 Good, 0 Defect (reaches quota)
         $service->recordResult([
             'heat_number' => 'HEAT-20261031-01',
             'cast_date' => '2026-10-31',
         ], [
             ['sand_casting_casting_order_line_id' => $line1->id, 'qty_good' => 60, 'qty_reject' => 0],
-            ['sand_casting_casting_order_line_id' => $line2->id, 'qty_good' => 44, 'qty_reject' => 0],
-            ['sand_casting_casting_order_line_id' => $line3->id, 'qty_good' => 40, 'qty_reject' => 0],
+            ['sand_casting_casting_order_line_id' => $line2->id, 'qty_good' => 22, 'qty_reject' => 0],
+            ['sand_casting_casting_order_line_id' => $line3->id, 'qty_good' => 16, 'qty_reject' => 0],
             ['sand_casting_casting_order_line_id' => $line4->id, 'qty_good' => 22, 'qty_reject' => 0],
         ], $this->ppicUser->id);
 
@@ -1591,11 +1599,11 @@ class CastingOrderTest extends TestCase
         $this->assertEquals(200, $line1->qty_remaining_to_cast);
         $this->assertEquals('IN_PROGRESS', $line1->execution_status);
 
-        $this->assertEquals(44, $line2->qty_cast_good);
+        $this->assertEquals(22, $line2->qty_cast_good);
         $this->assertEquals(0, $line2->qty_remaining_to_cast);
         $this->assertEquals('COMPLETED', $line2->execution_status);
 
-        $this->assertEquals(40, $line3->qty_cast_good);
+        $this->assertEquals(16, $line3->qty_cast_good);
         $this->assertEquals(0, $line3->qty_remaining_to_cast);
         $this->assertEquals('COMPLETED', $line3->execution_status);
 
@@ -1624,9 +1632,8 @@ class CastingOrderTest extends TestCase
             ->assertDontSee('2610L005')
             ->assertDontSee('2610L146');
 
-        // 3. Condition B: Rencana Cor list (/sand-casting/casting-orders/plans?tab=plans)
-        // Must exclude items with 0 remaining quota (plans 2, 3, 4)
-        // Must include item 1 with remaining quota 200
+        // 3. Condition B under Model A: Rencana Cor list (/sand-casting/casting-orders/plans?tab=plans)
+        // Must exclude all items because plan1's 300 PCS is fully locked by the PARTIALLY_COMPLETED PCOR
         $plansResp = $this->actingAs($this->ppicUser)
             ->get(route('sand-casting.casting-orders.plans', ['tab' => 'plans']));
         $plansResp->assertOk();
@@ -1634,45 +1641,17 @@ class CastingOrderTest extends TestCase
         $activePlans = $plansResp->viewData('plans');
         $planIdsInView = $activePlans->pluck('id')->toArray();
 
-        $this->assertContains($plan1->id, $planIdsInView);
+        // Model A: plan1 remains locked until PCOR completes; it does NOT release uncast quota to plans view
+        $this->assertNotContains($plan1->id, $planIdsInView);
         $this->assertNotContains($plan2->id, $planIdsInView);
         $this->assertNotContains($plan3->id, $planIdsInView);
         $this->assertNotContains($plan4->id, $planIdsInView);
 
-        $p1InView = $activePlans->firstWhere('id', $plan1->id);
-        $this->assertEquals(200, $p1InView->qty_remaining_casting_scheduled);
+        $plan1->refresh();
+        $this->assertEquals(0, $plan1->qty_remaining_casting_scheduled);
 
-        // 4. Create new PCOR for next date (2026-11-01)
-        // Attempting to open create screen with finished item (plan2) must redirect with error
-        $createFinishedItem = $this->actingAs($this->ppicUser)
-            ->get(route('sand-casting.casting-orders.create', ['plan_ids' => [$plan2->id]]));
-        $createFinishedItem->assertRedirect(route('sand-casting.casting-orders.plans'));
-        $createFinishedItem->assertSessionHas('error');
-
-        // Attempting to order finished item (plan2) in store must fail with 422
-        $failFinishedStore = $this->actingAs($this->ppicUser)
-            ->post(route('sand-casting.casting-orders.store'), [
-                'casting_order_number' => 'PCOR-20261101-0001',
-                'scheduled_date' => '2026-11-01',
-                'items' => [
-                    ['production_plan_id' => $plan2->id, 'qty_ordered' => 1, 'line_number' => 2],
-                ],
-            ]);
-        $failFinishedStore->assertStatus(422);
-
-        // Attempting to order 201 PCS for plan1 (more than 200 remaining) must fail with 422
+        // 4. Attempting to create new PCOR for plan1 must fail because its quota is locked by PCOR-20261031-0002
         $failStore = $this->actingAs($this->ppicUser)
-            ->post(route('sand-casting.casting-orders.store'), [
-                'casting_order_number' => 'PCOR-20261101-0001',
-                'scheduled_date' => '2026-11-01',
-                'items' => [
-                    ['production_plan_id' => $plan1->id, 'qty_ordered' => 201, 'line_number' => 1],
-                ],
-            ]);
-        $failStore->assertStatus(422);
-
-        // Ordering remaining 200 PCS succeeds
-        $successStore = $this->actingAs($this->ppicUser)
             ->post(route('sand-casting.casting-orders.store'), [
                 'casting_order_number' => 'PCOR-20261101-0001',
                 'scheduled_date' => '2026-11-01',
@@ -1680,17 +1659,21 @@ class CastingOrderTest extends TestCase
                     ['production_plan_id' => $plan1->id, 'qty_ordered' => 200, 'line_number' => 1],
                 ],
             ]);
-        $successStore->assertRedirect();
+        $failStore->assertStatus(422);
 
-        // 5. Verify double allocation prevention:
-        // Once PCOR-2 is created, plan1 remaining quota becomes 0
-        $plan1->refresh();
-        $this->assertEquals(0, $plan1->qty_remaining_casting_scheduled);
+        // 5. Subsequent casting results continue on the SAME PCOR until completed
+        $service->recordResult([
+            'heat_number' => 'HEAT-20261031-03',
+            'cast_date' => '2026-11-01',
+        ], [
+            ['sand_casting_casting_order_line_id' => $line1->id, 'qty_good' => 200, 'qty_reject' => 0],
+        ], $this->ppicUser->id);
 
-        $plansRespAfter = $this->actingAs($this->ppicUser)
-            ->get(route('sand-casting.casting-orders.plans', ['tab' => 'plans']));
-        $activePlansAfter = $plansRespAfter->viewData('plans');
-        $this->assertNotContains($plan1->id, $activePlansAfter->pluck('id')->toArray());
+        $pcor->refresh();
+        $line1->refresh();
+        $this->assertEquals('COMPLETED', $pcor->status);
+        $this->assertEquals(300, $line1->qty_cast_good);
+        $this->assertEquals(0, $line1->qty_remaining_to_cast);
     }
 
     public function test_print_pcor_only_shows_outstanding_and_handles_all_finished_state(): void
@@ -1790,8 +1773,8 @@ class CastingOrderTest extends TestCase
             'cast_date' => '2026-10-31',
         ], [
             ['sand_casting_casting_order_line_id' => $l1->id, 'qty_good' => 60, 'qty_reject' => 3],
-            ['sand_casting_casting_order_line_id' => $l2->id, 'qty_good' => 44, 'qty_reject' => 0],
-            ['sand_casting_casting_order_line_id' => $l3->id, 'qty_good' => 40, 'qty_reject' => 0],
+            ['sand_casting_casting_order_line_id' => $l2->id, 'qty_good' => 22, 'qty_reject' => 0],
+            ['sand_casting_casting_order_line_id' => $l3->id, 'qty_good' => 16, 'qty_reject' => 0],
             ['sand_casting_casting_order_line_id' => $l4->id, 'qty_good' => 22, 'qty_reject' => 0],
         ], $this->ppicUser->id);
 
