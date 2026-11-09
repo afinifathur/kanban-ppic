@@ -1345,6 +1345,13 @@ class SandCastingProductionFloorQueryService
         $previousDefectQty = $latestLog ? (int) $latestLog['previous_total'] : 0;
         $addedDefectQty = $latestLog ? (int) $latestLog['added_qty'] : 0;
 
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($exec->stage);
+        $hasGudangReceive = $line->relationLoaded('stageExecutions')
+            ? ($line->stageExecutions->contains(fn ($se) => $se->checkpoint_code === 'GUDANG_RECEIVE' && $se->physical_done_at !== null)
+                || $line->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->whereNotNull('physical_done_at')->exists())
+            : $line->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->whereNotNull('physical_done_at')->exists();
+        $isQualityLocked = ($canonicalStage !== 'gudang_jadi') && (($line->current_stage === 'completed') || $hasGudangReceive);
+
         return [
             'id' => $exec->id,
             'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
@@ -1384,6 +1391,7 @@ class SandCastingProductionFloorQueryService
             'is_reverification' => $isReverification,
             'previous_defect_qty' => $previousDefectQty,
             'added_defect_qty' => $addedDefectQty,
+            'is_quality_locked' => $isQualityLocked,
         ];
     }
 
@@ -1659,6 +1667,13 @@ class SandCastingProductionFloorQueryService
         $previousDefectQty = $latestLog ? (int) $latestLog['previous_total'] : 0;
         $addedDefectQty = $latestLog ? (int) $latestLog['added_qty'] : 0;
 
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($exec->stage);
+        $hasGudangReceive = $line->relationLoaded('stageExecutions')
+            ? ($line->stageExecutions->contains(fn ($se) => $se->checkpoint_code === 'GUDANG_RECEIVE' && $se->physical_done_at !== null)
+                || $line->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->whereNotNull('physical_done_at')->exists())
+            : $line->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->whereNotNull('physical_done_at')->exists();
+        $isQualityLocked = ($canonicalStage !== 'gudang_jadi') && (($line->current_stage === 'completed') || $hasGudangReceive);
+
         return [
             'id' => $exec->id,
             'sand_casting_casting_result_line_id' => $exec->sand_casting_casting_result_line_id,
@@ -1698,6 +1713,7 @@ class SandCastingProductionFloorQueryService
             'is_reverification' => $isReverification,
             'previous_defect_qty' => $previousDefectQty,
             'added_defect_qty' => $addedDefectQty,
+            'is_quality_locked' => $isQualityLocked,
             'draft_defect_qty' => (int) array_sum(array_column($defects, 'qty')),
             'has_draft' => ! empty($defects) && $exec->status === SandCastingStageExecution::STATUS_WAITING_QC,
         ];

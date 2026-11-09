@@ -1,10 +1,148 @@
 @extends('layouts.app')
 
 @section('top_bar')
-    <div class="flex items-center justify-between w-full gap-4">
-        <div class="shrink-0">
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">Perintah Cor — Cor Pasir (Sand Casting)</h1>
-            <p class="text-gray-500 text-[10px]">Alokasi dan penerbitan instruksi penuangan cor pasir berdasarkan rencana produksi</p>
+    @php
+        $baselineAvailability = $baselineAvailability ?? [
+            'total' => ['pcs' => 0, 'kg' => 0.0],
+            'categories' => [
+                'LOCAL' => ['pcs' => 0, 'kg' => 0.0],
+                'EXPORT' => ['pcs' => 0, 'kg' => 0.0],
+                'UNCLASSIFIED' => ['pcs' => 0, 'kg' => 0.0],
+            ],
+            'lines' => [
+                1 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0],
+                2 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0],
+                3 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0],
+                4 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0],
+                0 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0],
+            ],
+            'items' => [],
+            'filter_active' => false,
+        ];
+        $totalKg = (float) ($baselineAvailability['total']['kg'] ?? 0.0);
+    @endphp
+    <div class="flex items-center justify-between w-full gap-2 py-0.5 min-w-0">
+        <!-- Title & Subtitle -->
+        <div class="shrink-0 pr-2">
+            <div class="flex items-center gap-1.5">
+                <h1 class="text-base font-extrabold text-slate-900 leading-none tracking-tight">Perintah Cor</h1>
+                @if($baselineAvailability['filter_active'] ?? false)
+                    <span id="panel-filter-active-badge" class="inline-flex items-center gap-1 text-[8.5px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1 py-0.2 rounded shadow-2xs" title="Data ketersediaan saat ini dibatasi oleh filter yang aktif">
+                        <i class="fas fa-filter text-[7.5px]"></i> Filter Aktif
+                    </span>
+                @endif
+            </div>
+            <div class="text-[10px] font-semibold text-slate-500 leading-none mt-1">Cor Pasir (Sand Casting)</div>
+        </div>
+
+        <!-- Minimalist Live Casting Availability & Line Distribution Panel (Single Horizontal Row) -->
+        <div id="live-casting-availability-panel" class="flex items-center gap-1.5 text-xs overflow-x-auto no-scrollbar">
+            <!-- 1. Sisa Kuota (pcs dan kg) -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 shadow-2xs shrink-0 min-w-[95px]">
+                <div class="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-500 leading-none">SISA KUOTA</div>
+                <div class="text-xs font-black text-slate-800 font-mono leading-none my-0.5">
+                    <span id="panel-total-rem-pcs">{{ number_format($baselineAvailability['total']['pcs'] ?? 0) }}</span> <span class="text-[9px] font-normal text-slate-500">pcs</span>
+                </div>
+                <div class="text-[10px] font-bold text-slate-600 font-mono leading-none">
+                    <span id="panel-total-rem-kg">{{ number_format($baselineAvailability['total']['kg'] ?? 0, 2) }}</span> kg
+                </div>
+            </div>
+
+            <!-- 2. Market LOCAL dan 3. EXPORT -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center gap-2.5 shadow-2xs shrink-0">
+                <!-- LOCAL -->
+                <div class="min-w-[75px]">
+                    <div class="text-[8.5px] font-extrabold uppercase tracking-wider text-blue-700 leading-none">LOCAL</div>
+                    <div class="text-xs font-black text-slate-800 font-mono leading-none my-0.5">
+                        <span id="panel-local-rem-pcs">{{ number_format($baselineAvailability['categories']['LOCAL']['pcs'] ?? 0) }}</span> <span class="text-[9px] font-normal text-slate-500">pcs</span>
+                    </div>
+                    <div class="text-[10px] font-bold text-slate-600 font-mono leading-none">
+                        <span id="panel-local-rem-kg">{{ number_format($baselineAvailability['categories']['LOCAL']['kg'] ?? 0, 2) }}</span> kg
+                    </div>
+                </div>
+                <!-- EXPORT -->
+                <div class="border-l border-slate-200 pl-2.5 min-w-[75px]">
+                    <div class="text-[8.5px] font-extrabold uppercase tracking-wider text-purple-700 leading-none">EXPORT</div>
+                    <div class="text-xs font-black text-slate-800 font-mono leading-none my-0.5">
+                        <span id="panel-export-rem-pcs">{{ number_format($baselineAvailability['categories']['EXPORT']['pcs'] ?? 0) }}</span> <span class="text-[9px] font-normal text-slate-500">pcs</span>
+                    </div>
+                    <div class="text-[10px] font-bold text-slate-600 font-mono leading-none">
+                        <span id="panel-export-rem-kg">{{ number_format($baselineAvailability['categories']['EXPORT']['kg'] ?? 0, 2) }}</span> kg
+                    </div>
+                </div>
+                @if(($baselineAvailability['categories']['UNCLASSIFIED']['pcs'] ?? 0) > 0)
+                    <div class="border-l border-slate-200 pl-2 text-[8.5px] font-mono text-slate-400">
+                        <div class="text-[7.5px] font-bold text-slate-400 uppercase leading-none">LAINNYA</div>
+                        <div><span id="panel-unclass-rem-pcs">{{ number_format($baselineAvailability['categories']['UNCLASSIFIED']['pcs'] ?? 0) }}</span> pcs</div>
+                        <div><span id="panel-unclass-rem-kg">{{ number_format($baselineAvailability['categories']['UNCLASSIFIED']['kg'] ?? 0, 2) }}</span> kg</div>
+                    </div>
+                @endif
+            </div>
+
+            <!-- 4. LINE 1, 5. LINE 2, 6. LINE 3, 7. LINE 4 -->
+            @for($l = 1; $l <= 4; $l++)
+                @php
+                    $lineData = $baselineAvailability['lines'][$l] ?? ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0];
+                    $lineKg = (float) ($lineData['kg'] ?? 0.0);
+                    $hasPo = ($lineData['pcs'] ?? 0) > 0;
+                    $linePct = ($totalKg > 0 && $lineKg > 0)
+                        ? round(($lineKg / $totalKg) * 100)
+                        : 0;
+                @endphp
+                <div id="panel-line-{{ $l }}-card" class="bg-white border border-slate-200 rounded-lg px-2.5 py-1 shadow-2xs shrink-0 min-w-[165px]">
+                    <!-- Baris 1: Header Line & Persentase -->
+                    <div class="flex items-center justify-between gap-1 leading-none mb-1">
+                        <div class="flex items-center gap-1">
+                            <span class="text-[9px] font-black text-slate-700 tracking-wider">LINE {{ $l }}</span>
+                            <span id="panel-line-{{ $l }}-no-po-badge" class="{{ $hasPo ? 'hidden' : '' }} text-[7.5px] font-bold text-slate-400 bg-slate-100 px-1 py-0.2 rounded leading-none">Tidak ada PO</span>
+                        </div>
+                        <span id="panel-line-{{ $l }}-pct" class="text-[10px] font-bold font-mono {{ $hasPo && $linePct > 0 ? 'text-amber-700' : 'text-slate-400' }}">{{ $linePct }}%</span>
+                    </div>
+                    
+                    <!-- Baris 2 & 3: Susunan Vertikal (Kiri: Total Pcs & Total Kg, Kanan: Local & Export) -->
+                    <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 items-center leading-tight">
+                        <!-- Row 1: Pcs & Local -->
+                        <div class="text-[10px] font-black text-slate-800 font-mono whitespace-nowrap">
+                            <span id="panel-line-{{ $l }}-rem-pcs">{{ number_format($lineData['pcs'] ?? 0) }}</span> <span class="text-[8px] font-normal text-slate-500">pcs</span>
+                        </div>
+                        <div class="flex items-center justify-between gap-1 text-[8.5px] font-mono whitespace-nowrap pl-1">
+                            <span class="text-blue-700 font-semibold">L: Local</span>
+                            <span class="text-slate-700 font-bold"><span id="panel-line-{{ $l }}-loc-kg">{{ number_format($lineData['local_kg'] ?? 0, 2) }}</span> kg</span>
+                        </div>
+
+                        <!-- Row 2: Kg & Export -->
+                        <div class="text-[9px] font-bold text-slate-700 font-mono whitespace-nowrap">
+                            <span id="panel-line-{{ $l }}-rem-kg">{{ number_format($lineKg, 2) }}</span> kg
+                        </div>
+                        <div class="flex items-center justify-between gap-1 text-[8.5px] font-mono whitespace-nowrap pl-1">
+                            <span class="text-purple-700 font-semibold">E: Export</span>
+                            <span class="text-slate-700 font-bold"><span id="panel-line-{{ $l }}-exp-kg">{{ number_format($lineData['export_kg'] ?? 0, 2) }}</span> kg</span>
+                        </div>
+                    </div>
+                </div>
+            @endfor
+
+            @if(($baselineAvailability['lines'][0]['pcs'] ?? 0) > 0)
+                @php
+                    $line0Data = $baselineAvailability['lines'][0];
+                    $line0Kg = (float) ($line0Data['kg'] ?? 0.0);
+                    $line0Pct = $totalKg > 0 ? round(($line0Kg / $totalKg) * 100) : 0;
+                @endphp
+                <div id="panel-line-0-card" class="bg-amber-50/50 border border-amber-200/70 rounded-lg px-2.5 py-1 shadow-2xs shrink-0 min-w-[125px]" title="Item tanpa line yang ditentukan (Line 0)">
+                    <div class="flex items-center justify-between gap-1 leading-none mb-1">
+                        <span class="text-[9px] font-black text-amber-800 tracking-wider">UNASSIGNED</span>
+                        <span id="panel-line-0-pct" class="text-[10px] font-bold font-mono text-amber-700">{{ $line0Pct }}%</span>
+                    </div>
+                    <div class="space-y-0.5 text-[8.5px] leading-tight">
+                        <div class="text-[10px] font-black text-slate-800 font-mono whitespace-nowrap">
+                            <span id="panel-line-0-rem-pcs">{{ number_format($line0Data['pcs'] ?? 0) }}</span> <span class="text-[8px] font-normal text-slate-500">pcs</span>
+                        </div>
+                        <div class="text-[9px] font-bold text-slate-700 font-mono whitespace-nowrap">
+                            <span id="panel-line-0-rem-kg">{{ number_format($line0Kg, 2) }}</span> kg
+                        </div>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 @endsection
@@ -23,6 +161,12 @@
     @endif
 
     <style>
+        #app-main-header {
+            height: auto !important;
+            min-height: 3.5rem;
+            padding-top: 0.25rem;
+            padding-bottom: 0.25rem;
+        }
         #app-main-content {
             padding-top: 0 !important;
         }
@@ -33,7 +177,7 @@
         }
     </style>
 
-    <div class="space-y-3 pt-2 sm:pt-4">
+    <div class="space-y-2 pt-1 sm:pt-1.5">
         <!-- Flash Messages -->
         @if(session('success'))
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg flex items-center justify-between shadow-sm">
@@ -308,6 +452,7 @@
                                                     data-max-qty="{{ $remainingToOrder }}"
                                                     data-weight="{{ $unitWeight }}"
                                                     data-line="{{ $defaultLine }}"
+                                                    data-origin-line="{{ (int) ($plan->line_number ?: 0) }}"
                                                     data-category="{{ $customerCategory }}"
                                                     class="plan-checkbox rounded text-blue-600 focus:ring-blue-500 border-slate-300">
                                             @else
@@ -342,16 +487,16 @@
                                             {{ $unitWeight > 0 ? number_format($unitWeight, 2).' kg' : '-' }}
                                         </td>
                                         <td class="p-3 text-center">
-                                            @if($canSelect)
-                                                <select data-plan-line="{{ $plan->id }}"
-                                                    class="plan-line-select bg-white border border-slate-300 rounded px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500">
-                                                    @for($l = 1; $l <= 4; $l++)
-                                                        <option value="{{ $l }}" {{ $defaultLine === $l ? 'selected' : '' }}>Line {{ $l }}</option>
-                                                    @endfor
-                                                </select>
-                                            @else
+                                            @php
+                                                $displayLine = (int) ($plan->line_number ?: 0);
+                                            @endphp
+                                            @if($displayLine >= 1 && $displayLine <= 4)
                                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                                    Line {{ $defaultLine }}
+                                                    Line {{ $displayLine }}
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Line belum ditentukan di Daftar Rencana">
+                                                    Line -
                                                 </span>
                                             @endif
                                         </td>
@@ -630,10 +775,10 @@
 
         document.addEventListener('DOMContentLoaded', function () {
             const selectionStorageKey = @json($selectionStorageKey);
+            const BASELINE_AVAILABILITY = @json($baselineAvailability);
             const checkAll = document.getElementById('check-all');
             const checkboxes = Array.from(document.querySelectorAll('.plan-checkbox'));
             const qtyInputs = Array.from(document.querySelectorAll('.plan-qty-input'));
-            const lineSelects = Array.from(document.querySelectorAll('.plan-line-select'));
             const btnCreate = document.getElementById('btn-create-order');
             const selectedCountSpan = document.getElementById('selected-count');
             const selectionSummary = document.getElementById('selection-summary');
@@ -676,7 +821,6 @@
                 const code = checkbox.getAttribute('data-code') || ('#' + planId);
                 const maxQty = parseInt(checkbox.getAttribute('data-max-qty') || checkbox.getAttribute('data-qty'), 10) || 1;
                 const qtyInput = document.querySelector('.plan-qty-input[data-plan-qty="' + planId + '"]');
-                const lineSelect = document.querySelector('.plan-line-select[data-plan-line="' + planId + '"]');
 
                 let rawQty = qtyInput ? parseInt(qtyInput.value, 10) : parseInt(checkbox.getAttribute('data-qty'), 10);
                 let qty = Number.isInteger(rawQty) ? rawQty : maxQty;
@@ -688,7 +832,9 @@
                     qty = maxQty;
                 }
 
-                let line = lineSelect ? (parseInt(lineSelect.value, 10) || 1) : (parseInt(checkbox.getAttribute('data-line'), 10) || 1);
+                // Line is read-only, strictly derived from production plan
+                const originLine = parseInt(checkbox.getAttribute('data-origin-line'), 10) || 0;
+                let line = (originLine >= 1 && originLine <= 4) ? originLine : (parseInt(checkbox.getAttribute('data-line'), 10) || 1);
                 if (line < 1 || line > 4) line = 1;
 
                 const weight = parseFloat(checkbox.getAttribute('data-weight')) || 0;
@@ -702,6 +848,7 @@
                     maxQty: maxQty,
                     weight: weight,
                     line: line,
+                    originLine: originLine,
                     category: category,
                 };
             }
@@ -730,6 +877,7 @@
                                         maxQty: parseInt(value.maxQty || value.qty, 10) || 1,
                                         weight: parseFloat(value.weight) || 0,
                                         line: parseInt(value.line, 10) || 1,
+                                        originLine: parseInt(value.originLine !== undefined ? value.originLine : (value.line || 0), 10) || 0,
                                         category: (value.category || 'UNCLASSIFIED').toUpperCase(),
                                     };
                                 }
@@ -755,6 +903,7 @@
                                     maxQty: parseInt(entry.maxQty || entry.qty, 10) || 1,
                                     weight: parseFloat(entry.weight) || 0,
                                     line: parseInt(entry.line, 10) || 1,
+                                    originLine: parseInt(entry.originLine !== undefined ? entry.originLine : (entry.line || 0), 10) || 0,
                                     category: (entry.category || 'UNCLASSIFIED').toUpperCase(),
                                 };
                             }
@@ -779,6 +928,7 @@
                         maxQty: m.maxQty || m.qty,
                         weight: m.weight,
                         line: m.line || 1,
+                        originLine: m.originLine !== undefined ? m.originLine : 0,
                         category: m.category || 'UNCLASSIFIED',
                     };
                 });
@@ -828,7 +978,6 @@
                     checkbox.checked = selectedIds.has(planId);
 
                     const qtyInput = document.querySelector('.plan-qty-input[data-plan-qty="' + planId + '"]');
-                    const lineSelect = document.querySelector('.plan-line-select[data-plan-line="' + planId + '"]');
                     const maxQty = parseInt(checkbox.getAttribute('data-max-qty') || checkbox.getAttribute('data-qty'), 10) || 1;
 
                     if (checkbox.checked) {
@@ -839,15 +988,12 @@
                             selectedMeta[planId].weight = parseFloat(checkbox.getAttribute('data-weight')) || selectedMeta[planId].weight || 0;
                             selectedMeta[planId].category = (checkbox.getAttribute('data-category') || selectedMeta[planId].category || 'UNCLASSIFIED').toUpperCase();
                             selectedMeta[planId].code = checkbox.getAttribute('data-code') || selectedMeta[planId].code || ('#' + planId);
+                            selectedMeta[planId].originLine = parseInt(checkbox.getAttribute('data-origin-line'), 10) || selectedMeta[planId].originLine || 0;
                             selectedMeta[planId].maxQty = maxQty;
 
                             if (qtyInput && selectedMeta[planId].qty > 0) {
                                 qtyInput.value = Math.min(maxQty, selectedMeta[planId].qty);
                                 checkbox.setAttribute('data-qty', qtyInput.value);
-                            }
-                            if (lineSelect && selectedMeta[planId].line >= 1 && selectedMeta[planId].line <= 4) {
-                                lineSelect.value = selectedMeta[planId].line;
-                                checkbox.setAttribute('data-line', lineSelect.value);
                             }
                         }
                     }
@@ -940,6 +1086,136 @@
                     setElText('calc-line-' + l + '-kg', formatWeight(lineStats[l].kg));
                     setElText('mini-line-' + l + '-kg', formatWeight(lineStats[l].kg) + ' kg');
                 }
+
+                // --- Top Bar: Minimalist Live Casting Availability Updates ---
+                const allocatedFromOriginLine = {
+                    0: { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 },
+                    1: { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 },
+                    2: { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 },
+                    3: { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 },
+                    4: { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 },
+                };
+
+                Array.from(selectedIds).forEach(function (id) {
+                    const m = selectedMeta[id];
+                    if (m) {
+                        const qty = parseInt(m.qty, 10) || 0;
+                        const unitWeight = parseFloat(m.weight) || 0;
+                        const itemKg = qty * unitWeight;
+                        const cat = (m.category === 'LOCAL' || m.category === 'EXPORT') ? m.category : 'UNCLASSIFIED';
+
+                        let origLine = 0;
+                        if (BASELINE_AVAILABILITY.items && BASELINE_AVAILABILITY.items[id]) {
+                            origLine = parseInt(BASELINE_AVAILABILITY.items[id].line, 10) || 0;
+                        } else if (m.originLine !== undefined && m.originLine !== null) {
+                            origLine = parseInt(m.originLine, 10) || 0;
+                        } else {
+                            origLine = parseInt(m.line, 10) || 0;
+                        }
+                        if (origLine < 1 || origLine > 4) origLine = 0;
+
+                        if (!allocatedFromOriginLine[origLine]) {
+                            allocatedFromOriginLine[origLine] = { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 };
+                        }
+                        allocatedFromOriginLine[origLine].pcs += qty;
+                        allocatedFromOriginLine[origLine].kg += itemKg;
+                        if (cat === 'LOCAL') {
+                            allocatedFromOriginLine[origLine].LOCAL += qty;
+                            allocatedFromOriginLine[origLine].local_kg += itemKg;
+                        } else if (cat === 'EXPORT') {
+                            allocatedFromOriginLine[origLine].EXPORT += qty;
+                            allocatedFromOriginLine[origLine].export_kg += itemKg;
+                        }
+                    }
+                });
+
+                // Top Bar: SISA KUOTA (Total Remaining)
+                const baseTotPcs = BASELINE_AVAILABILITY.total ? (BASELINE_AVAILABILITY.total.pcs || 0) : 0;
+                const baseTotKg = BASELINE_AVAILABILITY.total ? (BASELINE_AVAILABILITY.total.kg || 0) : 0;
+                const remTotPcs = Math.max(0, baseTotPcs - totalQty);
+                const remTotKg = Math.max(0, baseTotKg - totalWeight);
+
+                setElText('panel-total-rem-pcs', formatQty(remTotPcs));
+                setElText('panel-total-rem-kg', formatWeight(remTotKg));
+
+                // Top Bar: Market Categories (LOCAL & EXPORT)
+                ['LOCAL', 'EXPORT'].forEach(function (cat) {
+                    const baseCat = (BASELINE_AVAILABILITY.categories && BASELINE_AVAILABILITY.categories[cat])
+                        ? BASELINE_AVAILABILITY.categories[cat]
+                        : { pcs: 0, kg: 0 };
+                    const allocCatPcs = custStats[cat] ? custStats[cat].pcs : 0;
+                    const allocCatKg = custStats[cat] ? custStats[cat].kg : 0;
+
+                    const remCatPcs = Math.max(0, (baseCat.pcs || 0) - allocCatPcs);
+                    const remCatKg = Math.max(0, (baseCat.kg || 0) - allocCatKg);
+
+                    const catKey = cat.toLowerCase();
+                    setElText('panel-' + catKey + '-rem-pcs', formatQty(remCatPcs));
+                    setElText('panel-' + catKey + '-rem-kg', formatWeight(remCatKg));
+                });
+
+                if (BASELINE_AVAILABILITY.categories && BASELINE_AVAILABILITY.categories.UNCLASSIFIED) {
+                    const baseUnclass = BASELINE_AVAILABILITY.categories.UNCLASSIFIED;
+                    const remUnclassPcs = Math.max(0, (baseUnclass.pcs || 0) - (custStats.UNCLASSIFIED ? custStats.UNCLASSIFIED.pcs : 0));
+                    const remUnclassKg = Math.max(0, (baseUnclass.kg || 0) - (custStats.UNCLASSIFIED ? custStats.UNCLASSIFIED.kg : 0));
+                    setElText('panel-unclass-rem-pcs', formatQty(remUnclassPcs));
+                    setElText('panel-unclass-rem-kg', formatWeight(remUnclassKg));
+                }
+
+                // Top Bar: Lines 1..4 (Distribusi Beban Line berdasarkan Berat kg)
+                for (let l = 1; l <= 4; l++) {
+                    const baseLine = (BASELINE_AVAILABILITY.lines && BASELINE_AVAILABILITY.lines[l])
+                        ? BASELINE_AVAILABILITY.lines[l]
+                        : { pcs: 0, kg: 0, local_pcs: 0, local_kg: 0, export_pcs: 0, export_kg: 0 };
+                    const allocOrig = allocatedFromOriginLine[l] || { pcs: 0, kg: 0, LOCAL: 0, EXPORT: 0, local_kg: 0, export_kg: 0 };
+
+                    const remLinePcs = Math.max(0, (baseLine.pcs || 0) - allocOrig.pcs);
+                    const remLineKg = Math.max(0, (baseLine.kg || 0) - allocOrig.kg);
+                    const remLocKg = Math.max(0, (baseLine.local_kg || 0) - allocOrig.local_kg);
+                    const remExpKg = Math.max(0, (baseLine.export_kg || 0) - allocOrig.export_kg);
+
+                    const hasPo = (baseLine.pcs || 0) > 0;
+                    const noPoBadge = document.getElementById('panel-line-' + l + '-no-po-badge');
+                    if (noPoBadge) {
+                        if (hasPo) {
+                            noPoBadge.classList.add('hidden');
+                        } else {
+                            noPoBadge.classList.remove('hidden');
+                        }
+                    }
+
+                    // Baris 1: Persentase Line = Berat kuota tersisa Line / Total berat kuota tersisa * 100%
+                    const pct = remTotKg > 0 ? Math.round((remLineKg / remTotKg) * 100) : 0;
+                    const pctEl = document.getElementById('panel-line-' + l + '-pct');
+                    if (pctEl) {
+                        pctEl.textContent = pct + '%';
+                        if (hasPo && pct > 0) {
+                            pctEl.className = 'text-[10px] font-bold font-mono text-amber-700';
+                        } else {
+                            pctEl.className = 'text-[10px] font-bold font-mono text-slate-400';
+                        }
+                    }
+
+                    // Baris 2: Qty pcs
+                    setElText('panel-line-' + l + '-rem-pcs', formatQty(remLinePcs));
+
+                    // Baris 3: Total Berat kg | L: ... kg | E: ... kg
+                    setElText('panel-line-' + l + '-rem-kg', formatWeight(remLineKg));
+                    setElText('panel-line-' + l + '-loc-kg', formatWeight(remLocKg));
+                    setElText('panel-line-' + l + '-exp-kg', formatWeight(remExpKg));
+                }
+
+                // Line 0 unassigned
+                const baseLine0 = (BASELINE_AVAILABILITY.lines && BASELINE_AVAILABILITY.lines[0])
+                    ? BASELINE_AVAILABILITY.lines[0]
+                    : { pcs: 0, kg: 0 };
+                const allocOrig0 = allocatedFromOriginLine[0] || { pcs: 0, kg: 0 };
+                const remLine0Pcs = Math.max(0, (baseLine0.pcs || 0) - allocOrig0.pcs);
+                const remLine0Kg = Math.max(0, (baseLine0.kg || 0) - allocOrig0.kg);
+                const pct0 = remTotKg > 0 ? Math.round((remLine0Kg / remTotKg) * 100) : 0;
+                setElText('panel-line-0-rem-pcs', formatQty(remLine0Pcs));
+                setElText('panel-line-0-rem-kg', formatWeight(remLine0Kg));
+                setElText('panel-line-0-pct', pct0 + '%');
 
                 if (btnCreate) {
                     btnCreate.disabled = selectedIds.size === 0;
@@ -1070,24 +1346,6 @@
 
                 input.addEventListener('blur', function () {
                     validateAndSyncQty(true);
-                });
-            });
-
-            lineSelects.forEach(function (select) {
-                select.addEventListener('change', function () {
-                    const planId = parseInt(select.getAttribute('data-plan-line'), 10);
-                    const checkbox = document.querySelector('.plan-checkbox[value="' + planId + '"]');
-                    if (!checkbox) return;
-
-                    const values = getRowValues(checkbox);
-                    checkbox.setAttribute('data-line', values.line);
-
-                    if (selectedIds.has(planId)) {
-                        selectedMeta[planId] = values;
-                        persistSelection();
-                        syncSummary();
-                        syncHiddenInputs();
-                    }
                 });
             });
 

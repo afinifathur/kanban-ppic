@@ -40,8 +40,7 @@ class CastingOrderController extends Controller
         $committedSubquerySql = "COALESCE((
             SELECT SUM(
                 CASE
-                    WHEN o.status IN ('DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED') THEN l.qty_ordered
-                    WHEN o.status = 'COMPLETED' THEN (
+                    WHEN o.status IN ('DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED') THEN (
                         CASE
                             WHEN COALESCE((
                                 SELECT SUM(r.qty_good)
@@ -96,6 +95,83 @@ class CastingOrderController extends Controller
             $plansQuery->whereRaw("qty_planned > ({$committedSubquerySql})");
         }
 
+        $customerCategoryMap = \App\Models\Customer::getCategoryMap();
+
+        $filterActive = $request->filled('date')
+            || $request->filled('customer')
+            || $request->filled('code')
+            || ($request->filled('status') && $request->input('status') !== 'active');
+
+        // Baseline availability across ALL eligible active plans (unpaginated)
+        $baselineItems = (clone $plansQuery)->get();
+
+        $baselineAvailability = [
+            'total' => ['pcs' => 0, 'kg' => 0.0],
+            'categories' => [
+                'LOCAL' => ['pcs' => 0, 'kg' => 0.0],
+                'EXPORT' => ['pcs' => 0, 'kg' => 0.0],
+                'UNCLASSIFIED' => ['pcs' => 0, 'kg' => 0.0],
+            ],
+            'lines' => [
+                1 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0, 'unclassified_pcs' => 0, 'unclassified_kg' => 0.0],
+                2 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0, 'unclassified_pcs' => 0, 'unclassified_kg' => 0.0],
+                3 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0, 'unclassified_pcs' => 0, 'unclassified_kg' => 0.0],
+                4 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0, 'unclassified_pcs' => 0, 'unclassified_kg' => 0.0],
+                0 => ['pcs' => 0, 'kg' => 0.0, 'local_pcs' => 0, 'local_kg' => 0.0, 'export_pcs' => 0, 'export_kg' => 0.0, 'unclassified_pcs' => 0, 'unclassified_kg' => 0.0],
+            ],
+            'items' => [],
+            'filter_active' => $filterActive,
+        ];
+
+        foreach ($baselineItems as $item) {
+            if ($item->is_closed) {
+                continue;
+            }
+            $scheduled = (int) ($item->qty_casting_scheduled ?? 0);
+            $remaining = max(0, (int) $item->qty_planned - $scheduled);
+            if ($remaining <= 0) {
+                continue;
+            }
+
+            $weight = (float) ($item->weight ?? 0.0);
+            $kg = (float) round($remaining * $weight, 2);
+            $category = \App\Models\Customer::resolveCategory($item->customer, $customerCategoryMap);
+            $line = (int) ($item->line_number ?: 0);
+            if ($line < 1 || $line > 4) {
+                $line = 0;
+            }
+
+            $baselineAvailability['total']['pcs'] += $remaining;
+            $baselineAvailability['total']['kg'] = (float) round($baselineAvailability['total']['kg'] + $kg, 2);
+
+            $baselineAvailability['categories'][$category]['pcs'] += $remaining;
+            $baselineAvailability['categories'][$category]['kg'] = (float) round($baselineAvailability['categories'][$category]['kg'] + $kg, 2);
+
+            $baselineAvailability['lines'][$line]['pcs'] += $remaining;
+            $baselineAvailability['lines'][$line]['kg'] = (float) round($baselineAvailability['lines'][$line]['kg'] + $kg, 2);
+
+            if ($category === 'LOCAL') {
+                $baselineAvailability['lines'][$line]['local_pcs'] += $remaining;
+                $baselineAvailability['lines'][$line]['local_kg'] = (float) round($baselineAvailability['lines'][$line]['local_kg'] + $kg, 2);
+            } elseif ($category === 'EXPORT') {
+                $baselineAvailability['lines'][$line]['export_pcs'] += $remaining;
+                $baselineAvailability['lines'][$line]['export_kg'] = (float) round($baselineAvailability['lines'][$line]['export_kg'] + $kg, 2);
+            } else {
+                $baselineAvailability['lines'][$line]['unclassified_pcs'] += $remaining;
+                $baselineAvailability['lines'][$line]['unclassified_kg'] = (float) round($baselineAvailability['lines'][$line]['unclassified_kg'] + $kg, 2);
+            }
+
+            $baselineAvailability['items'][$item->id] = [
+                'id' => $item->id,
+                'code' => $item->code,
+                'remaining' => $remaining,
+                'weight' => $weight,
+                'kg' => $kg,
+                'line' => $line,
+                'category' => $category,
+            ];
+        }
+
         $plans = $plansQuery->orderBy('id', 'desc')
             ->paginate(100, ['*'], 'plans_page')
             ->withQueryString();
@@ -144,15 +220,14 @@ class CastingOrderController extends Controller
             $activeTab = $request->query('orders_page') ? 'orders' : 'plans';
         }
 
-        $customerCategoryMap = \App\Models\Customer::getCategoryMap();
-
         return view('sand-casting.casting-orders.plans', compact(
             'plans',
             'castingOrders',
             'activeTab',
             'uniqueCodes',
             'uniqueCustomers',
-            'customerCategoryMap'
+            'customerCategoryMap',
+            'baselineAvailability'
         ));
     }
 
@@ -356,16 +431,10 @@ class CastingOrderController extends Controller
             foreach ($request->items as $itemData) {
                 $plan = ProductionPlan::findOrFail($itemData['production_plan_id']);
 
-                $resolvedLine = ! empty($itemData['line_number'])
-                    ? (int) $itemData['line_number']
-                    : (int) ($plan->line_number ?: 1);
-
+                // Line is strictly read-only and derived from production_plans.line_number
+                $resolvedLine = (int) ($plan->line_number ?: 1);
                 if ($resolvedLine < 1 || $resolvedLine > 4) {
                     $resolvedLine = 1;
-                }
-
-                if ((int) $plan->line_number !== $resolvedLine) {
-                    $plan->update(['line_number' => $resolvedLine]);
                 }
 
                 $order->lines()->create([
@@ -485,10 +554,6 @@ class CastingOrderController extends Controller
                     $maxAllowed = max(0, $plan->qty_planned - $otherCommitted);
                     if ($itemData['qty_ordered'] > $maxAllowed) {
                         abort(422, 'Kuantitas untuk '.$line->code.' melebihi kuota rencana (Maks: '.$maxAllowed.' pcs).');
-                    }
-
-                    if (! empty($itemData['line_number']) && (int) $plan->line_number !== (int) $itemData['line_number']) {
-                        $plan->update(['line_number' => (int) $itemData['line_number']]);
                     }
                 }
 
@@ -766,12 +831,15 @@ class CastingOrderController extends Controller
                 return back()->with('error', 'Kuantitas melebihi sisa yang belum diperintah (Maks: '.number_format($remaining).' pcs).');
             }
 
-            if ($request->filled('line_number') && (int) $plan->line_number !== (int) $request->line_number) {
-                $plan->update(['line_number' => (int) $request->line_number]);
+            // Line is strictly read-only and derived from production_plans.line_number
+            $resolvedLine = (int) ($plan->line_number ?: 1);
+            if ($resolvedLine < 1 || $resolvedLine > 4) {
+                $resolvedLine = 1;
             }
 
             $castingOrder->lines()->create([
                 'production_plan_id' => $plan->id,
+                'line_number' => $resolvedLine,
                 'qty_ordered' => $request->qty_ordered,
                 'code' => $plan->code,
                 'customer' => $plan->customer,

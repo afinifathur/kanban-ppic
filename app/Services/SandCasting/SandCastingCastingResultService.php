@@ -160,24 +160,11 @@ class SandCastingCastingResultService
                 }
 
                 if ($order->status === 'COMPLETED') {
-                    throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} sudah berstatus COMPLETED dan tidak dapat dialokasikan untuk Heat Number baru.");
+                    throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} sudah selesai (COMPLETED) dan tidak dapat menerima penambahan Heat baru.");
                 }
 
                 if (! in_array($order->status, ['ISSUED', 'PARTIALLY_COMPLETED'], true)) {
                     throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} tidak dalam status yang valid untuk pencatatan Hasil Cor.");
-                }
-
-                // Quota validation: cumulative Good cannot exceed qty_ordered on the PCOR line
-                $existingGood = (int) SandCastingCastingResultLine::where('sand_casting_casting_order_line_id', $orderLine->id)
-                    ->sum('qty_good');
-                $ordered = (int) $orderLine->qty_ordered;
-                $remainingQuota = max(0, $ordered - $existingGood);
-
-                if ($qtyGood > $remainingQuota) {
-                    $itemLabel = $planCode.($planItem !== '-' ? " ({$planItem})" : '');
-                    throw new InvalidArgumentException(
-                        "Kuantitas Good ({$qtyGood} pcs) untuk item {$itemLabel} melebihi sisa yang belum dicor pada Perintah Cor {$order->casting_order_number} (Sisa kuota: {$remainingQuota} pcs)."
-                    );
                 }
 
                 // Verify domain on individual plan
@@ -401,6 +388,7 @@ class SandCastingCastingResultService
             // 2. Validate and Update Lines
             $seenLineIds = [];
             $seenPlanIds = [];
+            $affectedOrderIds = [];
 
             foreach ($linesData as $itemData) {
                 $lineId = (int) ($itemData['id'] ?? 0);
@@ -520,7 +508,7 @@ class SandCastingCastingResultService
                 if (! $lineHasExecution && $newLineOrderLineId !== (int) $line->sand_casting_casting_order_line_id) {
                     $order = $orderLine->castingOrder;
                     if (! $order || ! in_array($order->status, ['ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED'], true)) {
-                        throw new InvalidArgumentException("Perintah Cor {$orderLine->code} tidak dalam status yang valid.");
+                        throw new InvalidArgumentException("Perintah Cor {$orderLine->code} tidak dalam status yang valid untuk menerima alokasi baris Hasil Cor.");
                     }
                 }
 
@@ -529,21 +517,6 @@ class SandCastingCastingResultService
                     if ($orderLine->productionPlan && $orderLine->productionPlan->product_scope !== $user->product_scope) {
                         throw new InvalidArgumentException("Unauthorized: Item {$orderLine->code} berada di luar product scope.");
                     }
-                }
-
-                // Quota validation for correction: cumulative Good on target order line cannot exceed qty_ordered
-                $otherGood = (int) SandCastingCastingResultLine::where('sand_casting_casting_order_line_id', $orderLine->id)
-                    ->where('id', '!=', $line->id)
-                    ->sum('qty_good');
-                $ordered = (int) $orderLine->qty_ordered;
-                $maxAllowed = max(0, $ordered - $otherGood);
-
-                if ($newQtyGood > $maxAllowed) {
-                    $itemLabel = $planCode.($planItem !== '-' ? " ({$planItem})" : '');
-                    $orderNum = $orderLine->castingOrder ? $orderLine->castingOrder->casting_order_number : '-';
-                    throw new InvalidArgumentException(
-                        "Koreksi kuantitas Good ({$newQtyGood} pcs) untuk item {$itemLabel} melebihi sisa yang belum dicor pada Perintah Cor {$orderNum} (Maks: {$maxAllowed} pcs)."
-                    );
                 }
 
                 // Weight calculations
@@ -580,10 +553,28 @@ class SandCastingCastingResultService
                     $line->needs_reprint = true;
                 }
 
+                $oldOrderLineId = (int) $line->sand_casting_casting_order_line_id;
+                $oldOrderLine = SandCastingCastingOrderLine::with(['castingOrder', 'productionPlan'])->find($oldOrderLineId);
+                $oldOrderId = $oldOrderLine ? (int) $oldOrderLine->sand_casting_casting_order_id : null;
+                $oldPlanId = (int) $line->production_plan_id;
+                $oldPlan = $oldOrderLine ? $oldOrderLine->productionPlan : \App\Models\ProductionPlan::find($oldPlanId);
+                $oldCode = $oldPlan ? $oldPlan->code : ($oldOrderLine ? $oldOrderLine->code : null);
+                $oldPcorNumber = $oldOrderLine && $oldOrderLine->castingOrder ? $oldOrderLine->castingOrder->casting_order_number : null;
+
+                $newOrderId = (int) $orderLine->sand_casting_casting_order_id;
+                $newOrder = $orderLine->castingOrder;
+                $newPcorNumber = $newOrder ? $newOrder->casting_order_number : null;
+                $newCode = $orderLine->productionPlan ? $orderLine->productionPlan->code : ($orderLine->code ?? null);
+
+                $affectedOrderIds[] = $oldOrderId;
+                $affectedOrderIds[] = $newOrderId;
+
                 // Record Line Audits
                 $lineChanges = [
-                    'sand_casting_casting_order_line_id' => [$line->sand_casting_casting_order_line_id, $newLineOrderLineId],
-                    'production_plan_id' => [$line->production_plan_id, $planId],
+                    'sand_casting_casting_order_line_id' => [$oldOrderLineId, $newLineOrderLineId],
+                    'production_plan_id' => [$oldPlanId, $planId],
+                    'production_code' => [$oldCode, $newCode],
+                    'casting_order_number' => [$oldPcorNumber, $newPcorNumber],
                     'qty_good' => [$line->qty_good, $newQtyGood],
                     'qty_reject' => [$line->qty_reject, $newQtyReject],
                     'unit_weight_kg' => [$line->unit_weight_kg, $newUnitWeight],
@@ -609,9 +600,6 @@ class SandCastingCastingResultService
                     }
                 }
 
-                $oldOrderId = $line->castingOrderLine ? (int) $line->castingOrderLine->sand_casting_casting_order_id : null;
-                $newOrderId = (int) $orderLine->sand_casting_casting_order_id;
-
                 // Save Line Mutations (traveler_number and current_stage are strictly preserved)
                 $line->sand_casting_casting_order_line_id = $newLineOrderLineId;
                 $line->production_plan_id = $planId;
@@ -627,6 +615,13 @@ class SandCastingCastingResultService
                     if ($orderModel) {
                         $this->syncCastingOrderStatus($orderModel);
                     }
+                }
+            }
+
+            foreach (array_unique(array_filter($affectedOrderIds)) as $syncOrderId) {
+                $orderModel = SandCastingCastingOrder::lockForUpdate()->find($syncOrderId);
+                if ($orderModel) {
+                    $this->syncCastingOrderStatus($orderModel);
                 }
             }
 

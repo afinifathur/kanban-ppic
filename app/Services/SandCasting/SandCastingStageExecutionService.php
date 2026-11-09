@@ -326,6 +326,9 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
 
+            // Final Quality Lock Guard: Ensure stage quality is not locked
+            $this->assertStageQualityNotLocked($execution, $line);
+
             if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED dan tidak dapat diubah. Gunakan fitur tambah defect untuk mencatat penambahan.");
             }
@@ -433,6 +436,9 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
 
+            // Final Quality Lock Guard: Ensure stage quality is not locked
+            $this->assertStageQualityNotLocked($execution, $line);
+
             // Idempotency check: verify against both this execution and global log table
             if ($trimmedKey !== null) {
                 $existingLog = \App\Models\SandCastingStageExecutionDefectLog::where('idempotency_key', $trimmedKey)
@@ -538,6 +544,68 @@ class SandCastingStageExecutionService
     }
 
     /**
+     * Final Quality Lock Guard:
+     * When a KTR is completed in Gudang Jadi (current_stage === 'completed' or has GUDANG_RECEIVE execution with physical_done_at),
+     * defect mutations on prior stages (netto, bubut_od, bubut_cnc, bor, qc) are permanently locked.
+     * Exception: stage 'gudang_jadi' remains editable.
+     *
+     * @throws InvalidArgumentException
+     */
+    public function assertStageQualityNotLocked(
+        SandCastingStageExecution $execution,
+        ?SandCastingCastingResultLine $line = null
+    ): void {
+        $canonicalStage = SandCastingStageAuthorizationService::normalizeStage($execution->stage);
+
+        // Exception: stage gudang_jadi is never locked by Final Quality Lock
+        if ($canonicalStage === 'gudang_jadi') {
+            return;
+        }
+
+        $parentLine = $line ?? $execution->castingResultLine;
+        if (! $parentLine) {
+            $executionId = $execution->id ?? 'unknown';
+            throw new InvalidArgumentException(
+                "Data KTR induk tidak ditemukan untuk eksekusi ID {$executionId}. Mutasi defect ditolak demi integritas mutu (Fail-Closed)."
+            );
+        }
+
+        // Finalization check on the parent KTR:
+        // 1. current_stage is 'completed'
+        // 2. OR an execution with checkpoint_code 'GUDANG_RECEIVE' exists and has physical_done_at IS NOT NULL
+        $hasGudangReceive = $parentLine->relationLoaded('stageExecutions')
+            ? ($parentLine->stageExecutions->contains(fn ($se) => $se->checkpoint_code === 'GUDANG_RECEIVE' && $se->physical_done_at !== null)
+                || $parentLine->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->whereNotNull('physical_done_at')->exists())
+            : $parentLine->stageExecutions()->where('checkpoint_code', 'GUDANG_RECEIVE')->whereNotNull('physical_done_at')->exists();
+
+        $isCompleted = ($parentLine->current_stage === 'completed') || $hasGudangReceive;
+
+        if ($isCompleted) {
+            $stageLabel = strtoupper(str_replace('_', ' ', (string) ($canonicalStage ?? $execution->stage)));
+            $travelerNumber = $parentLine->traveler_number ?? 'KTR';
+            throw new InvalidArgumentException(
+                "Tahap {$stageLabel} pada KTR {$travelerNumber} telah TERKUNCI karena proses Gudang Jadi sudah selesai. Koreksi defect hanya diperbolehkan pada tahap Gudang Jadi."
+            );
+        }
+    }
+
+    /**
+     * Check whether an execution is locked by Final Quality Lock.
+     */
+    public function isStageQualityLocked(
+        SandCastingStageExecution $execution,
+        ?SandCastingCastingResultLine $line = null
+    ): bool {
+        try {
+            $this->assertStageQualityNotLocked($execution, $line);
+
+            return false;
+        } catch (InvalidArgumentException) {
+            return true;
+        }
+    }
+
+    /**
      * Step 2-Timeout: Auto-Nihil after 5 calendar days timeout.
      * Transitions WAITING_DEFECT -> WAITING_QC with defect_qty = 0, good_qty = input_qty, is_auto_nihil = true.
      * Strictly atomic with lockForUpdate().
@@ -635,6 +703,9 @@ class SandCastingStageExecutionService
             if (! $line) {
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
+
+            // Final Quality Lock Guard: Ensure stage quality is not locked
+            $this->assertStageQualityNotLocked($execution, $line);
 
             if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED. Draft tidak dapat disimpan.");
@@ -741,6 +812,9 @@ class SandCastingStageExecutionService
             if (! $line) {
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
+
+            // Final Quality Lock Guard: Ensure stage quality is not locked
+            $this->assertStageQualityNotLocked($execution, $line);
 
             if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED.");

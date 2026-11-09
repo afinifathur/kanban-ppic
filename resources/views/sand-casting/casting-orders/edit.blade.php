@@ -157,13 +157,19 @@
                                     <td class="border border-slate-200 p-3 text-center font-bold text-slate-900">
                                         {{ $plan ? number_format($plan->qty_planned) : '-' }}
                                     </td>
-                                    <td class="border border-slate-200 p-2 bg-amber-50/40">
-                                        <select name="items[{{ $index }}][line_number]"
-                                            class="w-full bg-white border border-amber-300 rounded-lg px-2 py-1 text-center text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500">
-                                            @for($l = 1; $l <= 4; $l++)
-                                                <option value="{{ $l }}" {{ $currentLine === $l ? 'selected' : '' }}>Line {{ $l }}</option>
-                                            @endfor
-                                        </select>
+                                    <td class="border border-slate-200 p-2 text-center">
+                                        @php
+                                            $currentLineVal = (int) ($plan?->line_number ?: ($line->line_number ?: 0));
+                                        @endphp
+                                        @if($currentLineVal >= 1 && $currentLineVal <= 4)
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                Line {{ $currentLineVal }}
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                                Line -
+                                            </span>
+                                        @endif
                                     </td>
                                     <td class="border border-slate-200 p-2 bg-blue-50/40">
                                         <input type="number" name="items[{{ $index }}][qty_ordered]"
@@ -242,13 +248,10 @@
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Line (1–4)</label>
-                        <select name="line_number" id="add_line_number"
-                            class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500">
-                            @for($l = 1; $l <= 4; $l++)
-                                <option value="{{ $l }}">Line {{ $l }}</option>
-                            @endfor
-                        </select>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Line (Read-only)</label>
+                        <div id="add_line_display" class="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700">
+                            -
+                        </div>
                     </div>
 
                     <div>
@@ -309,7 +312,7 @@
         function updateMaxAddQty() {
             const select = document.getElementById('add_production_plan_id');
             const qtyInput = document.getElementById('add_qty_ordered');
-            const lineSelect = document.getElementById('add_line_number');
+            const lineDisplay = document.getElementById('add_line_display');
             const selectedOption = select.options[select.selectedIndex];
             const remaining = selectedOption ? parseInt(selectedOption.getAttribute('data-remaining')) || 1 : 1;
             const defaultLine = selectedOption ? parseInt(selectedOption.getAttribute('data-line')) || 1 : 1;
@@ -318,8 +321,8 @@
                 qtyInput.max = remaining;
                 qtyInput.value = remaining;
             }
-            if (lineSelect) {
-                lineSelect.value = defaultLine;
+            if (lineDisplay) {
+                lineDisplay.textContent = selectedOption && selectedOption.value ? 'Line ' + defaultLine : '-';
             }
         }
     </script>

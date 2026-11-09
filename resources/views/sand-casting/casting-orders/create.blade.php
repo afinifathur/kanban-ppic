@@ -141,11 +141,18 @@
                                         {{ $plan->size ?: '-' }} / {{ $plan->aisi ?: '-' }}
                                     </td>
                                     <td class="border border-slate-200 p-2 text-center">
-                                        <select name="items[{{ $index }}][line_number]" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-center text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500">
-                                            @for($ln = 1; $ln <= 4; $ln++)
-                                                <option value="{{ $ln }}" {{ $defaultLine === $ln ? 'selected' : '' }}>Line {{ $ln }}</option>
-                                            @endfor
-                                        </select>
+                                        @php
+                                            $planLine = (int) ($plan->line_number ?: 0);
+                                        @endphp
+                                        @if($planLine >= 1 && $planLine <= 4)
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                Line {{ $planLine }}
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Line belum ditentukan di Daftar Rencana">
+                                                Line -
+                                            </span>
+                                        @endif
                                     </td>
                                     <td class="border border-slate-200 p-3 text-center font-bold text-slate-900">{{ number_format($plan->qty_planned) }}</td>
                                     <td class="border border-slate-200 p-3 text-center font-bold text-emerald-600" data-remaining-qty="{{ $available }}">

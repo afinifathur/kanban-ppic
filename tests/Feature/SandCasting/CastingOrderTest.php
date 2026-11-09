@@ -661,7 +661,7 @@ class CastingOrderTest extends TestCase
         $response->assertSee('sessionStorage.setItem(selectionStorageKey', false);
     }
 
-    public function test_create_update_and_store_line_persist_line_number_on_production_plan(): void
+    public function test_browser_payload_cannot_mutate_production_plan_line_number(): void
     {
         $scPlan1 = ProductionPlan::create([
             'code' => 'SC-LINE-01',
@@ -693,7 +693,7 @@ class CastingOrderTest extends TestCase
             'status' => 'planning',
         ]);
 
-        // 1. Store PCOR with line_number = 3
+        // 1. Attempt to store PCOR with browser manipulation line_number = 3
         $this->actingAs($this->ppicUser)
             ->post(route('sand-casting.casting-orders.store'), [
                 'casting_order_number' => 'PCOR-20260914-0301',
@@ -708,12 +708,15 @@ class CastingOrderTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertEquals(3, $scPlan1->fresh()->line_number);
+        // Production Plan line_number remains 1 (read-only against browser manipulation)
+        $this->assertEquals(1, $scPlan1->fresh()->line_number);
 
         $order = SandCastingCastingOrder::where('casting_order_number', 'PCOR-20260914-0301')->firstOrFail();
         $line1 = $order->lines->first();
+        // Order line uses line_number from production plan
+        $this->assertEquals(1, $line1->line_number);
 
-        // 2. Update PCOR with line_number = 4
+        // 2. Attempt to update PCOR with browser manipulation line_number = 4
         $this->actingAs($this->ppicUser)
             ->put(route('sand-casting.casting-orders.update', $order), [
                 'casting_order_number' => 'PCOR-20260914-0301',
@@ -728,9 +731,9 @@ class CastingOrderTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertEquals(4, $scPlan1->fresh()->line_number);
+        $this->assertEquals(1, $scPlan1->fresh()->line_number);
 
-        // 3. Add second line via storeLine with line_number = 2
+        // 3. Attempt to add line via storeLine with browser manipulation line_number = 2
         $this->actingAs($this->ppicUser)
             ->post(route('sand-casting.casting-orders.lines.store', $order), [
                 'production_plan_id' => $scPlan2->id,
@@ -739,7 +742,24 @@ class CastingOrderTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertEquals(2, $scPlan2->fresh()->line_number);
+        $this->assertEquals(1, $scPlan2->fresh()->line_number);
+        $line2 = $order->lines()->where('production_plan_id', $scPlan2->id)->firstOrFail();
+        $this->assertEquals(1, $line2->line_number);
+
+        // 4. Verify that changing line via Daftar Rencana (PlanController) works normally as single source of truth
+        $this->actingAs($this->ppicUser)
+            ->put(route('plan.update', $scPlan1), [
+                'line_number' => 3,
+                'po_number' => $scPlan1->po_number,
+                'item_code' => $scPlan1->item_code,
+                'item_name' => $scPlan1->item_name,
+                'qty_planned' => $scPlan1->qty_planned,
+                'status' => 'planning',
+                'product_scope' => $scPlan1->product_scope,
+            ])
+            ->assertRedirect();
+
+        $this->assertEquals(3, $scPlan1->fresh()->line_number);
     }
 
     public function test_issued_order_can_be_reverted_to_draft_only_when_no_outcomes_exist(): void
@@ -905,21 +925,34 @@ class CastingOrderTest extends TestCase
         $this->assertEquals(100, $scPlan->qty_casting_scheduled);
         $this->assertEquals(0, $scPlan->qty_remaining_casting_scheduled);
 
-        // Recording a new Heat 3 against a COMPLETED PCOR must be rejected
+        // CANCELLED order cannot receive new results
+        $orderCancelled = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-CANCEL-SYNC',
+            'scheduled_date' => '2026-09-16',
+            'status' => 'CANCELLED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $lineCancelled = $orderCancelled->lines()->create([
+            'production_plan_id' => $scPlan->id,
+            'qty_ordered' => 10,
+            'code' => $scPlan->code,
+            'item_name' => $scPlan->item_name,
+        ]);
+
         try {
             $service->recordResult([
-                'heat_number' => 'HEAT-SYNC-03',
+                'heat_number' => 'HEAT-SYNC-CANCEL',
                 'cast_date' => '2026-09-16',
             ], [
                 [
-                    'sand_casting_casting_order_line_id' => $line->id,
+                    'sand_casting_casting_order_line_id' => $lineCancelled->id,
                     'qty_good' => 10,
                     'qty_reject' => 0,
                 ],
             ], $this->ppicUser->id);
-            $this->fail('Expected InvalidArgumentException when allocating new Heat to COMPLETED PCOR.');
+            $this->fail('Expected InvalidArgumentException when allocating Heat to CANCELLED PCOR.');
         } catch (\InvalidArgumentException $e) {
-            $this->assertStringContainsString('sudah berstatus COMPLETED', $e->getMessage());
+            $this->assertStringContainsString('dibatalkan', $e->getMessage());
         }
 
         // Correcting Heat 2 down from 20 to 10 Good -> Auto reverts PCOR to PARTIALLY_COMPLETED
@@ -1091,10 +1124,10 @@ class CastingOrderTest extends TestCase
             ->assertSee('data-category="LOCAL"', false)
             ->assertSee('data-category="EXPORT"', false)
             ->assertSee('data-category="UNCLASSIFIED"', false)
-            ->assertSee('plan-line-select', false)
+            ->assertDontSee('plan-line-select', false)
             ->assertSee('plan-qty-input', false);
 
-        // Verify Create form receives custom selected_qty and selected_line tuned in calculator
+        // Verify Create form receives custom selected_qty and displays read-only line
         $createResponse = $this->actingAs($this->ppicUser)
             ->get(route('sand-casting.casting-orders.create', [
                 'plan_ids' => [$planLocal->id, $planExport->id],
@@ -1111,8 +1144,9 @@ class CastingOrderTest extends TestCase
         $createResponse->assertOk()
             ->assertSee('value="12"', false)
             ->assertSee('value="8"', false)
-            ->assertSee('<option value="4" selected>Line 4</option>', false)
-            ->assertSee('<option value="3" selected>Line 3</option>', false);
+            ->assertSee('Line 1')
+            ->assertSee('Line 2')
+            ->assertDontSee('name="items[0][line_number]"', false);
     }
 
     public function test_pcor_monitoring_multi_date_filter_and_overcast_progress_aggregation(): void
@@ -1475,8 +1509,8 @@ class CastingOrderTest extends TestCase
         $createdOrder = SandCastingCastingOrder::where('casting_order_number', 'PCOR-20261102-0099')->firstOrFail();
         $this->assertEquals(3, $createdOrder->lines()->count());
         $this->assertEquals(450, $createdOrder->qty_ordered);
-        $this->assertEquals(2, $p2Plan->fresh()->line_number);
-        $this->assertEquals(3, $p3Plan->fresh()->line_number);
+        $this->assertEquals(1, $p2Plan->fresh()->line_number, 'Production plan line must not be modified by PCOR issuance');
+        $this->assertEquals(1, $p3Plan->fresh()->line_number, 'Production plan line must not be modified by PCOR issuance');
     }
 
     public function test_pcor_finished_items_excluded_from_new_plans_and_outstanding_carryover(): void

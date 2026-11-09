@@ -432,7 +432,13 @@
 
                                         <!-- Aksi Button (Blue QC Action) -->
                                         <td id="action-cell-{{ $card['id'] }}" class="py-2 px-3 text-center whitespace-nowrap">
-                                            @if(!empty($card['has_draft']))
+                                            @if(!empty($card['is_quality_locked']))
+                                                <span class="bg-slate-100 text-slate-400 font-bold px-2.5 py-1.5 rounded-md text-xs inline-flex items-center gap-1 border border-slate-200 cursor-not-allowed select-none"
+                                                    title="Terkunci permanen karena KTR telah selesai di Gudang Jadi.">
+                                                    <i class="fas fa-lock text-slate-400 text-[10px]"></i>
+                                                    TERKUNCI
+                                                </span>
+                                            @elseif(!empty($card['has_draft']))
                                                 <button type="button"
                                                     onclick="openQcModal({{ json_encode($card) }})"
                                                     class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold px-2.5 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
@@ -680,6 +686,20 @@
         let isSubmitting = false;
 
         function openQcModal(card) {
+            if (card && card.is_quality_locked) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Tahap Terkunci',
+                        text: 'Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.',
+                        confirmButtonColor: '#2563eb'
+                    });
+                } else {
+                    alert('Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.');
+                }
+                return;
+            }
+
             currentCard = card;
             isSubmitting = false;
             const modal = document.getElementById('qcModal');

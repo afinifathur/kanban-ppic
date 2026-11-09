@@ -323,7 +323,13 @@
 
                                     <!-- Aksi Button -->
                                     <td class="py-2 px-3 text-center whitespace-nowrap">
-                                        @if($card['status'] === \App\Models\SandCastingStageExecution::STATUS_WAITING_DEFECT)
+                                        @if(!empty($card['is_quality_locked']))
+                                            <span class="bg-slate-100 text-slate-400 font-bold px-2.5 py-1.5 rounded-md text-xs inline-flex items-center gap-1 border border-slate-200 cursor-not-allowed select-none"
+                                                title="Terkunci permanen karena KTR telah selesai di Gudang Jadi.">
+                                                <i class="fas fa-lock text-slate-400 text-[10px]"></i>
+                                                TERKUNCI
+                                            </span>
+                                        @elseif($card['status'] === \App\Models\SandCastingStageExecution::STATUS_WAITING_DEFECT)
                                             <button type="button"
                                                 onclick="openDefectModal({{ json_encode($card) }})"
                                                 class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
@@ -644,6 +650,20 @@
     <!-- 6. JAVASCRIPT LOGIC -->
     <script>
         function openDefectModal(card) {
+            if (card && card.is_quality_locked) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Tahap Terkunci',
+                        text: 'Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.',
+                        confirmButtonColor: '#ea580c'
+                    });
+                } else {
+                    alert('Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.');
+                }
+                return;
+            }
+
             const modal = document.getElementById('defectModal');
             const form = document.getElementById('defectForm');
 
@@ -721,6 +741,20 @@
         }
 
         function openAddDefectModal(card) {
+            if (card && card.is_quality_locked) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Tahap Terkunci',
+                        text: 'Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.',
+                        confirmButtonColor: '#ea580c'
+                    });
+                } else {
+                    alert('Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.');
+                }
+                return;
+            }
+
             const modal = document.getElementById('addDefectModal');
             const form = document.getElementById('addDefectForm');
 

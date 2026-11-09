@@ -4,7 +4,6 @@ namespace Tests\Feature\SandCasting;
 
 use App\Models\ProductionPlan;
 use App\Models\SandCastingCastingOrder;
-use App\Models\SandCastingCastingOrderLine;
 use App\Models\User;
 use App\Services\SandCasting\SandCastingCastingResultService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -200,7 +199,7 @@ class CastingOrderModelATest extends TestCase
     }
 
     /**
-     * Skenario 4: Setelah Good 200 PCS, tambahan Good 1 PCS harus ditolak.
+     * Skenario 4: Setelah Good 200 PCS (order COMPLETED), tambahan Heat baru harus ditolak.
      */
     public function test_scenario_4_after_full_good_additional_1_good_is_strictly_rejected(): void
     {
@@ -232,10 +231,13 @@ class CastingOrderModelATest extends TestCase
             ],
         ], $this->ppicUser->id);
 
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('sudah berstatus COMPLETED');
+        $this->assertEquals('COMPLETED', $order->fresh()->status);
+        $this->assertEquals(0, $line->fresh()->qty_remaining_to_cast);
 
-        // Attempting to record 1 more Good on completed order
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('sudah selesai (COMPLETED) dan tidak dapat menerima penambahan Heat baru');
+
+        // Attempting to record 1 more Good on completed order must be rejected
         $this->service->recordResult([
             'heat_number' => 'HEAT-SCENARIO-04B',
             'cast_date' => '2026-11-07',
@@ -249,9 +251,9 @@ class CastingOrderModelATest extends TestCase
     }
 
     /**
-     * Skenario 5: Dua input yang bersamaan tidak boleh menyebabkan akumulasi Good melebihi 200 PCS.
+     * Skenario 5: Input yang melebihi sisa kuota (over-plan) diizinkan dan mencatat seluruh Good aktual.
      */
-    public function test_scenario_5_concurrency_locking_prevents_exceeding_good_quota(): void
+    public function test_scenario_5_over_quota_input_is_allowed_and_commits_actual_good(): void
     {
         $plan = $this->createPlan(200);
 
@@ -284,38 +286,26 @@ class CastingOrderModelATest extends TestCase
         $this->assertEquals(150, $line->fresh()->qty_cast_good);
         $this->assertEquals(50, $line->fresh()->qty_remaining_to_cast);
 
-        // Second user attempts to input 60 Good (exceeding remaining 50)
-        try {
-            $this->service->recordResult([
-                'heat_number' => 'HEAT-SCENARIO-05B',
-                'cast_date' => '2026-11-06',
-            ], [
-                [
-                    'sand_casting_casting_order_line_id' => $line->id,
-                    'qty_good' => 60,
-                    'qty_reject' => 0,
-                ],
-            ], $this->ppicUser->id);
-            $this->fail('Expected InvalidArgumentException when second input exceeds remaining quota.');
-        } catch (InvalidArgumentException $e) {
-            $this->assertStringContainsString('melebihi sisa yang belum dicor', $e->getMessage());
-            $this->assertStringContainsString('Sisa kuota: 50 pcs', $e->getMessage());
-        }
-
-        // Remaining 50 input succeeds exactly
-        $this->service->recordResult([
-            'heat_number' => 'HEAT-SCENARIO-05C',
+        // Second user inputs 60 Good (exceeding remaining 50 -> total 210 pcs)
+        $resB = $this->service->recordResult([
+            'heat_number' => 'HEAT-SCENARIO-05B',
             'cast_date' => '2026-11-06',
         ], [
             [
                 'sand_casting_casting_order_line_id' => $line->id,
-                'qty_good' => 50,
+                'qty_good' => 60,
                 'qty_reject' => 0,
             ],
         ], $this->ppicUser->id);
 
-        $this->assertEquals(200, $line->fresh()->qty_cast_good);
+        $this->assertNotNull($resB);
+        $this->assertEquals(210, $line->fresh()->qty_cast_good);
+        $this->assertEquals(0, $line->fresh()->qty_remaining_to_cast);
         $this->assertEquals('COMPLETED', $order->fresh()->status);
+
+        // Model A commits actual 210, remaining quota is 0 (no duplicate PCOR can be issued)
+        $this->assertEquals(210, $plan->fresh()->qty_casting_scheduled);
+        $this->assertEquals(0, $plan->fresh()->qty_remaining_casting_scheduled);
     }
 
     /**
@@ -431,11 +421,11 @@ class CastingOrderModelATest extends TestCase
             $this->assertStringContainsString('dibatalkan', $e->getMessage());
         }
 
-        // 2. COMPLETED test
+        // 2. COMPLETED test: can receive additional physical outcomes
         $orderCompleted = SandCastingCastingOrder::create([
             'casting_order_number' => 'PCOR-20261106-0008B',
             'scheduled_date' => '2026-11-06',
-            'status' => 'COMPLETED',
+            'status' => 'ISSUED',
             'created_by' => $this->ppicUser->id,
         ]);
         $lineCompleted = $orderCompleted->lines()->create([
@@ -445,9 +435,24 @@ class CastingOrderModelATest extends TestCase
             'item_name' => $plan->item_name,
         ]);
 
+        // Complete the order first (100 Good)
+        $this->service->recordResult([
+            'heat_number' => 'HEAT-SCENARIO-08B1',
+            'cast_date' => '2026-11-06',
+        ], [
+            [
+                'sand_casting_casting_order_line_id' => $lineCompleted->id,
+                'qty_good' => 100,
+                'qty_reject' => 0,
+            ],
+        ], $this->ppicUser->id);
+
+        $this->assertEquals('COMPLETED', $orderCompleted->fresh()->status);
+
+        // Additional physical heat on completed order is rejected
         try {
             $this->service->recordResult([
-                'heat_number' => 'HEAT-SCENARIO-08B',
+                'heat_number' => 'HEAT-SCENARIO-08B2',
                 'cast_date' => '2026-11-06',
             ], [
                 [
@@ -645,4 +650,3 @@ class CastingOrderModelATest extends TestCase
         $this->assertEquals(0, $plan->qty_remaining_casting_scheduled);
     }
 }
-

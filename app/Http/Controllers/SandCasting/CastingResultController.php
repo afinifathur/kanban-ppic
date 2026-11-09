@@ -86,6 +86,16 @@ class CastingResultController extends Controller
         $isPpic = auth()->user()->hasRole('ppic');
         $preselectedOrderId = $request->query('casting_order_id');
 
+        if ($preselectedOrderId) {
+            $preselectedOrder = \App\Models\SandCastingCastingOrder::find($preselectedOrderId);
+            if (! $preselectedOrder || ! in_array($preselectedOrder->status, ['ISSUED', 'PARTIALLY_COMPLETED'], true)) {
+                $statusDesc = $preselectedOrder ? $preselectedOrder->status : 'tidak ditemukan';
+
+                return redirect()->route('sand-casting.casting-results.create')
+                    ->with('error', "Perintah Cor #{$preselectedOrderId} ({$statusDesc}) tidak dapat menerima pencatatan Hasil Cor baru.");
+            }
+        }
+
         $linesQuery = SandCastingCastingOrderLine::with(['castingOrder', 'productionPlan', 'resultLines'])
             ->whereHas('castingOrder', function ($q) {
                 $q->whereIn('status', ['ISSUED', 'PARTIALLY_COMPLETED']);
@@ -104,8 +114,18 @@ class CastingResultController extends Controller
             $linesQuery->where('sand_casting_casting_order_id', $preselectedOrderId);
         }
 
-        $availableLines = $linesQuery->get()->filter(function ($line) {
-            return $line->qty_remaining_to_cast > 0;
+        $availableLines = $linesQuery->get()->filter(function ($line) use ($preselectedOrderId) {
+            $orderStatus = $line->castingOrder ? $line->castingOrder->status : null;
+            if (! in_array($orderStatus, ['ISSUED', 'PARTIALLY_COMPLETED'], true)) {
+                return false;
+            }
+
+            if ($preselectedOrderId) {
+                return (int) $line->sand_casting_casting_order_id === (int) $preselectedOrderId;
+            }
+
+            // Include lines with remaining quota to cast or actively in-progress orders
+            return true;
         })->values();
 
         return view('sand-casting.casting-results.create', compact('availableLines', 'preselectedOrderId'));
@@ -246,8 +266,10 @@ class CastingResultController extends Controller
 
         $existingOrderLineIds = $castingResult->lines->pluck('sand_casting_casting_order_line_id')->all();
 
-        $availableLines = $linesQuery->get()->filter(function ($line) use ($existingOrderLineIds) {
-            return $line->qty_remaining_to_cast > 0 || in_array($line->id, $existingOrderLineIds, true);
+        $availableLines = $linesQuery->get()->filter(function ($line) {
+            $orderStatus = $line->castingOrder ? $line->castingOrder->status : null;
+
+            return in_array($orderStatus, ['ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED'], true);
         })->values();
 
         return view('sand-casting.casting-results.edit', compact('castingResult', 'availableLines'));

@@ -107,9 +107,7 @@ class ProductionPlan extends Model
             $good = (int) $line->resultLines->sum('qty_good');
             $ordered = (int) $line->qty_ordered;
 
-            if (in_array($status, ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED'], true)) {
-                $totalCommitted += $ordered;
-            } elseif ($status === 'COMPLETED') {
+            if (in_array($status, ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED', 'COMPLETED'], true)) {
                 $totalCommitted += max($ordered, $good);
             }
         }

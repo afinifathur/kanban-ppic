@@ -480,20 +480,7 @@ class DefectAdjustmentTest extends TestCase
     public function test_14_effective_gd_calculation_reflects_defect_adjustments_dynamically(): void
     {
         [$plan, $line] = $this->createKtr(100, 'FLANGE_BESI', 'PLAN-GD-ADJ');
-        $line->update(['current_stage' => 'completed']);
-
-        // GUDANG_RECEIVE physical execution scanned with snapshot good_qty = 100
-        $gdExec = $line->stageExecutions()->create([
-            'stage' => 'gudang_jadi',
-            'checkpoint_code' => 'GUDANG_RECEIVE',
-            'input_qty' => 100,
-            'defect_qty' => 0,
-            'good_qty' => 100,
-            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
-            'operator_id' => $this->spvUser->id,
-            'executed_at' => now(),
-            'physical_done_at' => now(),
-        ]);
+        $line->update(['current_stage' => 'netto']);
 
         // Netto execution has 5 defect recorded
         $nettoExec = $line->stageExecutions()->create([
@@ -508,14 +495,22 @@ class DefectAdjustmentTest extends TestCase
             'physical_done_at' => now(),
         ]);
 
-        // Initial check: effective GD is 95
-        $row = $this->statusService->calculatePlanStatusRow($plan->load('sandCastingResultLines.stageExecutions'));
-        $this->assertSame(95, $row['gd']);
-        $this->assertSame(5, $row['remaining_po']);
-        $this->assertSame('ACTIVE', $row['status']);
-
-        // PPIC adjusts Netto defect downward: 5 -> 2 (-3 pcs)
+        // PPIC adjusts Netto defect downward: 5 -> 2 (-3 pcs) before Gudang Jadi finalization
         $this->executionService->adjustDefectQty($nettoExec, -3, $this->adminPpic->id, 'Koreksi penurunan defect netto');
+
+        // GUDANG_RECEIVE physical execution completed
+        $line->update(['current_stage' => 'completed']);
+        $gdExec = $line->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'operator_id' => $this->spvUser->id,
+            'executed_at' => now(),
+            'physical_done_at' => now(),
+        ]);
 
         // Production Status dynamically resolves effective GD: 100 - 2 = 98 pcs
         $updatedRow = $this->statusService->calculatePlanStatusRow($plan->fresh(['sandCastingResultLines.stageExecutions']));
