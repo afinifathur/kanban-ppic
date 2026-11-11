@@ -602,7 +602,8 @@ class ReadyForOvenReportTest extends TestCase
         $response->assertSee('PT Test');
         $response->assertSee('Waktu Selesai Lapisan');
         $response->assertSee('Jumlah Rangkai');
-        $response->assertSee('Jumlah Pcs');
+        $response->assertSee('SIAP OVEN / PO');
+        $response->assertDontSee('<th>Berat (Kg)</th>', false);
         $response->assertSee('Dibuat Oleh');
         $response->assertSee('Diterima Oleh');
         $response->assertSee('size: A4 portrait', false);

@@ -28,6 +28,7 @@ return [
         'layer_6' => 'Lapisan 6',
         'layer_7' => 'Lapisan 7',
         'oven' => 'Oven',
+        'siap_cor' => 'Siap Cor',
     ],
 
     'aging' => [
@@ -72,6 +73,8 @@ return [
         'max_hours' => (float) env('LOST_WAX_AGING_MAX_HOURS', 6),
         'min_scan_interval_minutes' => (int) env('LOST_WAX_MIN_SCAN_INTERVAL_MINUTES', 20),
     ],
+
+    'daily_oven_target_kg' => (float) env('LOST_WAX_DAILY_OVEN_TARGET_KG', 2000),
 
     'printer_name' => env('THERMAL_PRINTER_NAME', 'TSC TE200'),
     'print_agent_token' => env('PRINT_AGENT_TOKEN', 'peroniks_print_token_2026'),

@@ -291,7 +291,7 @@
     // Populate Datalist
     document.addEventListener('DOMContentLoaded', () => {
         const datalist = document.getElementById('availableCodesList');
-        const uniqueCodes = [...new Set(AVAILABLE_LINES.map(l => l.code).filter(Boolean))].sort();
+        const uniqueCodes = [...new Set(AVAILABLE_LINES.filter(l => getRemainingQuota(l) > 0).map(l => l.code).filter(Boolean))].sort();
         uniqueCodes.forEach(code => {
             const opt = document.createElement('option');
             opt.value = code;
@@ -349,7 +349,7 @@
         // If preselected order was provided, we can optionally pre-filter
         const preselectedOrderId = {{ $preselectedOrderId ? $preselectedOrderId : 'null' }};
         if (preselectedOrderId) {
-            const orderLines = AVAILABLE_LINES.filter(l => l.sand_casting_casting_order_id === preselectedOrderId);
+            const orderLines = AVAILABLE_LINES.filter(l => l.sand_casting_casting_order_id === preselectedOrderId && getRemainingQuota(l) > 0);
             if (orderLines.length > 0) {
                 orderLines.forEach(l => {
                     const rem = getRemainingQuota(l);
@@ -385,8 +385,8 @@
             return;
         }
 
-        // Find available lines matching code
-        const matches = AVAILABLE_LINES.filter(l => l.code && l.code.toUpperCase() === query);
+        // Find available lines matching code with remaining quota > 0
+        const matches = AVAILABLE_LINES.filter(l => l.code && l.code.toUpperCase() === query && getRemainingQuota(l) > 0);
 
         if (matches.length === 0) {
             container.innerHTML = `<div class="text-xs text-red-300 font-semibold py-2">Tidak ditemukan Perintah Cor aktif dengan kode <strong>${query}</strong> (atau sisa kuota cor sudah habis).</div>`;
@@ -444,7 +444,7 @@
 
     function selectCandidateLineById(lineId) {
         const line = AVAILABLE_LINES.find(l => l.id === lineId);
-        if (line) {
+        if (line && getRemainingQuota(line) > 0) {
             selectCandidateLine(line);
             const container = document.getElementById('candidateContainer');
             const orderNum = line.casting_order ? line.casting_order.casting_order_number : '-';
@@ -463,6 +463,11 @@
     }
 
     function selectCandidateLine(line) {
+        if (!line || getRemainingQuota(line) <= 0) {
+            alert('Sisa kuota untuk item ini sudah habis (0 pcs). Tidak dapat menambahkan ke Heat.');
+            return;
+        }
+
         selectedLineData = line;
         const stagingRow = document.getElementById('stagingInputRow');
         const orderNum = line.casting_order ? line.casting_order.casting_order_number : '-';
@@ -490,6 +495,11 @@
         }
 
         const remainingQuota = getRemainingQuota(selectedLineData);
+        if (remainingQuota <= 0) {
+            alert('Sisa kuota untuk item ini sudah habis (0 pcs). Tidak dapat menambahkan ke Heat.');
+            return;
+        }
+
         const good = parseInt(document.getElementById('stage_qty_good').value) || 0;
         const reject = parseInt(document.getElementById('stage_qty_reject').value) || 0;
 

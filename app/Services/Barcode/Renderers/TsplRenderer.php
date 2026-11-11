@@ -70,9 +70,12 @@ class TsplRenderer
         $cmds[] = 'TEXT 30,165,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
 
         // Barcode & Isi Rangkaian
-        // Left side: Barcode & Human-readable number
-        $cmds[] = 'BARCODE 80,195,"128",100,0,0,2,4,"'.$barcode.'"';
-        $cmds[] = 'TEXT 240,298,"'.self::FONT_NORMAL.'",0,1,1,2,"'.$barcode.'"';
+        // Left side: Barcode 1D & Human-readable number
+        $cmds[] = 'BARCODE 60,195,"128",90,0,0,2,4,"'.$barcode.'"';
+        $cmds[] = 'TEXT 150,298,"'.self::FONT_NORMAL.'",0,1,1,2,"'.$barcode.'"';
+
+        // QR Code (Kanan, berdampingan dengan Barcode 1D)
+        $cmds[] = 'QRCODE 330,198,M,4,A,0,"'.$barcode.'"';
 
         // Right side: Isi Rangkaian
         $cmds[] = 'TEXT 580,205,"'.self::FONT_NORMAL.'",0,1,1,2,"ISI RANGKAIAN"';

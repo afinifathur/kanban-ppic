@@ -167,6 +167,11 @@ class SandCastingCastingResultService
                     throw new InvalidArgumentException("Perintah Cor {$order->casting_order_number} tidak dalam status yang valid untuk pencatatan Hasil Cor.");
                 }
 
+                // Verify line-level remaining quota: cannot allocate a new heat to an already completed line
+                if ($orderLine->qty_remaining_to_cast <= 0) {
+                    throw new InvalidArgumentException("Baris Perintah Cor {$orderLine->code} sudah terpenuhi (Sisa kuota: 0 pcs) dan tidak dapat menerima penambahan Heat baru.");
+                }
+
                 // Verify domain on individual plan
                 if ($orderLine->productionPlan && ! $orderLine->productionPlan->isSandCasting()) {
                     throw new InvalidArgumentException("Item {$orderLine->code} bukan bagian dari domain Sand Casting.");

@@ -120,9 +120,20 @@
                                 </div>
                             </div>
 
-                            <div class="flex flex-col items-center justify-center my-1">
-                                <img src="{{ route('lost-wax.trees.barcode', $t) }}" alt="Barcode" class="mx-auto" style="height: 48px; max-width: 100%;">
-                                <div class="font-bold text-[10px] tracking-wider mt-1">{{ $t->barcode }}</div>
+                            <div class="flex items-center justify-between gap-1.5 my-1 px-1">
+                                <!-- Barcode 1D (Kiri) -->
+                                <div class="flex-1 flex flex-col items-center justify-center min-w-0 pr-1">
+                                    <img src="{{ route('lost-wax.trees.barcode', $t) }}" alt="Barcode" class="mx-auto" style="height: 44px; max-width: 100%; object-fit: contain;">
+                                    <div class="font-bold text-[10px] tracking-wider mt-0.5 font-mono text-center">{{ $t->barcode }}</div>
+                                </div>
+
+                                <!-- QR Code (Kanan) -->
+                                @if(isset($qrCodes[$t->id]))
+                                <div class="shrink-0 flex flex-col items-center justify-center pl-1.5 border-l border-slate-300">
+                                    <img src="{{ $qrCodes[$t->id] }}" alt="QR Code" style="width: 20mm; height: 20mm;" class="bg-white p-0.5">
+                                    <div class="text-[7.5px] font-bold text-slate-500 uppercase tracking-tight mt-0.5">SCAN QR</div>
+                                </div>
+                                @endif
                             </div>
 
                             <div class="border-t border-black pt-1 text-[9px] space-y-0.5">

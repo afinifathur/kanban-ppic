@@ -510,20 +510,48 @@
                                 <span class="text-sm sidebar-text">Barang Siap Oven</span>
                             </a>
                         </li>
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'spv') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
-                            <a href="{{ route('lost-wax.production-status') }}"
-                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Production Status">
-                                <i class="fas fa-table w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Production Status</span>
+                            <a href="{{ route('lost-wax.scan-siap-cor.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan-siap-cor.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Scan Siap Cor">
+                                <i class="fas fa-check-double w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Scan Siap Cor</span>
                             </a>
                         </li>
+                        @endif
+                        @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || Auth::user()->roles->contains('name', 'spv') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
+                        <li>
+                            <a href="{{ route('lost-wax.reports.ready-for-casting.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.reports.ready-for-casting.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Barang Siap Cor">
+                                <i class="fas fa-clipboard-check w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Barang Siap Cor</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.casting-results.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.casting-results.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Input Hasil Cor">
+                                <i class="fas fa-fire w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Input Hasil Cor</span>
+                            </a>
+                        </li>
+                        @endif
                         <li>
                             <a href="{{ route('lost-wax.rack-monitor.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.rack-monitor.index') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
                                 title="Rack Monitoring">
                                 <i class="fas fa-desktop w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
                                 <span class="text-sm sidebar-text">Rack Monitoring</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.production-status') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.production-status') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
+                                title="Production Status">
+                                <i class="fas fa-table w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Production Status</span>
                             </a>
                         </li>
                         <li>

@@ -531,4 +531,3 @@ class AllStagesScannerAsynchronousWorkflowTest extends TestCase
             ->assertStatus(403);
     }
 }
-

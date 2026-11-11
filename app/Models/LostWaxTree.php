@@ -88,6 +88,33 @@ class LostWaxTree extends Model
         return $this->hasMany(LostWaxTreeDefect::class, 'lost_wax_tree_id');
     }
 
+    /**
+     * All casting result detail records (including cancelled history).
+     */
+    public function castingResultTrees()
+    {
+        return $this->hasMany(\App\Models\LostWaxCastingResultTree::class, 'lost_wax_tree_id');
+    }
+
+    /**
+     * The active casting result detail record (linked to a COMPLETED casting result).
+     */
+    public function castingResultTree()
+    {
+        return $this->hasOne(\App\Models\LostWaxCastingResultTree::class, 'lost_wax_tree_id')
+            ->whereHas('castingResult', function ($query) {
+                $query->where('status', 'COMPLETED');
+            });
+    }
+
+    /**
+     * Direct link to the active casting result detail record via active_tree_id constraint column.
+     */
+    public function activeCastingResultTree()
+    {
+        return $this->hasOne(\App\Models\LostWaxCastingResultTree::class, 'active_tree_id');
+    }
+
     public function getTotalDefectQuantityAttribute(): int
     {
         if ($this->relationLoaded('defects')) {

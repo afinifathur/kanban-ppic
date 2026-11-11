@@ -120,12 +120,12 @@ class CastingResultController extends Controller
                 return false;
             }
 
-            if ($preselectedOrderId) {
-                return (int) $line->sand_casting_casting_order_id === (int) $preselectedOrderId;
+            if ($preselectedOrderId && (int) $line->sand_casting_casting_order_id !== (int) $preselectedOrderId) {
+                return false;
             }
 
-            // Include lines with remaining quota to cast or actively in-progress orders
-            return true;
+            // Only include lines with positive remaining quota to cast
+            return $line->qty_remaining_to_cast > 0;
         })->values();
 
         return view('sand-casting.casting-results.create', compact('availableLines', 'preselectedOrderId'));

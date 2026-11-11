@@ -55,11 +55,11 @@ class LiveCastingAvailabilityPanelTest extends TestCase
     {
         $id = self::$planCounter++;
         $defaults = [
-            'code' => 'SC-CODE-' . $id,
-            'title' => 'Title ' . $id,
-            'item_code' => '4.' . (100 + $id),
-            'item_name' => 'FLANGE BESI ' . $id,
-            'po_number' => 'PO-' . (1000 + $id),
+            'code' => 'SC-CODE-'.$id,
+            'title' => 'Title '.$id,
+            'item_code' => '4.'.(100 + $id),
+            'item_name' => 'FLANGE BESI '.$id,
+            'po_number' => 'PO-'.(1000 + $id),
             'qty_planned' => 100,
             'qty_remaining' => 100,
             'weight' => 2.50,

@@ -546,8 +546,13 @@ class CastingOrderController extends Controller
                             $st = $l->castingOrder ? $l->castingOrder->status : null;
                             $g = (int) $l->resultLines->sum('qty_good');
                             $ord = (int) $l->qty_ordered;
-                            if (in_array($st, ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED'], true)) return $ord;
-                            if ($st === 'COMPLETED') return max($ord, $g);
+                            if (in_array($st, ['DRAFT', 'ISSUED', 'PARTIALLY_COMPLETED'], true)) {
+                                return $ord;
+                            }
+                            if ($st === 'COMPLETED') {
+                                return max($ord, $g);
+                            }
+
                             return 0;
                         });
 
@@ -630,6 +635,7 @@ class CastingOrderController extends Controller
                                 if ($st === 'COMPLETED') {
                                     return max($ord, $g);
                                 }
+
                                 return 0;
                             });
 

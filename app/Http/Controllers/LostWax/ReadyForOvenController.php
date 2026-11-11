@@ -18,18 +18,31 @@ class ReadyForOvenController extends Controller
     public function index(Request $request)
     {
         $search = trim($request->input('search', ''));
-        $scope = null;
+        $dailyTargetKg = $request->input('daily_target_kg');
+        $poStatus = trim($request->input('po_status', 'all'));
+        $codes = (array) $request->input('codes', []);
+        $customers = (array) $request->input('customers', []);
 
+        $codes = array_values(array_filter($codes, fn ($c) => $c !== null && $c !== ''));
+        $customers = array_values(array_filter($customers, fn ($c) => $c !== null && $c !== ''));
+
+        $scope = null;
         if (auth()->check() && auth()->user()->hasRole('ppic')) {
             $scope = auth()->user()->product_scope;
         }
 
-        $data = $this->readyForOvenService->getQueueData($search, $scope);
+        $data = $this->readyForOvenService->getQueueData($search, $scope, $dailyTargetKg, $poStatus, $codes, $customers);
 
         return view('lost-wax.reports.ready-for-oven.index', [
             'items' => $data['items'],
             'summary' => $data['summary'],
             'search' => $search,
+            'dailyTargetKg' => $data['summary']['daily_target_kg'],
+            'poStatus' => $data['summary']['po_status'],
+            'codes' => $codes,
+            'customers' => $customers,
+            'allCodes' => $data['all_codes'],
+            'allCustomers' => $data['all_customers'],
         ]);
     }
 
@@ -39,18 +52,31 @@ class ReadyForOvenController extends Controller
     public function print(Request $request)
     {
         $search = trim($request->input('search', ''));
-        $scope = null;
+        $dailyTargetKg = $request->input('daily_target_kg');
+        $poStatus = trim($request->input('po_status', 'all'));
+        $codes = (array) $request->input('codes', []);
+        $customers = (array) $request->input('customers', []);
 
+        $codes = array_values(array_filter($codes, fn ($c) => $c !== null && $c !== ''));
+        $customers = array_values(array_filter($customers, fn ($c) => $c !== null && $c !== ''));
+
+        $scope = null;
         if (auth()->check() && auth()->user()->hasRole('ppic')) {
             $scope = auth()->user()->product_scope;
         }
 
-        $data = $this->readyForOvenService->getQueueData($search, $scope);
+        $data = $this->readyForOvenService->getQueueData($search, $scope, $dailyTargetKg, $poStatus, $codes, $customers);
 
         return view('lost-wax.reports.ready-for-oven.print', [
             'items' => $data['items'],
             'summary' => $data['summary'],
             'search' => $search,
+            'dailyTargetKg' => $data['summary']['daily_target_kg'],
+            'poStatus' => $data['summary']['po_status'],
+            'codes' => $codes,
+            'customers' => $customers,
+            'allCodes' => $data['all_codes'],
+            'allCustomers' => $data['all_customers'],
         ]);
     }
 }

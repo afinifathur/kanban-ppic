@@ -189,6 +189,10 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/scan-oven', [ScanController::class, 'scanOven'])->name('scan-oven.index');
             Route::post('/scan-oven', [ScanController::class, 'processOven'])->name('scan-oven.process');
 
+            // Scan Siap Cor
+            Route::get('/scan-siap-cor', [\App\Http\Controllers\LostWax\ScanSiapCorController::class, 'index'])->name('scan-siap-cor.index');
+            Route::post('/scan-siap-cor', [\App\Http\Controllers\LostWax\ScanSiapCorController::class, 'process'])->name('scan-siap-cor.process');
+
             // Void Scan Event
             Route::post('/scan-events/{event}/void', [ScanController::class, 'voidEvent'])->name('scan-events.void');
 
@@ -211,6 +215,20 @@ Route::middleware(['auth'])->group(function () {
             // Antrean & Dokumen Barang Siap Oven
             Route::get('/reports/ready-for-oven', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'index'])->name('reports.ready-for-oven.index');
             Route::get('/reports/ready-for-oven/print', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'print'])->name('reports.ready-for-oven.print');
+
+            // Antrean & Dokumen Barang Siap Cor (Phase 3)
+            Route::get('/reports/ready-for-casting', [\App\Http\Controllers\LostWax\ReadyForCastingController::class, 'index'])->name('reports.ready-for-casting.index');
+            Route::get('/reports/ready-for-casting/print', [\App\Http\Controllers\LostWax\ReadyForCastingController::class, 'print'])->name('reports.ready-for-casting.print');
+        });
+
+        // Input Hasil Cor & Transaksi Heat (Phase 4) - accessible by planning and execution roles (admin, ppic, spv, admin_qc_fitting)
+        Route::middleware(['permission:access_planning|access_execution'])->group(function () {
+            Route::get('/casting-results', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'index'])->name('casting-results.index');
+            Route::get('/casting-results/create', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'create'])->name('casting-results.create');
+            Route::post('/casting-results', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'store'])->name('casting-results.store');
+            Route::get('/casting-results/{castingResult}', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'show'])->name('casting-results.show');
+            Route::get('/casting-results/{castingResult}/print', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'print'])->name('casting-results.print');
+            Route::post('/casting-results/{castingResult}/cancel', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'cancel'])->name('casting-results.cancel');
         });
 
         // Production Status (Lost Wax Read Model) - accessible with execution or production visibility

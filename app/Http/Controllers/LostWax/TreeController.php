@@ -312,7 +312,10 @@ class TreeController extends Controller
             $warnings[] = 'Rangkaian berikut dilewati karena belum memiliki Rack: '.implode(', ', $skippedBarcodes);
         }
 
-        return view('lost-wax.trees.traveler', compact('treesList', 'warnings'));
+        $qrCodeService = app(\App\Services\LostWax\LostWaxQrCodeService::class);
+        $qrCodes = $qrCodeService->generateBatchDataUris($treesList);
+
+        return view('lost-wax.trees.traveler', compact('treesList', 'warnings', 'qrCodes'));
     }
 
     public function printThermal(Request $request)
