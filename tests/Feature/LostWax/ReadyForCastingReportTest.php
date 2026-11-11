@@ -482,7 +482,8 @@ class ReadyForCastingReportTest extends TestCase
         $response = $this->actingAs($this->adminUser)->get(route('lost-wax.reports.ready-for-casting.print'));
         $response->assertStatus(200);
         $response->assertSee('PT. PERONI KARYA SENTRA');
-        $response->assertSee('LEMBAR KONTROL PENGECORAN');
+        $response->assertSee('LAPORAN BARANG SIAP COR');
+        $response->assertSee('HEAT NUMBER');
 
         // Verify zero database changes
         $this->assertEquals($initialEventCount, LostWaxScanEvent::count());
@@ -525,5 +526,72 @@ class ReadyForCastingReportTest extends TestCase
         $this->actingAs($this->ppicUser)->get(route('lost-wax.reports.ready-for-casting.index'))->assertStatus(200);
         $this->actingAs($this->spvUser)->get(route('lost-wax.reports.ready-for-casting.index'))->assertStatus(200);
         $this->actingAs($this->qcFittingUser)->get(route('lost-wax.reports.ready-for-casting.index'))->assertStatus(200);
+    }
+
+    public function test_16_print_page_groups_trees_by_production_code_and_item(): void
+    {
+        // 1. Group A: 3 trees with same plan (2610AB58) and item (STUB END 3") with varying quantities (8, 10, 6 pcs) -> 24 pcs total
+        $planA = $this->createPlan([
+            'code' => '2610AB58',
+            'customer' => 'PT ALPHA MEGA',
+            'item_name' => 'A06 • SS304 BUTT WELD STUB END SCH40 3"',
+            'aisi' => 'SS304',
+        ]);
+        $lineA = $this->createPrintOrderLine($planA);
+
+        $treeA1 = $this->createTree(['lost_wax_print_order_line_id' => $lineA->id, 'quantity' => 8]);
+        $this->createScanEvent($treeA1, 'siap_cor', now()->subHours(3));
+
+        $treeA2 = $this->createTree(['lost_wax_print_order_line_id' => $lineA->id, 'quantity' => 10]);
+        $this->createScanEvent($treeA2, 'siap_cor', now()->subHours(2));
+
+        $treeA3 = $this->createTree(['lost_wax_print_order_line_id' => $lineA->id, 'quantity' => 6]);
+        $this->createScanEvent($treeA3, 'siap_cor', now()->subHours(1));
+
+        // 2. Group B: 1 tree with different plan (2610CD99) and item (VALVE BODY 2"), 15 pcs
+        $planB = $this->createPlan([
+            'code' => '2610CD99',
+            'customer' => 'PT BETA TEKNIK',
+            'item_name' => 'B12 • VALVE BODY 2"',
+            'aisi' => 'CF8M',
+        ]);
+        $lineB = $this->createPrintOrderLine($planB);
+
+        $treeB1 = $this->createTree(['lost_wax_print_order_line_id' => $lineB->id, 'quantity' => 15]);
+        $this->createScanEvent($treeB1, 'siap_cor', now()->subMinutes(30));
+
+        // Visit print document
+        $response = $this->actingAs($this->adminUser)->get(route('lost-wax.reports.ready-for-casting.print'));
+        $response->assertStatus(200);
+
+        // Header check
+        $response->assertSee('LAPORAN BARANG SIAP COR');
+        $response->assertSee('HEAT NUMBER');
+
+        // Group A assertions: sum 24 PCS, (3 Pohon), code and item visible
+        $response->assertSee('2610AB58');
+        $response->assertSee('A06 • SS304 BUTT WELD STUB END SCH40 3"');
+        $response->assertSee('24');
+        $response->assertSee('(3 Pohon)');
+
+        // Individual Traveler Card and their own respective quantity
+        $response->assertSee($treeA1->human_barcode ?? $treeA1->barcode);
+        $response->assertSee($treeA2->human_barcode ?? $treeA2->barcode);
+        $response->assertSee($treeA3->human_barcode ?? $treeA3->barcode);
+        $response->assertSee('—');
+
+        // Group B assertions: 15 PCS, single tree
+        $response->assertSee('2610CD99');
+        $response->assertSee('B12 • VALVE BODY 2"');
+        $response->assertSee('15');
+        $response->assertSee($treeB1->human_barcode ?? $treeB1->barcode);
+
+        // Summary totals: 4 trees physical, 39 PCS total (8 + 10 + 6 + 15)
+        $response->assertSee('4 Pohon');
+        $response->assertSee('39 PCS');
+
+        // Verify long notes paragraph is absent
+        $response->assertDontSee('LEMBAR KONTROL PENGECORAN — PERSEDIAAN PASCA DEWAXING');
+        $response->assertDontSee('Dokumen ini mencatat seluruh Traveler Card');
     }
 }

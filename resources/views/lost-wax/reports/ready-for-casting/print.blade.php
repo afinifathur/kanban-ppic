@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lembar Kontrol Pengecoran - {{ $summary['generated_at_formatted'] }}</title>
+    <title>Laporan Barang Siap Cor - {{ $summary['generated_at_formatted'] }}</title>
     <style>
         @page {
             size: A4 portrait;
@@ -12,12 +12,12 @@
 
         body {
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 9.5px;
+            font-size: 10.5px;
             color: #0f172a;
             margin: 0;
             padding: 0;
             background: #ffffff;
-            line-height: 1.25;
+            line-height: 1.3;
         }
 
         /* Non-print toolbar */
@@ -81,8 +81,8 @@
         }
 
         .doc-header h1 {
-            margin: 0;
-            font-size: 15px;
+            margin: 2px 0 4px 0;
+            font-size: 19px;
             font-weight: 900;
             color: #0f172a;
             letter-spacing: 0.5px;
@@ -109,27 +109,28 @@
         .summary-box {
             flex: 1;
             border: 1px solid #cbd5e1;
-            padding: 4px 8px;
+            padding: 5px 8px;
             border-radius: 4px;
             background: #f8fafc;
         }
 
         .summary-box .label {
-            font-size: 7.5px;
+            font-size: 8px;
             text-transform: uppercase;
             color: #64748b;
             font-weight: bold;
+            letter-spacing: 0.3px;
         }
 
         .summary-box .value {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 900;
             color: #0f172a;
             margin-top: 1px;
         }
 
         .summary-box .subtext {
-            font-size: 7.5px;
+            font-size: 8px;
             color: #64748b;
         }
 
@@ -137,40 +138,42 @@
         table.print-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 9px;
+            font-size: 10px;
             margin-top: 4px;
         }
 
         table.print-table th,
         table.print-table td {
-            border: 1px solid #64748b;
-            padding: 4px 6px;
+            border: 1px solid #475569;
+            padding: 6px 8px;
             vertical-align: middle;
         }
 
         table.print-table th {
             background-color: #f1f5f9;
-            font-weight: 800;
+            font-weight: 900;
             text-transform: uppercase;
-            font-size: 8.5px;
-            color: #1e293b;
+            font-size: 9.5px;
+            color: #0f172a;
+            letter-spacing: 0.3px;
         }
 
         table.print-table tr.data-row {
-            height: 32px;
+            min-height: 42px;
         }
 
         .handwrite-box {
-            border: 1px dashed #94a3b8;
-            height: 24px;
-            border-radius: 2px;
+            border: 1.5px dashed #94a3b8;
+            height: 34px;
+            min-height: 34px;
+            border-radius: 3px;
             background-color: #ffffff;
         }
 
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
-        .font-mono { font-family: monospace; }
+        .font-mono { font-family: monospace, Courier, sans-serif; }
         .font-bold { font-weight: bold; }
 
         /* Signatures */
@@ -190,18 +193,19 @@
             padding: 6px;
             text-align: center;
             vertical-align: top;
-            font-size: 8.5px;
+            font-size: 9px;
         }
 
         .sign-role {
             font-weight: bold;
             color: #334155;
             margin-bottom: 34px;
+            line-height: 1.3;
         }
 
         .sign-name {
             color: #64748b;
-            font-size: 8px;
+            font-size: 8.5px;
         }
 
         @media print {
@@ -212,9 +216,6 @@
                 background: none;
                 margin: 0;
             }
-            table.print-table tr.data-row {
-                height: 32px !important;
-            }
         }
     </style>
 </head>
@@ -222,12 +223,12 @@
     <!-- Non-print Toolbar -->
     <div class="no-print-toolbar">
         <div>
-            <strong>Pratinjau Cetak Lembar Kontrol Pengecoran (A4)</strong> &bull; Total {{ number_format($summary['total_trees']) }} Pohon ({{ number_format($summary['total_usable_pcs']) }} PCS)
+            <strong>Pratinjau Cetak Laporan Barang Siap Cor (A4)</strong> &bull; Total {{ number_format($summary['total_trees']) }} Pohon Fisik ({{ number_format($summary['total_usable_pcs']) }} PCS)
         </div>
         <div style="display: flex; gap: 8px;">
             <button class="btn btn-print" onclick="window.print()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><path d="M6 14h12v8H6z"></path></svg>
-                Cetak Lembar Kontrol
+                Cetak Laporan
             </button>
             <button class="btn btn-close" onclick="window.close()">Tutup</button>
         </div>
@@ -235,14 +236,14 @@
 
     <!-- Header Dokumen -->
     <div class="doc-header">
-        <div class="company">PT. PERONI KARYA SENTRA &bull; DIVISI FOUNDRY &amp; LOST WAX</div>
-        <h1>LEMBAR KONTROL PENGECORAN &mdash; PERSEDIAAN PASCA DEWAXING (LOST WAX)</h1>
+        <div class="company">PT. PERONI KARYA SENTRA &bull; KANBAN PPIC LOST WAX</div>
+        <h1>LAPORAN BARANG SIAP COR</h1>
         <div class="meta-bar">
-            <div><strong>Tanggal Cetak:</strong> {{ $summary['generated_at_formatted'] }} ({{ $summary['generated_time'] }} WIB)</div>
+            <div><strong>Waktu Cetak:</strong> {{ $summary['generated_at_formatted'] }} ({{ $summary['generated_time'] }} WIB) &bull; <strong>Prioritas:</strong> FIFO</div>
             @if($summary['is_filtered'])
                 <div><strong>Filter:</strong> {{ $summary['active_filter_text'] }}</div>
             @else
-                <div><strong>Filter:</strong> Semua Data Antrean (FIFO)</div>
+                <div><strong>Filter:</strong> Semua Data Antrean</div>
             @endif
             <div><strong>Dicetak Oleh:</strong> {{ auth()->user()?->name ?? 'Admin PPIC' }}</div>
         </div>
@@ -253,7 +254,7 @@
         <div class="summary-box">
             <div class="label">Total Traveler Card</div>
             <div class="value">{{ number_format($summary['total_trees']) }} Pohon</div>
-            <div class="subtext">WIP Siap Cor</div>
+            <div class="subtext">Jumlah Pohon Cangkang Fisik</div>
         </div>
         <div class="summary-box">
             <div class="label">Total Qty Siap Cor</div>
@@ -263,44 +264,89 @@
         <div class="summary-box">
             <div class="label">Total Kode Produksi</div>
             <div class="value">{{ number_format($summary['total_codes']) }} Kode</div>
-            <div class="subtext">Prioritas FIFO Scan Siap Cor</div>
+            <div class="subtext">Kode Produk Berbeda</div>
         </div>
     </div>
 
-    <!-- Tabel Lembar Kontrol -->
+    @php
+        // Group items by identical production_code, item_name, and customer
+        $groupedRows = $items->groupBy(function ($item) {
+            $code = trim((string) ($item['production_code'] ?? ''));
+            $name = trim((string) ($item['item_name'] ?? ''));
+            $cust = trim((string) ($item['customer'] ?? ''));
+            return "{$code}|{$name}|{$cust}";
+        })->values();
+    @endphp
+
+    <!-- Tabel Laporan Barang Siap Cor -->
     <table class="print-table">
         <thead>
             <tr>
-                <th style="width: 25px;" class="text-center">No.</th>
-                <th style="width: 140px;">Kode Produksi &amp; Customer</th>
-                <th style="width: 130px;">Traveler Card / Barcode</th>
-                <th style="width: 65px;" class="text-right">Qty (PCS)</th>
-                <th style="width: 135px;" class="text-center">LOKASI RAK / CATATAN PPIC</th>
-                <th style="width: 135px;" class="text-center">KETERANGAN / PARAF</th>
+                <th style="width: 30px;" class="text-center">No.</th>
+                <th style="width: 240px;" class="text-left">Kode Produksi / Nama Item</th>
+                <th style="width: 195px;" class="text-left">Traveler Card</th>
+                <th style="width: 85px;" class="text-right">Qty (PCS)</th>
+                <th style="width: 140px;" class="text-center">HEAT NUMBER</th>
             </tr>
         </thead>
         <tbody>
-            @forelse($items as $item)
+            @forelse($groupedRows as $group)
+                @php
+                    $first = $group->first();
+                    $code = $first['production_code'] ?? '-';
+                    $customer = $first['customer'] ?? '-';
+                    $itemName = $first['item_name'] ?? '-';
+                    $material = $first['material'] ?? '-';
+                    $groupPcs = (int) $group->sum('quantity_pcs');
+                    $groupTrees = $group->count();
+                    $travelerCards = $group->unique(fn ($i) => $i['tree_id'] ?? $i['barcode'])->map(function ($i) {
+                        return [
+                            'code' => !empty($i['human_barcode']) ? $i['human_barcode'] : $i['barcode'],
+                            'pcs' => (int) ($i['quantity_pcs'] ?? 0),
+                        ];
+                    })->values();
+                @endphp
                 <tr class="data-row">
-                    <td class="text-center font-bold" style="color: #334155;">
+                    <td class="text-center font-bold" style="font-size: 11px; color: #334155;">
                         {{ $loop->iteration }}
                     </td>
                     <td>
-                        <div class="font-bold font-mono" style="font-size: 10px; color: #0f172a;">{{ $item['production_code'] }}</div>
-                        <div style="font-size: 7.5px; color: #475569;">{{ $item['customer'] }} &bull; {{ $item['item_name'] }}</div>
-                        @if($item['material'] !== '-')
-                            <div style="font-size: 7px; color: #64748b;">Mat: {{ $item['material'] }}</div>
+                        <div style="font-size: 13px; font-weight: 900; font-family: monospace; color: #0f172a; letter-spacing: 0.5px;">
+                            {{ $code }}
+                        </div>
+                        <div style="font-size: 11.5px; font-weight: 700; color: #1e293b; margin-top: 3px; line-height: 1.35;">
+                            @if($customer !== '-' && !empty($customer))
+                                <span style="color: #475569;">{{ $customer }} &bull;</span>
+                            @endif
+                            {{ $itemName }}
+                        </div>
+                        @if($material !== '-' && !empty($material))
+                            <div style="font-size: 9.5px; font-weight: 600; color: #64748b; margin-top: 2px;">
+                                Material: {{ $material }}
+                            </div>
                         @endif
                     </td>
                     <td>
-                        <div class="font-bold font-mono" style="font-size: 9.5px; color: #0f172a;">{{ $item['human_barcode'] }}</div>
-                        <div class="font-mono" style="font-size: 7.5px; color: #64748b;">{{ $item['barcode'] }} &bull; Selesai: {{ $item['scanned_at_formatted'] }}</div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            @foreach($travelerCards as $tc)
+                                <div style="font-size: 11px; line-height: 1.35; white-space: nowrap;">
+                                    <span class="font-mono font-bold" style="color: #0f172a; letter-spacing: 0.3px;">{{ $tc['code'] }}</span>
+                                    <span style="color: #64748b; margin: 0 4px; font-weight: bold;">—</span>
+                                    <span style="font-weight: 800; color: #0f172a;">{{ number_format($tc['pcs']) }}</span>
+                                    <span style="font-size: 9px; font-weight: 700; color: #64748b;">PCS</span>
+                                </div>
+                            @endforeach
+                        </div>
                     </td>
-                    <td class="text-right font-bold" style="font-size: 10px; color: #047857;">
-                        {{ number_format($item['quantity_pcs']) }}
-                    </td>
-                    <td>
-                        <div class="handwrite-box"></div>
+                    <td class="text-right">
+                        <div style="font-size: 13.5px; font-weight: 900; color: #047857;">
+                            {{ number_format($groupPcs) }} <span style="font-size: 9.5px; font-weight: normal; color: #64748b;">PCS</span>
+                        </div>
+                        @if($groupTrees > 1)
+                            <div style="font-size: 8.5px; color: #64748b; margin-top: 1px;">
+                                ({{ $groupTrees }} Pohon)
+                            </div>
+                        @endif
                     </td>
                     <td>
                         <div class="handwrite-box"></div>
@@ -308,32 +354,28 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="text-center" style="padding: 24px; color: #94a3b8;">
-                        Tidak ada persediaan cangkang pasca dewaxing saat ini.
+                    <td colspan="5" class="text-center" style="padding: 24px; font-size: 11px; color: #94a3b8;">
+                        Tidak ada antrean barang siap cor saat ini.
                     </td>
                 </tr>
             @endforelse
         </tbody>
-        @if($items->isNotEmpty())
+        @if($groupedRows->isNotEmpty())
             <tfoot>
                 <tr style="background-color: #f8fafc; font-weight: bold;">
-                    <td colspan="3" class="text-right" style="padding: 5px 8px; text-transform: uppercase;">
-                        TOTAL {{ $summary['is_filtered'] ? 'HASIL FILTER' : 'KESELURUHAN' }} ({{ number_format($summary['total_trees']) }} POHON):
+                    <td colspan="3" class="text-right" style="padding: 6px 10px; font-size: 10.5px; text-transform: uppercase;">
+                        TOTAL {{ $summary['is_filtered'] ? 'HASIL FILTER' : 'KESELURUHAN' }} ({{ number_format($summary['total_trees']) }} POHON FISIK):
                     </td>
-                    <td class="text-right" style="font-size: 10px; color: #047857;">
+                    <td class="text-right" style="font-size: 13.5px; font-weight: 900; color: #047857; padding: 6px 8px;">
                         {{ number_format($summary['total_usable_pcs']) }} PCS
                     </td>
-                    <td colspan="2" style="font-size: 7.5px; color: #64748b; font-style: italic; text-align: center;">
-                        *Persediaan cangkang matang di rak buffer pasca dewaxing
+                    <td style="font-size: 8.5px; color: #64748b; text-align: center; font-style: italic;">
+                        *Ruang isi Heat Number
                     </td>
                 </tr>
             </tfoot>
         @endif
     </table>
-
-    <div style="margin-top: 4px; font-size: 7.5px; color: #64748b; font-style: italic;">
-        *Catatan: Dokumen ini menyajikan persediaan cangkang matang di rak buffer pasca dewaxing. Urutan baris diurutkan secara FIFO berdasarkan waktu Selesai Dewaxing terawal. Realisasi pengecoran dicatat pada formulir Rencana Pengecoran atau Bukti Hasil Cor.
-    </div>
 
     <!-- Tanda Tangan Operasional -->
     <div class="sign-section">
@@ -356,4 +398,3 @@
     </div>
 </body>
 </html>
-

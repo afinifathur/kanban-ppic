@@ -631,7 +631,8 @@ class ReadyForOvenReportTest extends TestCase
         $response->assertDontSee('<th>Berat (Kg)</th>', false);
         $response->assertSee('Dibuat Oleh');
         $response->assertSee('Diterima Oleh');
-        $response->assertSee('size: A4 portrait', false);
+        $response->assertSee('size: A4 landscape', false);
+        $response->assertSee('(12 PCS)');
     }
 
     /**
@@ -679,5 +680,56 @@ class ReadyForOvenReportTest extends TestCase
             '/href="[^"]*\/lost-wax\/reports\/ready-for-oven"[^>]*class="[^"]*text-slate-300/',
             $html
         );
+    }
+
+    /**
+     * 20. Print view renders compact horizontal barcodes with individual PCS quantities.
+     */
+    public function test_20_print_renders_compact_horizontal_barcodes_with_individual_pcs_quantities(): void
+    {
+        $plan = $this->createPlan(['code' => 'PLAN-OVEN-QTY', 'item_name' => 'Flange 3 Inch', 'customer' => 'PT METAL']);
+        $line = $this->createPrintOrderLine($plan);
+
+        // 3 trees with varying quantities (10, 8, 6 PCS)
+        $tree1 = $this->createTree([
+            'barcode' => '1061126019',
+            'lost_wax_print_order_line_id' => $line->id,
+            'current_stage' => 'layer_6',
+            'quantity' => 10,
+        ]);
+        $this->createScanEvent($tree1, 'layer_6', now()->subHours(3));
+
+        $tree2 = $this->createTree([
+            'barcode' => '1061126018',
+            'lost_wax_print_order_line_id' => $line->id,
+            'current_stage' => 'layer_6',
+            'quantity' => 8,
+        ]);
+        $this->createScanEvent($tree2, 'layer_6', now()->subHours(2));
+
+        $tree3 = $this->createTree([
+            'barcode' => '1061126017',
+            'lost_wax_print_order_line_id' => $line->id,
+            'current_stage' => 'layer_6',
+            'quantity' => 6,
+        ]);
+        $this->createScanEvent($tree3, 'layer_6', now()->subHour());
+
+        $response = $this->actingAs($this->user)->get(route('lost-wax.reports.ready-for-oven.print'));
+        $response->assertStatus(200);
+
+        // Verify landscape
+        $response->assertSee('size: A4 landscape', false);
+
+        // Verify each barcode has its individual quantity
+        $response->assertSee('1061126019 (10 PCS)');
+        $response->assertSee('1061126018 (8 PCS)');
+        $response->assertSee('1061126017 (6 PCS)');
+
+        // Verify SPK total is 24 PCS
+        $response->assertSee('24 PCS');
+
+        // Verify no discrepancy warning is triggered
+        $response->assertDontSee('*Ketidaksesuaian Qty');
     }
 }

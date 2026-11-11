@@ -6,8 +6,8 @@
     <title>Antrean Siap Oven Dewaxing - {{ $summary['generated_at_formatted'] }}</title>
     <style>
         @page {
-            size: A4 portrait;
-            margin: 8mm 10mm 10mm 10mm;
+            size: A4 landscape;
+            margin: 8mm 10mm 8mm 10mm;
         }
 
         body {
@@ -290,7 +290,7 @@
     <!-- Floating On-Screen Toolbar -->
     <div class="no-print-toolbar">
         <div>
-            <strong style="font-size: 13px;">Preview Dokumen Cetak A4 Portrait &mdash; LAPORAN ANTREAN SIAP OVEN DEWAXING{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</strong>
+            <strong style="font-size: 13px;">Preview Dokumen Cetak A4 Landscape &mdash; LAPORAN ANTREAN SIAP OVEN DEWAXING{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</strong>
             <span style="font-size: 10.5px; color: #94a3b8; margin-left: 8px;">
                 ({{ number_format($summary['total_unique_trees']) }} Pohon, {{ number_format($summary['total_usable_pcs'], 0, ',', '.') }} / {{ number_format($summary['total_po_pcs'], 0, ',', '.') }} Pcs Layak/PO, {{ $summary['total_weight_kg_formatted'] }} kg)
             </span>
@@ -457,16 +457,39 @@
                         <span style="font-weight: bold; color: #475569;">Rincian SPK ({{ count($item['work_orders']) }} SPK):</span>
                         <div style="margin-top: 1.5px;">
                             @foreach($item['work_orders'] as $wo)
-                                <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding: 1.5px 0;">
-                                    <span>
+                                @php
+                                    $barcodeDetails = [];
+                                    $treeSum = 0;
+                                    if (!empty($wo['trees'])) {
+                                        foreach ($wo['trees'] as $t) {
+                                            $b = $t['barcode'] ?? '';
+                                            $pcs = (int) ($t['quantity_pcs'] ?? 0);
+                                            $treeSum += $pcs;
+                                            $barcodeDetails[] = "{$b} ({$pcs} PCS)";
+                                        }
+                                    } elseif (!empty($wo['barcodes'])) {
+                                        $barcodeDetails = $wo['barcodes'];
+                                        $treeSum = (int) $wo['quantity_pcs'];
+                                    }
+                                    $hasDiscrepancy = !empty($wo['trees']) && ($treeSum !== (int) $wo['quantity_pcs']);
+                                @endphp
+                                <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding: 2px 0; gap: 8px;">
+                                    <span style="flex: 1; line-height: 1.45;">
                                         <strong style="color: #1e293b; font-family: monospace;">{{ $wo['work_order_number'] }}</strong>: 
                                         {{ $wo['tree_count'] }} pohon (<strong>{{ number_format($wo['quantity_pcs']) }} PCS</strong>)
                                         @if($wo['racks_compact'] !== '-')
                                             <span style="background: #e2e8f0; padding: 0 3px; border-radius: 2px; font-size: 7.5px;">[{{ $wo['racks_compact'] }}]</span>
                                         @endif
-                                        <span style="color: #64748b; font-family: monospace; font-size: 7.5px;">({{ implode(', ', $wo['barcodes']) }})</span>
+                                        <span style="color: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 8px;">
+                                            ({{ implode(', ', $barcodeDetails) }})
+                                        </span>
+                                        @if($hasDiscrepancy)
+                                            <span style="color: #dc2626; font-weight: bold; font-size: 7.5px; background: #fee2e2; border: 1px solid #fca5a5; padding: 0.5px 3px; border-radius: 2px; margin-left: 4px;">
+                                                *Ketidaksesuaian Qty: Total Barcode {{ $treeSum }} &ne; SPK {{ $wo['quantity_pcs'] }} PCS
+                                            </span>
+                                        @endif
                                     </span>
-                                    <span style="color: #64748b; font-family: monospace;">{{ $wo['finished_at_formatted'] }}</span>
+                                    <span style="color: #64748b; font-family: monospace; font-size: 8px; white-space: nowrap;">{{ $wo['finished_at_formatted'] }}</span>
                                 </div>
                             @endforeach
                         </div>
