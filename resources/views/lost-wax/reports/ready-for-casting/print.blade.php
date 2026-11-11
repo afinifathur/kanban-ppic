@@ -236,7 +236,7 @@
     <!-- Header Dokumen -->
     <div class="doc-header">
         <div class="company">PT. PERONI KARYA SENTRA &bull; DIVISI FOUNDRY &amp; LOST WAX</div>
-        <h1>LEMBAR KONTROL PENGECORAN &mdash; BARANG SIAP COR (LOST WAX)</h1>
+        <h1>LEMBAR KONTROL PENGECORAN &mdash; PERSEDIAAN PASCA DEWAXING (LOST WAX)</h1>
         <div class="meta-bar">
             <div><strong>Tanggal Cetak:</strong> {{ $summary['generated_at_formatted'] }} ({{ $summary['generated_time'] }} WIB)</div>
             @if($summary['is_filtered'])
@@ -275,8 +275,8 @@
                 <th style="width: 140px;">Kode Produksi &amp; Customer</th>
                 <th style="width: 130px;">Traveler Card / Barcode</th>
                 <th style="width: 65px;" class="text-right">Qty (PCS)</th>
-                <th style="width: 135px;" class="text-center">HEAT NUMBER (Manual Tangan)</th>
-                <th style="width: 135px;" class="text-center">KETERANGAN / TUNGKU / PARAF</th>
+                <th style="width: 135px;" class="text-center">LOKASI RAK / CATATAN PPIC</th>
+                <th style="width: 135px;" class="text-center">KETERANGAN / PARAF</th>
             </tr>
         </thead>
         <tbody>
@@ -294,7 +294,7 @@
                     </td>
                     <td>
                         <div class="font-bold font-mono" style="font-size: 9.5px; color: #0f172a;">{{ $item['human_barcode'] }}</div>
-                        <div class="font-mono" style="font-size: 7.5px; color: #64748b;">{{ $item['barcode'] }} &bull; Scan: {{ $item['scanned_at_formatted'] }}</div>
+                        <div class="font-mono" style="font-size: 7.5px; color: #64748b;">{{ $item['barcode'] }} &bull; Selesai: {{ $item['scanned_at_formatted'] }}</div>
                     </td>
                     <td class="text-right font-bold" style="font-size: 10px; color: #047857;">
                         {{ number_format($item['quantity_pcs']) }}
@@ -309,7 +309,7 @@
             @empty
                 <tr>
                     <td colspan="6" class="text-center" style="padding: 24px; color: #94a3b8;">
-                        Tidak ada antrean barang yang siap dicor saat ini.
+                        Tidak ada persediaan cangkang pasca dewaxing saat ini.
                     </td>
                 </tr>
             @endforelse
@@ -324,7 +324,7 @@
                         {{ number_format($summary['total_usable_pcs']) }} PCS
                     </td>
                     <td colspan="2" style="font-size: 7.5px; color: #64748b; font-style: italic; text-align: center;">
-                        *Pastikan Heat Number ditulis jelas dengan pulpen/spidol permanen
+                        *Persediaan cangkang matang di rak buffer pasca dewaxing
                     </td>
                 </tr>
             </tfoot>
@@ -332,7 +332,7 @@
     </table>
 
     <div style="margin-top: 4px; font-size: 7.5px; color: #64748b; font-style: italic;">
-        *Catatan: Dokumen ini merupakan lembar kontrol fisik lantai pengecoran. Urutan baris diurutkan secara FIFO berdasarkan waktu Scan Siap Cor terawal. Kepala Bagian Pengecoran mencatat Heat Number aktual pada kolom yang tersedia dan mengembalikan lembar ini ke Admin PPIC untuk diinput ke sistem pada Phase 4.
+        *Catatan: Dokumen ini menyajikan persediaan cangkang matang di rak buffer pasca dewaxing. Urutan baris diurutkan secara FIFO berdasarkan waktu Selesai Dewaxing terawal. Realisasi pengecoran dicatat pada formulir Rencana Pengecoran atau Bukti Hasil Cor.
     </div>
 
     <!-- Tanda Tangan Operasional -->

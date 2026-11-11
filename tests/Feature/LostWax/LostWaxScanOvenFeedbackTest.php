@@ -190,9 +190,9 @@ class LostWaxScanOvenFeedbackTest extends TestCase
         $response->assertOk();
 
         // 1. Existing elements preserved
-        $response->assertSee('SCAN OVEN');
-        $response->assertSee('SIAP SCAN OVEN');
-        $response->assertSee('SCAN BARCODE OVEN');
+        $response->assertSee('SCAN MASUK OVEN DEWAXING');
+        $response->assertSee('SIAP SCAN MASUK OVEN DEWAXING');
+        $response->assertSee('SCAN BARCODE MASUK OVEN DEWAXING');
 
         // 2. Audio activation button
         $response->assertSee('audioToggleBtn');

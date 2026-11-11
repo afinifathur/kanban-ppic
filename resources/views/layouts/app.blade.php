@@ -496,27 +496,27 @@
                         <li>
                             <a href="{{ route('lost-wax.scan-oven.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan-oven.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Scan Oven">
+                                title="Scan Masuk Oven Dewaxing">
                                 <i class="fas fa-fire-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Scan Oven</span>
+                                <span class="text-sm sidebar-text">Scan Masuk Oven Dewaxing</span>
                             </a>
                         </li>
                         @endif
                         <li>
                             <a href="{{ route('lost-wax.reports.ready-for-oven.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.reports.ready-for-oven.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Barang Siap Masuk Oven">
+                                title="Antrean Siap Oven Dewaxing">
                                 <i class="fas fa-temperature-high w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Barang Siap Oven</span>
+                                <span class="text-sm sidebar-text">Antrean Siap Oven Dewaxing</span>
                             </a>
                         </li>
                         @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'spv') || Auth::user()->roles->contains('name', 'admin_qc_fitting')))
                         <li>
                             <a href="{{ route('lost-wax.scan-siap-cor.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.scan-siap-cor.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Scan Siap Cor">
+                                title="Scan Selesai Dewaxing">
                                 <i class="fas fa-check-double w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Scan Siap Cor</span>
+                                <span class="text-sm sidebar-text">Scan Selesai Dewaxing</span>
                             </a>
                         </li>
                         @endif
@@ -524,9 +524,9 @@
                         <li>
                             <a href="{{ route('lost-wax.reports.ready-for-casting.index') }}"
                                 class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.reports.ready-for-casting.*') ? 'text-white font-medium border-l-2 border-amber-400' : 'text-slate-300' }}"
-                                title="Barang Siap Cor">
+                                title="Persediaan Pasca Dewaxing">
                                 <i class="fas fa-clipboard-check w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
-                                <span class="text-sm sidebar-text">Barang Siap Cor</span>
+                                <span class="text-sm sidebar-text">Persediaan Pasca Dewaxing</span>
                             </a>
                         </li>
                         <li>

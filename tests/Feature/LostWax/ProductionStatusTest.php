@@ -642,7 +642,7 @@ class ProductionStatusTest extends TestCase
         $this->actingAs($user)
             ->get(route('lost-wax.scan-oven.index'))
             ->assertOk()
-            ->assertSee('SCAN OVEN');
+            ->assertSee('SCAN MASUK OVEN DEWAXING');
     }
 
     public function test_side_menu_highlighted(): void

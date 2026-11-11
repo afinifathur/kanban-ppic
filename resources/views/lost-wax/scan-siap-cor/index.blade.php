@@ -3,8 +3,8 @@
 @section('top_bar')
     <div class="flex items-center justify-between w-full gap-2">
         <div>
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; SCAN SIAP COR</h1>
-            <p class="text-gray-500 text-[10px]">Scan barcode Traveler Card setelah selesai proses oven fisik untuk memindahkan WIP ke Siap Cor</p>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; SCAN SELESAI DEWAXING</h1>
+            <p class="text-gray-500 text-[10px]">Scan saat pohon keluar dari oven dan ditempatkan di rak buffer</p>
         </div>
         <div>
             {{-- Audio Toggle Control --}}
@@ -61,7 +61,7 @@
                 <i id="feedbackIcon" class="fas fa-check-circle"></i>
             </div>
             <div id="feedbackStatusTitle" class="text-3xl sm:text-4xl font-black tracking-tight mb-2 uppercase">
-                BERHASIL &mdash; SIAP COR
+                BERHASIL &mdash; SELESAI DEWAXING
             </div>
             <div id="feedbackItemName" class="text-xl sm:text-2xl font-black tracking-tight mb-1">
                 {{-- Scanned Item Name / Failure Reason --}}
@@ -75,7 +75,7 @@
         <div id="scanPanelCard" class="scan-panel-card bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center transition-colors">
             <div class="mb-6">
                 <div id="statusIndicator" class="text-lg font-bold text-slate-600">
-                    <i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SIAP COR
+                    <i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING
                 </div>
             </div>
 
@@ -92,7 +92,7 @@
             </form>
 
             <div class="text-xs text-slate-400">
-                Pindai barcode pohon setelah pembakaran oven selesai untuk memindahkan kuantitas ke antrean Siap Cor.
+                Pindai barcode pohon saat keluar dari oven dewaxing untuk memindahkan kuantitas ke rak buffer.
             </div>
 
             <div id="resultArea" class="hidden space-y-4 mt-6"></div>
@@ -142,7 +142,7 @@
             <div class="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <i class="fas fa-history text-slate-500"></i>
-                    <h3 class="font-bold text-slate-700 text-xs uppercase tracking-wider">Riwayat 10 Pemindaian Terakhir (Siap Cor)</h3>
+                    <h3 class="font-bold text-slate-700 text-xs uppercase tracking-wider">Riwayat 10 Pemindaian Terakhir (Selesai Dewaxing)</h3>
                 </div>
                 <span class="text-[11px] text-slate-400">Pembaruan Real-Time</span>
             </div>
@@ -154,7 +154,7 @@
                             <th class="py-2.5 px-3">Barcode</th>
                             <th class="py-2.5 px-3">Kode Produksi</th>
                             <th class="py-2.5 px-3">Nama Produk</th>
-                            <th class="py-2.5 px-3 text-right">Qty Siap Cor</th>
+                            <th class="py-2.5 px-3 text-right">Qty Cangkang</th>
                             <th class="py-2.5 px-3 text-center">Status</th>
                             <th class="py-2.5 px-3">Keterangan</th>
                         </tr>
@@ -182,13 +182,13 @@
                                     @endif
                                 </td>
                                 <td class="py-2 px-3 text-[11px] {{ $isSuccess ? 'text-slate-500' : 'text-rose-600 font-bold' }}">
-                                    {{ $isSuccess ? 'Siap Cor' : ($ev->anomaly_reason ?? 'Ditolak') }}
+                                    {{ $isSuccess ? 'Selesai Dewaxing' : ($ev->anomaly_reason ?? 'Ditolak') }}
                                 </td>
                             </tr>
                         @empty
                             <tr id="emptyHistoryRow">
                                 <td colspan="7" class="py-8 text-center text-slate-400">
-                                    Belum ada pemindaian Scan Siap Cor pada sesi ini.
+                                    Belum ada pemindaian Scan Selesai Dewaxing pada sesi ini.
                                 </td>
                             </tr>
                         @endforelse
@@ -377,7 +377,7 @@
                 if (thisRequestSeq === latestHandledRequestSeq) {
                     document.body.classList.remove('scanner-feedback-success');
                     fullFeedbackBanner.classList.add('hidden');
-                    statusIndicator.innerHTML = '<i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SIAP COR';
+                    statusIndicator.innerHTML = '<i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
                     statusIndicator.className = 'text-lg font-bold text-slate-600';
                 }
             }, 5000);
@@ -428,7 +428,7 @@
                     document.body.classList.remove('scanner-feedback-failed');
                     fullFeedbackBanner.classList.add('hidden');
                     errorArea.classList.add('hidden');
-                    statusIndicator.innerHTML = '<i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SIAP COR';
+                    statusIndicator.innerHTML = '<i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
                     statusIndicator.className = 'text-lg font-bold text-slate-600';
                 }
             }, 5000);

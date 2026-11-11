@@ -4,8 +4,8 @@
     <div class="flex items-center justify-between w-full flex-wrap gap-2">
         <div>
             <div class="text-[11px] font-bold text-slate-500 tracking-wider uppercase">PT. PERONI KARYA SENTRA &bull; KANBAN PPIC LOST WAX</div>
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; BARANG SIAP OVEN</h1>
-            <p class="text-gray-500 text-[10px]">Monitoring ketersediaan WIP pohon lilin yang telah tuntas pelapisan dan siap masuk Oven pembakaran (FIFO)</p>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; ANTREAN SIAP OVEN DEWAXING</h1>
+            <p class="text-gray-500 text-[10px]">Monitoring antrean pohon cangkang yang telah tuntas pelapisan dan siap masuk ke oven untuk proses pelelehan lilin (FIFO)</p>
         </div>
         <div class="flex items-center gap-2 no-print">
             <a href="{{ route('lost-wax.reports.ready-for-oven.print', request()->query()) }}" target="_blank"

@@ -4,8 +4,8 @@
     <div class="flex items-center justify-between w-full flex-wrap gap-2">
         <div>
             <div class="text-[11px] font-bold text-slate-500 tracking-wider uppercase">PT. PERONI KARYA SENTRA &bull; KANBAN PPIC LOST WAX</div>
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; BARANG SIAP COR</h1>
-            <p class="text-gray-500 text-[10px]">Monitoring antrean WIP pohon lilin yang telah selesai proses oven dan siap untuk pengecoran (FIFO)</p>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; PERSEDIAAN PASCA DEWAXING</h1>
+            <p class="text-gray-500 text-[10px]">Daftar seluruh pohon cangkang yang telah selesai dewaxing dan belum dicor (Buffer Inventory - FIFO)</p>
         </div>
         <div class="flex items-center gap-2 no-print">
             <a href="{{ route('lost-wax.reports.ready-for-casting.print', request()->query()) }}" target="_blank"
@@ -48,7 +48,7 @@
         <!-- 2. Total Qty Siap Cor (PCS) -->
         <div class="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm">
             <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                <span>Total Qty Siap Cor</span>
+                <span>Total Qty Cangkang Siap Cor</span>
                 @if($summary['is_filtered'])
                     <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Filter</span>
                 @endif
@@ -170,13 +170,13 @@
                 <thead class="text-[11px] uppercase bg-slate-100 text-slate-700 border-b border-slate-200 select-none">
                     <tr>
                         <th scope="col" class="py-2.5 px-3 text-center w-12 font-bold">No.</th>
-                        <th scope="col" class="py-2.5 px-3 font-bold whitespace-nowrap">Waktu Scan Siap Cor</th>
+                        <th scope="col" class="py-2.5 px-3 font-bold whitespace-nowrap">Waktu Selesai Dewaxing</th>
                         <th scope="col" class="py-2.5 px-3 font-bold whitespace-nowrap">Traveler Card / Barcode</th>
                         <th scope="col" class="py-2.5 px-3 font-bold whitespace-nowrap">Kode Produksi</th>
                         <th scope="col" class="py-2.5 px-3 font-bold whitespace-nowrap">Customer</th>
                         <th scope="col" class="py-2.5 px-3 font-bold">Nama Barang / Material</th>
                         <th scope="col" class="py-2.5 px-3 font-bold whitespace-nowrap">SPK / WO</th>
-                        <th scope="col" class="py-2.5 px-3 text-right font-bold whitespace-nowrap">Qty Siap Cor (PCS)</th>
+                        <th scope="col" class="py-2.5 px-3 text-right font-bold whitespace-nowrap">Qty Cangkang (PCS)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -237,8 +237,8 @@
                                             Reset Filter
                                         </a>
                                     @else
-                                        <p class="font-medium text-slate-600">Tidak ada antrean barang yang siap dicor saat ini.</p>
-                                        <p class="text-[11px] text-slate-400">Traveler Card akan muncul setelah operator menyelesaikan pemindaian pada menu Scan Siap Cor.</p>
+                                        <p class="font-medium text-slate-600">Tidak ada persediaan cangkang pasca dewaxing saat ini.</p>
+                                        <p class="text-[11px] text-slate-400">Traveler Card akan muncul setelah operator menyelesaikan pemindaian pada menu Scan Selesai Dewaxing.</p>
                                     @endif
                                 </div>
                             </td>

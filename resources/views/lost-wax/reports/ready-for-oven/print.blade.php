@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barang Siap Oven - {{ $summary['generated_at_formatted'] }}</title>
+    <title>Antrean Siap Oven Dewaxing - {{ $summary['generated_at_formatted'] }}</title>
     <style>
         @page {
             size: A4 portrait;
@@ -290,7 +290,7 @@
     <!-- Floating On-Screen Toolbar -->
     <div class="no-print-toolbar">
         <div>
-            <strong style="font-size: 13px;">Preview Dokumen Cetak A4 Portrait &mdash; LAPORAN BARANG SIAP OVEN{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</strong>
+            <strong style="font-size: 13px;">Preview Dokumen Cetak A4 Portrait &mdash; LAPORAN ANTREAN SIAP OVEN DEWAXING{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</strong>
             <span style="font-size: 10.5px; color: #94a3b8; margin-left: 8px;">
                 ({{ number_format($summary['total_unique_trees']) }} Pohon, {{ number_format($summary['total_usable_pcs'], 0, ',', '.') }} / {{ number_format($summary['total_po_pcs'], 0, ',', '.') }} Pcs Layak/PO, {{ $summary['total_weight_kg_formatted'] }} kg)
             </span>
@@ -309,7 +309,7 @@
     <!-- Header Dokumen -->
     <div class="doc-header">
         <div class="company">PT. PERONI KARYA SENTRA &bull; KANBAN PPIC LOST WAX</div>
-        <h1>LAPORAN BARANG SIAP OVEN{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</h1>
+        <h1>LAPORAN ANTREAN SIAP OVEN DEWAXING{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</h1>
         <div class="meta-bar">
             <span><strong>Waktu Cetak:</strong> {{ $summary['generated_at_formatted'] }} WIB</span>
             <span><strong>Prioritas:</strong> FIFO (Waktu Selesai Lapisan Terawal)</span>

@@ -3,8 +3,8 @@
 @section('top_bar')
     <div class="flex items-center justify-between w-full gap-2">
         <div>
-            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; SCAN OVEN</h1>
-            <p class="text-gray-500 text-[10px]">Scan barcode Tree saat rak masuk Oven</p>
+            <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; SCAN MASUK OVEN DEWAXING</h1>
+            <p class="text-gray-500 text-[10px]">Scan saat pohon cangkang masuk ke oven untuk proses pelelehan lilin</p>
         </div>
         <div>
             {{-- Audio Toggle Control --}}
@@ -75,7 +75,7 @@
         <div id="scanPanelCard" class="scan-panel-card bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center transition-colors">
             <div class="mb-6">
                 <div id="statusIndicator" class="text-lg font-bold text-slate-500">
-                    <i class="fas fa-fire mr-2"></i> SIAP SCAN OVEN
+                    <i class="fas fa-fire mr-2"></i> SIAP SCAN MASUK OVEN DEWAXING
                 </div>
             </div>
 
@@ -85,7 +85,7 @@
                     id="scanInput"
                     name="barcode"
                     class="w-full text-center text-2xl font-mono tracking-widest py-4 rounded-xl border-2 border-slate-300 focus:border-orange-500 focus:ring-orange-500 outline-none transition-colors"
-                    placeholder="SCAN BARCODE OVEN"
+                    placeholder="SCAN BARCODE MASUK OVEN DEWAXING"
                     autofocus
                     autocomplete="off"
                 >
@@ -334,7 +334,7 @@
             document.body.classList.remove('scanner-feedback-success', 'scanner-feedback-failed');
             fullFeedbackBanner.classList.add('hidden');
 
-            statusIndicator.innerHTML = '<i class="fas fa-fire mr-2"></i> SIAP SCAN OVEN';
+            statusIndicator.innerHTML = '<i class="fas fa-fire mr-2"></i> SIAP SCAN MASUK OVEN DEWAXING';
             statusIndicator.className = 'text-lg font-bold text-slate-500';
             errorArea.classList.add('hidden');
         }

@@ -186,6 +186,31 @@ class ReadyForOvenReportTest extends TestCase
     }
 
     /**
+     * 3b. Pohon yang dilapisi hingga Layer 7 secara dinamis (require_layer_7 = false) tetap dapat muncul.
+     */
+    public function test_seven_layer_tree_dynamic_without_flag_appears(): void
+    {
+        $plan = $this->createPlan(['code' => 'PLAN-7DYN']);
+        $line = $this->createPrintOrderLine($plan);
+        $tree = $this->createTree([
+            'lost_wax_print_order_line_id' => $line->id,
+            'require_layer_7' => false, // Initial default flag was false!
+            'current_stage' => 'layer_7', // Physical condition: finished Layer 7 on shopfloor
+            'quantity' => 25,
+        ]);
+
+        $this->createScanEvent($tree, 'layer_7', now()->subHours(1));
+
+        $data = $this->service->getQueueData();
+
+        $this->assertEquals(1, $data['summary']['total_unique_trees']);
+        $this->assertEquals(1, $data['summary']['total_rangkai']);
+        $this->assertEquals(25, $data['summary']['total_usable_pcs']);
+        $this->assertEquals('layer_7', $data['items']->first()['finished_stage']);
+        $this->assertEquals('PLAN-7DYN', $data['items']->first()['production_code']);
+    }
+
+    /**
      * 4. Pohon cancelled tidak muncul.
      */
     public function test_cancelled_tree_does_not_appear(): void
@@ -596,7 +621,7 @@ class ReadyForOvenReportTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('PT. PERONI KARYA SENTRA');
         $response->assertDontSee('PT. PERONIKS CITRA BERSAUDARA');
-        $response->assertSee('BARANG SIAP OVEN');
+        $response->assertSee('ANTREAN SIAP OVEN DEWAXING');
         $response->assertSee('PRINT-CODE-01');
         $response->assertSee('Elbow 90 Deg');
         $response->assertSee('PT Test');
@@ -610,7 +635,7 @@ class ReadyForOvenReportTest extends TestCase
     }
 
     /**
-     * 18. Sidebar contains Barang Siap Oven link and displays active state when viewing Ready for Oven page.
+     * 18. Sidebar contains Antrean Siap Oven Dewaxing link and displays active state when viewing Ready for Oven page.
      */
     public function test_sidebar_contains_ready_for_oven_link_and_displays_active_state(): void
     {
@@ -622,8 +647,8 @@ class ReadyForOvenReportTest extends TestCase
         $response->assertSee(route('lost-wax.reports.ready-for-oven.index'), false);
 
         // Link label, tooltip, and icon
-        $response->assertSee('Barang Siap Oven');
-        $response->assertSee('title="Barang Siap Masuk Oven"', false);
+        $response->assertSee('Antrean Siap Oven Dewaxing');
+        $response->assertSee('title="Antrean Siap Oven Dewaxing"', false);
         $response->assertSee('fa-temperature-high');
 
         // Active state class
@@ -635,7 +660,7 @@ class ReadyForOvenReportTest extends TestCase
     }
 
     /**
-     * 19. Sidebar does not activate Barang Siap Oven link when viewing other Lost Wax pages.
+     * 19. Sidebar does not activate Antrean Siap Oven Dewaxing link when viewing other Lost Wax pages.
      */
     public function test_sidebar_ready_for_oven_link_is_inactive_on_other_pages(): void
     {
@@ -643,7 +668,7 @@ class ReadyForOvenReportTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee(route('lost-wax.reports.ready-for-oven.index'), false);
-        $response->assertSee('Barang Siap Oven');
+        $response->assertSee('Antrean Siap Oven Dewaxing');
 
         $html = $response->getContent();
         $this->assertDoesNotMatchRegularExpression(

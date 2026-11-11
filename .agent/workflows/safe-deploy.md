@@ -68,7 +68,8 @@ docker compose exec app php artisan cache:clear
 docker compose exec app php artisan migrate
 
 # Re-cache untuk production
-fokue 
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
 ```
 
 ### STEP 4: Verifikasi

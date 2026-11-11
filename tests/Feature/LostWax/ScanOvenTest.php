@@ -461,9 +461,9 @@ class ScanOvenTest extends TestCase
         $this->actingAs($user)
             ->get(route('lost-wax.scan-oven.index'))
             ->assertOk()
-            ->assertSee('SCAN OVEN')
-            ->assertSee('SIAP SCAN OVEN')
-            ->assertSee('SCAN BARCODE OVEN');
+            ->assertSee('SCAN MASUK OVEN DEWAXING')
+            ->assertSee('SIAP SCAN MASUK OVEN DEWAXING')
+            ->assertSee('SCAN BARCODE MASUK OVEN DEWAXING');
     }
 
     public function test_scan_oven_endpoint_returns_json(): void

@@ -1677,7 +1677,7 @@ class ReadyForOvenPhase1Test extends TestCase
         // 2. Print View
         $print = $this->actingAs($this->user)->get(route('lost-wax.reports.ready-for-oven.print', $params));
         $print->assertStatus(200);
-        $print->assertSee('LAPORAN BARANG SIAP OVEN — Kode: CODE-LEBIH | Status PO: COMPLETED | Customer: CUST-A');
+        $print->assertSee('LAPORAN ANTREAN SIAP OVEN DEWAXING — Kode: CODE-LEBIH | Status PO: COMPLETED | Customer: CUST-A');
         $print->assertSee('CODE-LEBIH');
         $print->assertDontSee('CODE-KURANG');
         $print->assertDontSee('CODE-SESUAI');
@@ -1695,7 +1695,7 @@ class ReadyForOvenPhase1Test extends TestCase
         // When invoking print with po_status=all (as linked by the Cetak Semua button)
         $printAll = $this->actingAs($this->user)->get(route('lost-wax.reports.ready-for-oven.print', ['po_status' => 'all']));
         $printAll->assertStatus(200);
-        $printAll->assertSee('LAPORAN BARANG SIAP OVEN');
+        $printAll->assertSee('LAPORAN ANTREAN SIAP OVEN DEWAXING');
         $printAll->assertSee('CODE-LEBIH');
         $printAll->assertSee('CODE-KURANG');
         $printAll->assertSee('CODE-SESUAI');

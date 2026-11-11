@@ -287,7 +287,7 @@ class LostWaxTree extends Model
             $nextStage = $stages[$nextIdx + 1] ?? null;
         }
 
-        if ($nextStage === 'oven') {
+        if ($this->current_stage === 'oven' || $this->current_stage === 'siap_cor' || $nextStage === 'oven') {
             return null;
         }
 

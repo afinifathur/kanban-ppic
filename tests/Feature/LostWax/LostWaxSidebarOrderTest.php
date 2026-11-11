@@ -71,10 +71,10 @@ class LostWaxSidebarOrderTest extends TestCase
             'Hasil Rangkai',
             'Rangkaian / Traveler',
             'Scan Lapisan',
-            'Scan Oven',
-            'Barang Siap Oven',
-            'Scan Siap Cor',
-            'Barang Siap Cor',
+            'Scan Masuk Oven Dewaxing',
+            'Antrean Siap Oven Dewaxing',
+            'Scan Selesai Dewaxing',
+            'Persediaan Pasca Dewaxing',
             'Input Hasil Cor',
             'Rack Monitoring',
             'Production Status',
@@ -126,18 +126,18 @@ class LostWaxSidebarOrderTest extends TestCase
         preg_match_all('/<span class="text-sm sidebar-text">([^<]+)<\/span>/', $menuHtml, $itemMatches);
         $menuTitles = array_map('trim', $itemMatches[1]);
 
-        // PPIC should see: Perintah Cetak, Barang Siap Oven, Barang Siap Cor, Input Hasil Cor, Rack Monitoring, Production Status, Rekap Kerusakan, Report Produksi
+        // PPIC should see: Perintah Cetak, Antrean Siap Oven Dewaxing, Persediaan Pasca Dewaxing, Input Hasil Cor, Rack Monitoring, Production Status, Rekap Kerusakan, Report Produksi
         $this->assertContains('Perintah Cetak', $menuTitles);
-        $this->assertContains('Barang Siap Oven', $menuTitles);
-        $this->assertContains('Barang Siap Cor', $menuTitles);
+        $this->assertContains('Antrean Siap Oven Dewaxing', $menuTitles);
+        $this->assertContains('Persediaan Pasca Dewaxing', $menuTitles);
         $this->assertContains('Input Hasil Cor', $menuTitles);
         $this->assertContains('Rack Monitoring', $menuTitles);
         $this->assertContains('Production Status', $menuTitles);
 
         // PPIC should NOT see execution scanner menus:
         $this->assertNotContains('Scan Lapisan', $menuTitles);
-        $this->assertNotContains('Scan Oven', $menuTitles);
-        $this->assertNotContains('Scan Siap Cor', $menuTitles);
+        $this->assertNotContains('Scan Masuk Oven Dewaxing', $menuTitles);
+        $this->assertNotContains('Scan Selesai Dewaxing', $menuTitles);
     }
 
     public function test_sidebar_role_visibility_for_spv(): void
@@ -161,10 +161,10 @@ class LostWaxSidebarOrderTest extends TestCase
         $this->assertContains('Hasil Rangkai', $menuTitles);
         $this->assertContains('Rangkaian / Traveler', $menuTitles);
         $this->assertContains('Scan Lapisan', $menuTitles);
-        $this->assertContains('Scan Oven', $menuTitles);
-        $this->assertContains('Barang Siap Oven', $menuTitles);
-        $this->assertContains('Scan Siap Cor', $menuTitles);
-        $this->assertContains('Barang Siap Cor', $menuTitles);
+        $this->assertContains('Scan Masuk Oven Dewaxing', $menuTitles);
+        $this->assertContains('Antrean Siap Oven Dewaxing', $menuTitles);
+        $this->assertContains('Scan Selesai Dewaxing', $menuTitles);
+        $this->assertContains('Persediaan Pasca Dewaxing', $menuTitles);
         $this->assertContains('Input Hasil Cor', $menuTitles);
         $this->assertContains('Rack Monitoring', $menuTitles);
         $this->assertContains('Production Status', $menuTitles);

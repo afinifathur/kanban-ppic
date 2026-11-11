@@ -63,16 +63,8 @@ class ReadyForOvenService
                         })
                         ->where('lost_wax_trees.current_stage', 'layer_6');
                 })
-                // 7-layer candidates: either tree or work_order requires layer 7, current_stage = layer_7
-                    ->orWhere(function ($sub) {
-                        $sub->where(function ($req7Sub) {
-                            $req7Sub->where('lost_wax_trees.require_layer_7', true)
-                                ->orWhereHas('workOrder', function ($w) {
-                                    $w->where('require_layer_7', true);
-                                });
-                        })
-                            ->where('lost_wax_trees.current_stage', 'layer_7');
-                    });
+                // 7-layer candidates: any tree that has reached layer_7 (whether planned or dynamic shopfloor dipping)
+                    ->orWhere('lost_wax_trees.current_stage', 'layer_7');
             })
             // Ensure no active (non-voided) successful oven scan exists
             ->whereDoesntHave('scanEvents', function ($q) {
@@ -112,12 +104,16 @@ class ReadyForOvenService
         $rawRows = collect();
 
         foreach ($trees as $tree) {
-            // A. Strict model-level evaluation of require_layer_7
-            $requiresLayer7 = $tree->require_layer_7;
-            $requiredFinalStage = $requiresLayer7 ? 'layer_7' : 'layer_6';
+            // A. Physical condition current_stage is the source of truth:
+            // - A tree at current_stage = 'layer_7' has completed Layer 7 (regardless of initial require_layer_7).
+            // - A tree at current_stage = 'layer_6' has completed Layer 6 (provided it is not designated for layer 7).
+            $requiresLayer7 = (bool) ($tree->require_layer_7 || ($tree->workOrder && $tree->workOrder->require_layer_7));
 
-            // Tree must currently be at the exact required final stage
-            if ($tree->current_stage !== $requiredFinalStage) {
+            if ($tree->current_stage === 'layer_7') {
+                $finalStage = 'layer_7';
+            } elseif ($tree->current_stage === 'layer_6' && ! $requiresLayer7) {
+                $finalStage = 'layer_6';
+            } else {
                 continue;
             }
 
@@ -127,9 +123,9 @@ class ReadyForOvenService
                 continue;
             }
 
-            // C. Find the latest valid (non-voided, result = 'success') scan event for the required stage
+            // C. Find the latest valid (non-voided, result = 'success') scan event for the final stage
             $finalStageEvent = $tree->scanEvents
-                ->where('stage', $requiredFinalStage)
+                ->where('stage', $finalStage)
                 ->where('result', 'success')
                 ->sortByDesc('scanned_at')
                 ->first();
@@ -256,8 +252,8 @@ class ReadyForOvenService
                         'weight_kg' => $weightKg,
                         'weight_kg_formatted' => $hasWeight ? number_format($weightKg, 2, ',', '.') : '-',
                         'has_weight' => $hasWeight,
-                        'finished_stage' => $requiredFinalStage,
-                        'finished_stage_label' => config("lost_wax.stages.{$requiredFinalStage}", ucfirst($requiredFinalStage)),
+                        'finished_stage' => $finalStage,
+                        'finished_stage_label' => config("lost_wax.stages.{$finalStage}", ucfirst($finalStage)),
                         'finished_at' => $scannedAt,
                         'finished_at_formatted' => $scannedAt->format('d/m/Y H:i'),
                     ]);
@@ -318,8 +314,8 @@ class ReadyForOvenService
                     'weight_kg' => $weightKg,
                     'weight_kg_formatted' => $hasWeight ? number_format($weightKg, 2, ',', '.') : '-',
                     'has_weight' => $hasWeight,
-                    'finished_stage' => $requiredFinalStage,
-                    'finished_stage_label' => config("lost_wax.stages.{$requiredFinalStage}", ucfirst($requiredFinalStage)),
+                    'finished_stage' => $finalStage,
+                    'finished_stage_label' => config("lost_wax.stages.{$finalStage}", ucfirst($finalStage)),
                     'finished_at' => $scannedAt,
                     'finished_at_formatted' => $scannedAt->format('d/m/Y H:i'),
                 ]);
