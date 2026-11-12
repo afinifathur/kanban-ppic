@@ -127,7 +127,7 @@ class ScanSiapCorTest extends TestCase
         $response = $this->actingAs($this->user)->get(route('lost-wax.scan-siap-cor.index'));
         $response->assertStatus(200);
         $response->assertSee('SCAN SELESAI DEWAXING');
-        $response->assertSee('SCAN BARCODE TRAVELER CARD');
+        $response->assertSee('SCAN BARCODE / QR CODE TRAVELER');
     }
 
     public function test_2_unauthenticated_user_redirected_to_login(): void
@@ -253,7 +253,7 @@ class ScanSiapCorTest extends TestCase
         $response->assertJson([
             'success' => true,
             'code' => 'SUCCESS',
-            'message' => 'BERHASIL — SIAP COR',
+            'message' => 'BERHASIL — SELESAI DEWAXING',
             'tree_info' => [
                 'barcode' => $tree->barcode,
                 'code' => 'COR-OK-01',

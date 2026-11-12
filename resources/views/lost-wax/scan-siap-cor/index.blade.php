@@ -91,16 +91,81 @@
             </div>
 
             <form id="scanForm" autocomplete="off" class="mb-4">
-                <input
-                    type="text"
-                    id="scanInput"
-                    name="barcode"
-                    class="w-full text-center text-xl sm:text-2xl font-mono tracking-widest py-3.5 sm:py-4 rounded-xl border-2 border-slate-300 focus:border-emerald-600 focus:ring-emerald-600 outline-none transition-colors"
-                    placeholder="SCAN BARCODE / QR CODE TRAVELER"
-                    autofocus
-                    autocomplete="off"
-                >
+                <div class="flex flex-col sm:flex-row gap-2.5 items-stretch">
+                    <input
+                        type="text"
+                        id="scanInput"
+                        name="barcode"
+                        class="flex-1 text-center text-xl sm:text-2xl font-mono tracking-widest py-3.5 sm:py-4 rounded-xl border-2 border-slate-300 focus:border-emerald-600 focus:ring-emerald-600 outline-none transition-colors"
+                        placeholder="SCAN BARCODE / QR CODE TRAVELER"
+                        autofocus
+                        autocomplete="off"
+                    >
+                    <button
+                        type="button"
+                        id="btnToggleCamera"
+                        onclick="toggleCamera()"
+                        class="min-h-[50px] sm:min-h-full px-5 py-3 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-900 active:bg-black text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0 touch-manipulation"
+                    >
+                        <i id="btnCameraIcon" class="fas fa-camera text-base text-emerald-400"></i>
+                        <span id="btnCameraText">Aktifkan Kamera</span>
+                    </button>
+                </div>
             </form>
+
+            {{-- LIVE CAMERA VIEWPORT (ANDROID-OPTIMIZED) --}}
+            <div id="cameraScannerArea" class="hidden my-4 relative rounded-2xl overflow-hidden bg-black border-2 border-emerald-500 shadow-xl mx-auto max-w-md animate-in fade-in zoom-in-95 duration-150">
+                {{-- Live Camera Header Overlay --}}
+                <div class="absolute top-0 inset-x-0 z-10 bg-gradient-to-b from-black/85 via-black/40 to-transparent p-3 flex items-center justify-between text-white">
+                    <div class="flex items-center gap-2 text-xs font-bold">
+                        <span class="relative flex h-2.5 w-2.5">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <span id="cameraStatusText">KAMERA BELAKANG AKTIF</span>
+                    </div>
+                    <button
+                        type="button"
+                        onclick="stopCamera()"
+                        class="px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-1.5 touch-manipulation"
+                        title="Tutup Kamera"
+                    >
+                        <i class="fas fa-times text-xs"></i>
+                        <span>Tutup</span>
+                    </button>
+                </div>
+
+                {{-- Camera Video Container --}}
+                <div class="relative w-full aspect-[4/3] bg-black flex items-center justify-center overflow-hidden">
+                    <video id="cameraVideo" playsinline autoplay muted class="w-full h-full object-cover"></video>
+
+                    {{-- Scanning Reticle Overlay --}}
+                    <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
+                        <div class="w-60 h-44 sm:w-64 sm:h-48 border-2 border-emerald-400/80 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+                            <div class="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl"></div>
+                            <div class="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr"></div>
+                            <div class="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl"></div>
+                            <div class="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-emerald-400 rounded-br"></div>
+                            <div class="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_8px_#10b981] animate-pulse absolute inset-x-0 top-1/2 -translate-y-1/2"></div>
+                        </div>
+                        <p class="text-white text-[11px] font-semibold bg-black/70 px-3 py-1 rounded-full mt-3 backdrop-blur-xs">
+                            Arahkan QR Code atau Barcode Traveler ke dalam kotak
+                        </p>
+                    </div>
+                </div>
+
+                {{-- Bottom Camera Control --}}
+                <div class="bg-slate-900 p-2.5 flex items-center justify-center gap-2">
+                    <button
+                        type="button"
+                        onclick="stopCamera()"
+                        class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center gap-2 shadow-xs touch-manipulation"
+                    >
+                        <i class="fas fa-camera-slash text-xs"></i>
+                        <span>Matikan Kamera</span>
+                    </button>
+                </div>
+            </div>
 
             <div class="text-xs text-slate-400">
                 Pindai QR Code atau Barcode Traveler Card pohon. Sistem akan menampilkan popup verifikasi sebelum menyelesaikan proses dewaxing.
@@ -319,6 +384,9 @@
         </div>
     </div>
 
+    {{-- ZXing Browser Barcode Decoder Library --}}
+    <script src="{{ asset('js/zxing-browser.min.js') }}"></script>
+
     <script>
         const scanInput = document.getElementById('scanInput');
         const scanForm = document.getElementById('scanForm');
@@ -351,14 +419,27 @@
         const modalConfirmError = document.getElementById('modalConfirmError');
         const modalConfirmErrorText = document.getElementById('modalConfirmErrorText');
 
+        // Camera Scanner Elements
+        const btnToggleCamera = document.getElementById('btnToggleCamera');
+        const btnCameraIcon = document.getElementById('btnCameraIcon');
+        const btnCameraText = document.getElementById('btnCameraText');
+        const cameraScannerArea = document.getElementById('cameraScannerArea');
+        const cameraVideo = document.getElementById('cameraVideo');
+
         let feedbackTimeoutId = null;
         let requestSeq = 0;
         let latestHandledRequestSeq = 0;
 
-        // Modal state tracking
+        // Modal & Camera state tracking
         let modalIsOpen = false;
         let pendingBarcode = null;
         let isSubmitting = false;
+
+        // Camera State
+        let codeReader = null;
+        let cameraControls = null;
+        let isCameraActive = false;
+        let isDecodingLocked = false;
 
         // Audio Configuration & Native Audio Elements
         const AUDIO_VOLUME = 0.8;
@@ -404,7 +485,7 @@
                 icon.className = "fas fa-volume-mute text-slate-500 text-xs";
                 text.innerText = "AKTIFKAN SUARA";
             }
-            if (!modalIsOpen) {
+            if (!modalIsOpen && !isCameraActive) {
                 scanInput.focus();
             }
         }
@@ -422,13 +503,188 @@
             } catch (e) {}
         }
 
-        // Form submission & barcode preview request
-        scanForm.addEventListener('submit', function(e) {
-            e.preventDefault();
+        // =========================================================================
+        // CAMERA SCANNER ENGINE (ZXing Browser)
+        // =========================================================================
+        async function toggleCamera() {
+            if (isCameraActive) {
+                stopCamera();
+            } else {
+                await startCamera();
+            }
+        }
+
+        async function startCamera() {
             if (modalIsOpen || isSubmitting) return;
 
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Kamera Tidak Didukung',
+                    text: 'Browser Anda tidak mendukung akses kamera atau fitur ini diblokir. Pastikan Chrome Android memiliki izin kamera dan flag izin IP LAN aktif.',
+                    confirmButtonColor: '#059669',
+                });
+                return;
+            }
+
+            if (typeof ZXingBrowser === 'undefined') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Library Scanner Belum Siap',
+                    text: 'Library pemindai barcode ZXing gagal dimuat. Muat ulang halaman.',
+                    confirmButtonColor: '#059669',
+                });
+                return;
+            }
+
+            try {
+                isDecodingLocked = false;
+                cameraScannerArea.classList.remove('hidden');
+
+                // Update button UI
+                btnToggleCamera.className = "min-h-[50px] sm:min-h-full px-5 py-3 rounded-xl font-bold text-sm bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0 touch-manipulation";
+                btnCameraIcon.className = "fas fa-camera-slash text-base text-white";
+                btnCameraText.innerText = "Matikan Kamera";
+                isCameraActive = true;
+
+                statusIndicator.innerHTML = '<i class="fas fa-camera mr-2 text-emerald-600"></i> KAMERA SCANNER AKTIF &mdash; MENCARI BARCODE...';
+                statusIndicator.className = 'text-base sm:text-lg font-bold text-emerald-700';
+
+                if (!codeReader) {
+                    codeReader = new ZXingBrowser.BrowserMultiFormatReader(null, {
+                        delayBetweenScanAttempts: 100,
+                        delayBetweenScanSuccess: 500
+                    });
+                }
+
+                const constraints = {
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+
+                cameraControls = await codeReader.decodeFromConstraints(constraints, cameraVideo, (result, error, controls) => {
+                    if (result && !isDecodingLocked && !modalIsOpen && !isSubmitting) {
+                        const text = result.getText().trim();
+                        if (text) {
+                            isDecodingLocked = true;
+
+                            // 1. Stop camera and release media stream
+                            stopCamera();
+
+                            // 2. Put detected barcode into input
+                            scanInput.value = text;
+
+                            // 3. Trigger preview scan flow (opens verification popup without auto-confirm)
+                            triggerPreviewScan(text);
+                        }
+                    }
+                });
+
+            } catch (err) {
+                console.error('Camera start error:', err);
+                stopCamera();
+
+                let errorTitle = 'Akses Kamera Gagal';
+                let errorMessage = 'Tidak dapat mengakses kamera belakang.';
+
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    errorTitle = 'Izin Kamera Ditolak';
+                    errorMessage = 'Izin kamera ditolak. Silakan izinkan akses kamera pada pengaturan browser Chrome untuk alamat ini.';
+                } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    errorTitle = 'Kamera Tidak Ditemukan';
+                    errorMessage = 'Kamera belakang tidak ditemukan pada perangkat Anda.';
+                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                    errorTitle = 'Kamera Sedang Digunakan';
+                    errorMessage = 'Kamera sedang digunakan oleh tab atau aplikasi lain. Tutup aplikasi tersebut lalu coba lagi.';
+                } else if (err.message) {
+                    errorMessage = err.message;
+                }
+
+                Swal.fire({
+                    icon: 'warning',
+                    title: errorTitle,
+                    text: errorMessage,
+                    confirmButtonColor: '#059669',
+                });
+            }
+        }
+
+        function stopCamera() {
+            isDecodingLocked = false;
+            isCameraActive = false;
+
+            if (cameraControls) {
+                try {
+                    cameraControls.stop();
+                } catch (e) {
+                    console.warn('Error stopping camera controls:', e);
+                }
+                cameraControls = null;
+            }
+
+            if (cameraVideo) {
+                try {
+                    if (cameraVideo.srcObject) {
+                        const stream = cameraVideo.srcObject;
+                        if (stream && stream.getTracks) {
+                            stream.getTracks().forEach(track => track.stop());
+                        }
+                        cameraVideo.srcObject = null;
+                    }
+                    cameraVideo.pause();
+                    cameraVideo.removeAttribute('src');
+                    cameraVideo.load();
+                } catch (e) {
+                    console.warn('Error releasing video tracks:', e);
+                }
+            }
+
+            cameraScannerArea.classList.add('hidden');
+
+            // Reset button UI
+            btnToggleCamera.className = "min-h-[50px] sm:min-h-full px-5 py-3 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-900 active:bg-black text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0 touch-manipulation";
+            btnCameraIcon.className = "fas fa-camera text-base text-emerald-400";
+            btnCameraText.innerText = "Aktifkan Kamera";
+
+            if (!modalIsOpen) {
+                statusIndicator.innerHTML = '<i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
+                statusIndicator.className = 'text-base sm:text-lg font-bold text-slate-600';
+                scanInput.focus();
+            }
+        }
+
+        // Stop camera when user switches tab or leaves page
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden && isCameraActive) {
+                stopCamera();
+            }
+        });
+
+        window.addEventListener('beforeunload', function() {
+            if (isCameraActive) {
+                stopCamera();
+            }
+        });
+
+        // =========================================================================
+        // SCAN FORM & BARCODE PREVIEW PIPELINE
+        // =========================================================================
+
+        // Form submission for Scanner HID / Keyboard Enter
+        scanForm.addEventListener('submit', function(e) {
+            e.preventDefault();
             const barcode = scanInput.value.trim();
             if (!barcode) return;
+            triggerPreviewScan(barcode);
+        });
+
+        // Common Preview Scan Trigger (Used by both Scanner HID / Manual Input & Camera Scanner)
+        function triggerPreviewScan(barcode) {
+            if (modalIsOpen || isSubmitting) return;
 
             scanInput.value = '';
             scanInput.blur();
@@ -484,14 +740,20 @@
                 showError({ reason: 'GAGAL — KONEKSI SERVER TERPUTUS' }, barcode, thisRequestSeq);
             })
             .finally(() => {
-                if (!modalIsOpen) {
+                isDecodingLocked = false;
+                if (!modalIsOpen && !isCameraActive) {
                     scanInput.focus();
                 }
             });
-        });
+        }
 
         // Open Verification Modal with Preview Data
         function openVerificationModal(data, barcode) {
+            // Ensure camera is fully stopped
+            if (isCameraActive) {
+                stopCamera();
+            }
+
             const ti = data.tree_info || {};
             pendingBarcode = barcode;
             modalIsOpen = true;
@@ -531,12 +793,15 @@
             verifyModal.classList.add('hidden');
             modalIsOpen = false;
             pendingBarcode = null;
+            isDecodingLocked = false;
 
             statusIndicator.innerHTML = '<i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
             statusIndicator.className = 'text-base sm:text-lg font-bold text-slate-600';
 
             scanInput.value = '';
-            scanInput.focus();
+            if (!isCameraActive) {
+                scanInput.focus();
+            }
         }
 
         // Action: KONFIRMASI (Calls process endpoint to save transaction)
@@ -761,16 +1026,16 @@
             }
         }
 
-        // Re-focus protection when clicking outside or window active (Disabled when modal is open)
+        // Re-focus protection when clicking outside or window active (Disabled when modal is open or camera is active)
         document.addEventListener('click', function(e) {
-            if (modalIsOpen) return;
-            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && e.target.tagName !== 'INPUT') {
+            if (modalIsOpen || isCameraActive) return;
+            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && e.target.tagName !== 'INPUT' && !e.target.closest('button')) {
                 scanInput.focus();
             }
         });
 
         window.addEventListener('focus', function() {
-            if (!modalIsOpen) {
+            if (!modalIsOpen && !isCameraActive) {
                 scanInput.focus();
             }
         });

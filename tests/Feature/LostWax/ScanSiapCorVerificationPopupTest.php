@@ -385,4 +385,24 @@ class ScanSiapCorVerificationPopupTest extends TestCase
         $tree->refresh();
         $this->assertEquals('siap_cor', $tree->current_stage);
     }
+
+    /**
+     * 13. Halaman Scan Selesai Dewaxing memuat tombol kamera, viewport kamera, dan library ZXing.
+     */
+    public function test_13_scan_siap_cor_view_renders_camera_scanner_elements_and_zxing_library(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('lost-wax.scan-siap-cor.index'));
+
+        $response->assertStatus(200);
+        $response->assertSee('btnToggleCamera');
+        $response->assertSee('Aktifkan Kamera');
+        $response->assertSee('Matikan Kamera');
+        $response->assertSee('cameraScannerArea');
+        $response->assertSee('cameraVideo');
+        $response->assertSee('zxing-browser.min.js');
+        $response->assertSee('scanInput');
+        $response->assertSee('verifyModal');
+        $response->assertSee('BATAL');
+        $response->assertSee('KONFIRMASI');
+    }
 }

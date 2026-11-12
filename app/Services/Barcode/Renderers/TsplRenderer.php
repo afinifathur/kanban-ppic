@@ -19,6 +19,7 @@ class TsplRenderer
 
         $itemCode = $this->sanitize($tree->getSourceItemCode() ?? '-');
         $itemName = $this->sanitize($tree->getSourceProduct() ?? '-');
+        $size = $this->sanitize($tree->getSourceSize() ?? '-');
         $aisi = $this->sanitize($tree->getSourceAisi() ?? '-');
         $custCode = $this->sanitize($tree->getSourceCustomer() ?? '-');
         $barcode = $this->sanitize($tree->barcode);
@@ -56,18 +57,27 @@ class TsplRenderer
         $cmds[] = 'BAR 20,320,680,3';
 
         // Vertical Dividers
+        $cmds[] = 'BAR 275,190,3,130';
         $cmds[] = 'BAR 460,190,3,130';
         $cmds[] = 'BAR 360,320,3,70';
 
         // Y=55: Production Info Block
-        $cmds[] = 'TEXT 30,55,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
-        $cmds[] = 'TEXT 30,77,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
-        $cmds[] = 'TEXT 30,99,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
         if ($productNameLines[1] !== '') {
-            $cmds[] = 'TEXT 30,121,"'.self::FONT_NORMAL.'",0,1,1,"                '.$productNameLines[1].'"';
+            $cmds[] = 'TEXT 30,52,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
+            $cmds[] = 'TEXT 30,72,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
+            $cmds[] = 'TEXT 30,92,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
+            $cmds[] = 'TEXT 30,112,"'.self::FONT_NORMAL.'",0,1,1,"                '.$productNameLines[1].'"';
+            $cmds[] = 'TEXT 30,132,"'.self::FONT_NORMAL.'",0,1,1,"UKURAN        : '.$size.'"';
+            $cmds[] = 'TEXT 30,152,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
+            $cmds[] = 'TEXT 30,172,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
+        } else {
+            $cmds[] = 'TEXT 30,55,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
+            $cmds[] = 'TEXT 30,77,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
+            $cmds[] = 'TEXT 30,99,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
+            $cmds[] = 'TEXT 30,121,"'.self::FONT_NORMAL.'",0,1,1,"UKURAN        : '.$size.'"';
+            $cmds[] = 'TEXT 30,143,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
+            $cmds[] = 'TEXT 30,165,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
         }
-        $cmds[] = 'TEXT 30,143,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
-        $cmds[] = 'TEXT 30,165,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
 
         // Barcode & Isi Rangkaian
         // Left side: Barcode 1D & Human-readable number

@@ -224,7 +224,7 @@ class LostWaxTree extends Model
     public function getSourceSize(): ?string
     {
         if ($this->lost_wax_print_order_line_id) {
-            return $this->printOrderLine?->size;
+            return $this->printOrderLine?->size ?? $this->printOrderLine?->productionPlan?->size;
         }
 
         return null;

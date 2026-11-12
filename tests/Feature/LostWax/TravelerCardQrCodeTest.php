@@ -137,7 +137,16 @@ class TravelerCardQrCodeTest extends TestCase
             ->get(route('lost-wax.trees.traveler', $tree));
 
         $response->assertOk();
+        $response->assertSee('FORM BARCODE LAPISAN');
         $response->assertSee('LOST WAX TRAVELER');
+
+        // Check Product Information fields
+        $response->assertSee('1. KODE PRODUKSI');
+        $response->assertSee('2. KODE ITEM');
+        $response->assertSee('3. NAMA ITEM');
+        $response->assertSee('4. UKURAN');
+        $response->assertSee('5. AISI');
+        $response->assertSee('6. KODE CUST');
 
         // Check 1D Barcode elements
         $response->assertSee(route('lost-wax.trees.barcode', $tree));
@@ -146,6 +155,14 @@ class TravelerCardQrCodeTest extends TestCase
         // Check QR Code elements
         $response->assertSee('data:image/svg+xml;base64,');
         $response->assertSee('SCAN QR');
+
+        // Check Quantity and Footer elements
+        $response->assertSee('ISI RANGKAIAN');
+        $response->assertSee('15 PCS');
+        $response->assertSee('TGL PRINT');
+        $response->assertSee('JAM PRINT');
+        $response->assertSee('KODE RAK');
+        $response->assertSee('KETERANGAN');
 
         // Check view data bindings
         $response->assertViewHas('qrCodes', function ($qrCodes) use ($tree) {
@@ -247,8 +264,28 @@ class TravelerCardQrCodeTest extends TestCase
         $this->assertStringContainsString('KODE PRODUKSI :', $tspl);
         $this->assertStringContainsString('KODE ITEM     :', $tspl);
         $this->assertStringContainsString('NAMA ITEM     :', $tspl);
+        $this->assertStringContainsString('UKURAN        :', $tspl);
         $this->assertStringContainsString('AISI          :', $tspl);
         $this->assertStringContainsString('TGL PRINT     :', $tspl);
         $this->assertStringContainsString('JAM PRINT     :', $tspl);
+    }
+
+    public function test_traveler_card_thermal_format_mode_renders_correctly(): void
+    {
+        $user = User::factory()->create();
+        $tree = $this->createTreeFixture('3110826005');
+
+        $response = $this->actingAs($user)
+            ->get(route('lost-wax.trees.traveler', [
+                'tree' => $tree->id,
+                'format' => 'thermal',
+            ]));
+
+        $response->assertOk();
+        $response->assertSee('traveler-card-thermal');
+        $response->assertSee('print-page-thermal');
+        $response->assertSee('FORM BARCODE LAPISAN');
+        $response->assertSee('3110826005');
+        $response->assertSee('15 PCS');
     }
 }

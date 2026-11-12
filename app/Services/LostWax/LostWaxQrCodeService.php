@@ -15,11 +15,11 @@ class LostWaxQrCodeService
      * Generate an SVG string representation of a QR code for a given barcode string.
      *
      * @param  string  $barcode  The plain text Traveler Card barcode identifier (e.g. "3110826005")
-     * @param  int  $size  Dimension in units/pixels (default: 120)
-     * @param  int  $margin  Quiet zone margin in modules (default: 1)
+     * @param  int  $size  Dimension in units/pixels (default: 200)
+     * @param  int  $margin  Quiet zone margin in modules (default: 4, minimal 4 modules per standard)
      * @return string Raw SVG markup
      */
-    public function generateSvg(string $barcode, int $size = 120, int $margin = 1): string
+    public function generateSvg(string $barcode, int $size = 200, int $margin = 4): string
     {
         $barcode = trim($barcode);
         if ($barcode === '') {
@@ -41,7 +41,7 @@ class LostWaxQrCodeService
      *
      * @return string Data URI (e.g. "data:image/svg+xml;base64,...")
      */
-    public function generateBase64DataUri(string $barcode, int $size = 120, int $margin = 1): string
+    public function generateBase64DataUri(string $barcode, int $size = 200, int $margin = 4): string
     {
         $svg = $this->generateSvg($barcode, $size, $margin);
 
@@ -54,7 +54,7 @@ class LostWaxQrCodeService
      * @param  iterable<\App\Models\LostWaxTree>  $trees
      * @return array<int, string> Map of [ tree_id => data_uri ]
      */
-    public function generateBatchDataUris(iterable $trees, int $size = 120, int $margin = 1): array
+    public function generateBatchDataUris(iterable $trees, int $size = 200, int $margin = 4): array
     {
         $map = [];
         foreach ($trees as $tree) {

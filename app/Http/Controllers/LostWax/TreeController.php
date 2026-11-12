@@ -313,7 +313,7 @@ class TreeController extends Controller
         }
 
         $qrCodeService = app(\App\Services\LostWax\LostWaxQrCodeService::class);
-        $qrCodes = $qrCodeService->generateBatchDataUris($treesList);
+        $qrCodes = $qrCodeService->generateBatchDataUris($treesList, 200, 4);
 
         return view('lost-wax.trees.traveler', compact('treesList', 'warnings', 'qrCodes'));
     }
