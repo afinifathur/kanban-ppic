@@ -154,6 +154,24 @@ class LostWaxCastingResultController extends Controller
     }
 
     /**
+     * Display printable A4 aggregate daily casting report document.
+     */
+    public function dailyReport(Request $request)
+    {
+        $dateInput = $request->input('date');
+
+        try {
+            $parsedDate = $dateInput ? Carbon::parse($dateInput)->format('Y-m-d') : Carbon::today()->format('Y-m-d');
+        } catch (\Throwable $e) {
+            $parsedDate = Carbon::today()->format('Y-m-d');
+        }
+
+        $reportData = $this->castingResultService->getDailyReportData($parsedDate);
+
+        return view('lost-wax.casting-results.daily-report', $reportData);
+    }
+
+    /**
      * Cancel / void an existing casting result transaction.
      */
     public function cancel(Request $request, LostWaxCastingResult $castingResult)
@@ -186,4 +204,3 @@ class LostWaxCastingResultController extends Controller
         }
     }
 }
-

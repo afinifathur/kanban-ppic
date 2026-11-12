@@ -332,6 +332,15 @@
                                         <span class="px-2 py-0.5 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase">
                                             BERHASIL
                                         </span>
+                                        @if($event->source === 'historical_reconciliation')
+                                            <span class="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 uppercase">
+                                                <i class="fas fa-history mr-0.5"></i> Rekonsiliasi Historis
+                                            </span>
+                                        @else
+                                            <span class="px-2 py-0.5 rounded text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+                                                <i class="fas fa-barcode mr-0.5"></i> Scan Fisik
+                                            </span>
+                                        @endif
                                     @else
                                         <span class="px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200 uppercase">
                                             DITOLAK
@@ -363,6 +372,12 @@
                             @if($event->anomaly_reason && !$isVoided)
                                 <div class="text-[11px] {{ $isRejected ? 'text-rose-700 bg-rose-50 border border-rose-200' : 'text-amber-700 bg-amber-50 border border-amber-200' }} rounded-md p-2 mt-1">
                                     <i class="fas {{ $isRejected ? 'fa-times-circle text-rose-500' : 'fa-exclamation-triangle text-amber-500' }} mr-1"></i> {{ $event->anomaly_reason }}
+                                </div>
+                            @endif
+
+                            @if($event->notes && !$isVoided)
+                                <div class="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2 mt-1">
+                                    <i class="fas fa-info-circle text-blue-500 mr-1"></i> {{ $event->notes }}
                                 </div>
                             @endif
 

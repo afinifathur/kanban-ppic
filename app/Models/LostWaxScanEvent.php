@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class LostWaxScanEvent extends Model
 {
+    public const SOURCE_PHYSICAL_SCAN = 'physical_scan';
+
+    public const SOURCE_HISTORICAL_RECONCILIATION = 'historical_reconciliation';
+
     protected $fillable = [
         'tree_id',
         'barcode',
@@ -13,7 +17,9 @@ class LostWaxScanEvent extends Model
         'scanned_at',
         'operator_id',
         'result',
+        'source',
         'anomaly_reason',
+        'notes',
         'aging_minutes',
         'aging_status',
     ];
@@ -22,6 +28,11 @@ class LostWaxScanEvent extends Model
         'scanned_at' => 'datetime',
         'aging_minutes' => 'integer',
     ];
+
+    public function getIsReconciliationAttribute(): bool
+    {
+        return $this->source === self::SOURCE_HISTORICAL_RECONCILIATION;
+    }
 
     public function tree()
     {

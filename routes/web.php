@@ -191,7 +191,12 @@ Route::middleware(['auth'])->group(function () {
 
             // Scan Siap Cor
             Route::get('/scan-siap-cor', [\App\Http\Controllers\LostWax\ScanSiapCorController::class, 'index'])->name('scan-siap-cor.index');
+            Route::post('/scan-siap-cor/preview', [\App\Http\Controllers\LostWax\ScanSiapCorController::class, 'preview'])->name('scan-siap-cor.preview');
             Route::post('/scan-siap-cor', [\App\Http\Controllers\LostWax\ScanSiapCorController::class, 'process'])->name('scan-siap-cor.process');
+            Route::post('/scan-siap-cor/confirm', [\App\Http\Controllers\LostWax\ScanSiapCorController::class, 'process'])->name('scan-siap-cor.confirm');
+
+            // Monitoring Proses Dewaxing
+            Route::get('/dewaxing-monitoring', [\App\Http\Controllers\LostWax\DewaxingMonitoringController::class, 'index'])->name('dewaxing-monitoring');
 
             // Void Scan Event
             Route::post('/scan-events/{event}/void', [ScanController::class, 'voidEvent'])->name('scan-events.void');
@@ -226,6 +231,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/casting-results', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'index'])->name('casting-results.index');
             Route::get('/casting-results/create', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'create'])->name('casting-results.create');
             Route::post('/casting-results', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'store'])->name('casting-results.store');
+            Route::get('/casting-results/daily-report', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'dailyReport'])->name('casting-results.daily-report');
             Route::get('/casting-results/{castingResult}', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'show'])->name('casting-results.show');
             Route::get('/casting-results/{castingResult}/print', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'print'])->name('casting-results.print');
             Route::post('/casting-results/{castingResult}/cancel', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'cancel'])->name('casting-results.cancel');

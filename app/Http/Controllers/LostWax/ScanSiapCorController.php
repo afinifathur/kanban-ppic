@@ -4,7 +4,6 @@ namespace App\Http\Controllers\LostWax;
 
 use App\Http\Controllers\Controller;
 use App\Models\LostWaxScanEvent;
-use App\Models\LostWaxTree;
 use App\Services\LostWax\ScanSiapCorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,11 +34,11 @@ class ScanSiapCorController extends Controller
     }
 
     /**
-     * Process barcode scan for Siap Cor.
+     * Preview barcode scan for Siap Cor (returns item details for popup verification without modifying DB).
      */
-    public function process(Request $request): JsonResponse
+    public function preview(Request $request): JsonResponse
     {
-        $barcode = trim($request->input('barcode', ''));
+        $barcode = trim((string) $request->input('barcode', ''));
 
         if ($barcode === '') {
             return response()->json([
@@ -49,27 +48,28 @@ class ScanSiapCorController extends Controller
             ]);
         }
 
-        // Product scope RBAC check for PPIC users
-        $user = auth()->user();
-        if ($user && $user->hasRole('ppic') && $user->product_scope) {
-            $tree = LostWaxTree::with(['printOrderLine.productionPlan'])
-                ->where('barcode', $barcode)
-                ->first();
+        $result = $this->scanSiapCorService->previewScan($barcode, auth()->user());
 
-            if ($tree) {
-                $plan = $tree->printOrderLine?->productionPlan;
-                if (! $plan || $plan->product_scope !== $user->product_scope) {
-                    return response()->json([
-                        'success' => false,
-                        'code' => 'UNAUTHORIZED_SCOPE',
-                        'reason' => 'GAGAL — BUKAN LINGKUP PRODUK ANDA',
-                    ]);
-                }
-            }
+        return response()->json($result);
+    }
+
+    /**
+     * Process / Confirm barcode scan for Siap Cor (atomic transition to siap_cor).
+     */
+    public function process(Request $request): JsonResponse
+    {
+        $barcode = trim((string) $request->input('barcode', ''));
+
+        if ($barcode === '') {
+            return response()->json([
+                'success' => false,
+                'code' => 'EMPTY_BARCODE',
+                'reason' => 'GAGAL — BARCODE TIDAK BOLEH KOSONG',
+            ]);
         }
 
         $operatorId = auth()->id() ?? 1;
-        $result = $this->scanSiapCorService->processScan($barcode, $operatorId);
+        $result = $this->scanSiapCorService->processScan($barcode, $operatorId, auth()->user());
 
         return response()->json($result);
     }

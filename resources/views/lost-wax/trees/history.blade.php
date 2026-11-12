@@ -64,12 +64,21 @@
                         <div class="bg-slate-50 rounded-lg p-3 ml-2 border border-slate-150">
                             <div class="flex items-start justify-between">
                                 <div>
-                                    <div class="font-semibold text-slate-800">
+                                    <div class="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
                                         @if($isVoided)
                                             <span class="text-slate-500 line-through">{{ $event->stage_label }}</span>
-                                            <span class="ml-2 bg-red-100 text-red-800 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">VOIDED / BATAL</span>
+                                            <span class="bg-red-100 text-red-800 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">VOIDED / BATAL</span>
                                         @elseif($event->result === 'success')
                                             <span class="text-emerald-600">{{ $event->stage_label }}</span>
+                                            @if($event->source === 'historical_reconciliation')
+                                                <span class="bg-blue-100 text-blue-800 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase border border-blue-200">
+                                                    <i class="fas fa-history mr-0.5"></i> Rekonsiliasi Historis
+                                                </span>
+                                            @else
+                                                <span class="bg-emerald-50 text-emerald-700 text-[9px] font-medium px-1.5 py-0.5 rounded border border-emerald-200">
+                                                    <i class="fas fa-barcode mr-0.5"></i> Scan Fisik
+                                                </span>
+                                            @endif
                                         @else
                                             <span class="text-red-600">DITOLAK</span>
                                         @endif
@@ -101,6 +110,13 @@
                                 <div class="text-xs text-red-600 mt-1 bg-red-50 p-2 rounded border border-red-100">
                                     <i class="fas fa-exclamation-triangle mr-1"></i>
                                     {{ $event->anomaly_reason }}
+                                </div>
+                            @endif
+
+                            @if($event->notes && !$isVoided)
+                                <div class="text-xs text-blue-700 mt-1 bg-blue-50 p-2 rounded border border-blue-200">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    {{ $event->notes }}
                                 </div>
                             @endif
 

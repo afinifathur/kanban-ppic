@@ -3,64 +3,67 @@
 @section('title', 'Riwayat Hasil Cor — Lost Wax')
 
 @section('content')
-<div class="space-y-5">
+<div class="space-y-4">
     <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2.5 border-b border-slate-200">
         <div>
             <div class="flex items-center gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                    <i class="fas fa-fire mr-1.5 text-xs text-amber-500"></i> Lost Wax Pengecoran
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <i class="fas fa-fire mr-1 text-[10px] text-amber-500"></i> Lost Wax Pengecoran
                 </span>
                 <span class="text-slate-300 text-xs">•</span>
                 <span class="text-slate-500 text-xs font-medium">Phase 4 — Input Hasil Cor</span>
             </div>
-            <h1 class="text-2xl font-bold text-slate-900 tracking-tight mt-1.5">Riwayat Hasil Cor</h1>
-            <p class="text-xs text-slate-500 mt-0.5">Daftar transaksi penuangan Heat Number dan Traveler Card yang telah dicor.</p>
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight mt-1">Riwayat Hasil Cor</h1>
         </div>
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <a href="{{ route('lost-wax.casting-results.daily-report') }}"
+               class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-sm">
+                <i class="fas fa-calendar-day mr-1.5 text-amber-500"></i> Laporan Cor Harian
+            </a>
             <a href="{{ route('lost-wax.reports.ready-for-casting.index') }}"
-               class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white transition-colors shadow-sm">
-                <i class="fas fa-clipboard-check mr-2 text-amber-400"></i> Antrean Siap Cor
+               class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white transition-colors shadow-sm">
+                <i class="fas fa-clipboard-check mr-1.5 text-amber-400"></i> Antrean Siap Cor
             </a>
             <a href="{{ route('lost-wax.casting-results.create') }}"
-               class="inline-flex items-center px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-sm">
-                <i class="fas fa-plus mr-1.5 text-xs"></i> Input Hasil Cor Baru
+               class="inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-sm">
+                <i class="fas fa-plus mr-1.5 text-[11px]"></i> Input Hasil Cor Baru
             </a>
         </div>
     </div>
 
-    <!-- KPI Summary Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <!-- KPI Summary Cards (Compact 1 Row on Desktop) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <!-- 1. Total Transaksi -->
-        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+        <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow transition-shadow">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Transaksi</span>
-                <span class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-xs">
-                    <i class="fas fa-list"></i>
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Transaksi</span>
+                <span class="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center text-xs">
+                    <i class="fas fa-list text-[10px]"></i>
                 </span>
             </div>
-            <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-slate-900 tracking-tight">{{ number_format($summary['total_transactions']) }}</span>
-                <span class="text-xs text-slate-500 font-medium">Batch</span>
+            <div class="mt-1 flex items-baseline gap-1.5">
+                <span class="text-xl font-black text-slate-900 tracking-tight">{{ number_format($summary['total_transactions']) }}</span>
+                <span class="text-[11px] text-slate-500 font-medium">Batch</span>
             </div>
-            <div class="text-[11px] text-slate-400 mt-1">Keseluruhan batch penuangan</div>
+            <div class="text-[10px] text-slate-400 mt-0.5 truncate">Semua batch penuangan</div>
         </div>
 
         <!-- 2. Heat Aktif (Selesai) -->
-        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+        <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow transition-shadow">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Heat Aktif (Selesai)</span>
-                <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs">
-                    <i class="fas fa-check-circle"></i>
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Heat Aktif (Selesai)</span>
+                <span class="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs">
+                    <i class="fas fa-check-circle text-[10px]"></i>
                 </span>
             </div>
-            <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-emerald-600 tracking-tight">{{ number_format($summary['total_completed']) }}</span>
-                <span class="text-xs text-slate-500 font-medium">Heat</span>
+            <div class="mt-1 flex items-baseline gap-1.5">
+                <span class="text-xl font-black text-emerald-600 tracking-tight">{{ number_format($summary['total_completed']) }}</span>
+                <span class="text-[11px] text-slate-500 font-medium">Heat</span>
             </div>
-            <div class="text-[11px] text-slate-400 mt-1">
+            <div class="text-[10px] text-slate-400 mt-0.5 truncate">
                 @if($summary['total_cancelled'] > 0)
-                    <span class="text-rose-500 font-medium">{{ number_format($summary['total_cancelled']) }} batch dibatalkan</span>
+                    <span class="text-rose-500 font-medium">{{ number_format($summary['total_cancelled']) }} dibatalkan</span>
                 @else
                     Semua transaksi aktif
                 @endif
@@ -68,33 +71,33 @@
         </div>
 
         <!-- 3. Total Pohon Dicor -->
-        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+        <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow transition-shadow">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Pohon Dicor</span>
-                <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-xs">
-                    <i class="fas fa-tree"></i>
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Pohon Dicor</span>
+                <span class="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center text-xs">
+                    <i class="fas fa-tree text-[10px]"></i>
                 </span>
             </div>
-            <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-amber-600 tracking-tight">{{ number_format($summary['total_trees']) }}</span>
-                <span class="text-xs text-slate-500 font-medium">Pohon</span>
+            <div class="mt-1 flex items-baseline gap-1.5">
+                <span class="text-xl font-black text-amber-600 tracking-tight">{{ number_format($summary['total_trees']) }}</span>
+                <span class="text-[11px] text-slate-500 font-medium">Pohon</span>
             </div>
-            <div class="text-[11px] text-slate-400 mt-1">Traveler Card aktif terkonsumsi</div>
+            <div class="text-[10px] text-slate-400 mt-0.5 truncate">Traveler Card terkonsumsi</div>
         </div>
 
         <!-- 4. Total Kuantitas Dicor -->
-        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+        <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow transition-shadow">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kuantitas Dicor</span>
-                <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
-                    <i class="fas fa-cubes"></i>
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Kuantitas Dicor</span>
+                <span class="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
+                    <i class="fas fa-cubes text-[10px]"></i>
                 </span>
             </div>
-            <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-slate-900 tracking-tight">{{ number_format($summary['total_pcs']) }}</span>
-                <span class="text-xs text-amber-600 font-bold">PCS</span>
+            <div class="mt-1 flex items-baseline gap-1.5">
+                <span class="text-xl font-black text-slate-900 tracking-tight">{{ number_format($summary['total_pcs']) }}</span>
+                <span class="text-[11px] text-amber-600 font-bold">PCS</span>
             </div>
-            <div class="text-[11px] text-slate-400 mt-1">Akumulasi kuantitas cor layak</div>
+            <div class="text-[10px] text-slate-400 mt-0.5 truncate">Akumulasi kuantitas dituang</div>
         </div>
     </div>
 
@@ -107,7 +110,7 @@
     @endif
 
     <!-- Filter & Search Panel -->
-    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
         <form method="GET" action="{{ route('lost-wax.casting-results.index') }}" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             <!-- Search Keyword -->
             <div class="md:col-span-4">

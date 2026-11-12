@@ -321,4 +321,36 @@ class LostWaxCastingResultService
 
         return $query;
     }
+
+    /**
+     * Get aggregate daily casting report data for a specific date (valid COMPLETED transactions only).
+     *
+     * @return array{date: string, cast_date: Carbon, results: \Illuminate\Database\Eloquent\Collection, summary: array{total_heats: int, total_trees: int, total_pcs: int}}
+     */
+    public function getDailyReportData(string $date): array
+    {
+        $parsedDate = Carbon::parse($date);
+
+        $results = LostWaxCastingResult::query()
+            ->with(['trees.tree', 'recorder'])
+            ->whereDate('cast_date', $parsedDate->toDateString())
+            ->where('status', 'COMPLETED')
+            ->orderBy('id')
+            ->get();
+
+        $totalHeats = $results->count();
+        $totalTrees = (int) $results->sum('total_trees');
+        $totalPcs = (int) $results->sum('total_pcs');
+
+        return [
+            'date' => $parsedDate->format('Y-m-d'),
+            'cast_date' => $parsedDate,
+            'results' => $results,
+            'summary' => [
+                'total_heats' => $totalHeats,
+                'total_trees' => $totalTrees,
+                'total_pcs' => $totalPcs,
+            ],
+        ];
+    }
 }

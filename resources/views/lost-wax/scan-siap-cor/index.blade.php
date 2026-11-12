@@ -6,7 +6,18 @@
             <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; SCAN SELESAI DEWAXING</h1>
             <p class="text-gray-500 text-[10px]">Scan saat pohon keluar dari oven dan ditempatkan di rak buffer</p>
         </div>
-        <div>
+        <div class="flex items-center gap-2">
+            {{-- Tombol Navigasi Monitoring Dewaxing --}}
+            <a
+                href="{{ route('lost-wax.dewaxing-monitoring') }}"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-700 cursor-pointer"
+                title="Buka Halaman Monitoring Proses Dewaxing"
+            >
+                <i class="fas fa-desktop text-white text-xs"></i>
+                <span class="hidden sm:inline">MONITORING PROSES DEWAXING</span>
+                <span class="sm:hidden">MONITORING</span>
+            </a>
+
             {{-- Audio Toggle Control --}}
             <button
                 type="button"
@@ -16,7 +27,7 @@
                 title="Aktifkan / Nonaktifkan Audio Feedback"
             >
                 <i id="audioIcon" class="fas fa-volume-mute text-slate-500 text-xs"></i>
-                <span id="audioText">AKTIFKAN SUARA</span>
+                <span id="audioText" class="hidden sm:inline">AKTIFKAN SUARA</span>
             </button>
         </div>
     </div>
@@ -72,10 +83,10 @@
         </div>
 
         {{-- Scan Input Panel --}}
-        <div id="scanPanelCard" class="scan-panel-card bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center transition-colors">
-            <div class="mb-6">
-                <div id="statusIndicator" class="text-lg font-bold text-slate-600">
-                    <i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING
+        <div id="scanPanelCard" class="scan-panel-card bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8 text-center transition-colors">
+            <div class="mb-4 sm:mb-6">
+                <div id="statusIndicator" class="text-base sm:text-lg font-bold text-slate-600">
+                    <i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING
                 </div>
             </div>
 
@@ -84,22 +95,22 @@
                     type="text"
                     id="scanInput"
                     name="barcode"
-                    class="w-full text-center text-2xl font-mono tracking-widest py-4 rounded-xl border-2 border-slate-300 focus:border-emerald-600 focus:ring-emerald-600 outline-none transition-colors"
-                    placeholder="SCAN BARCODE TRAVELER CARD"
+                    class="w-full text-center text-xl sm:text-2xl font-mono tracking-widest py-3.5 sm:py-4 rounded-xl border-2 border-slate-300 focus:border-emerald-600 focus:ring-emerald-600 outline-none transition-colors"
+                    placeholder="SCAN BARCODE / QR CODE TRAVELER"
                     autofocus
                     autocomplete="off"
                 >
             </form>
 
             <div class="text-xs text-slate-400">
-                Pindai barcode pohon saat keluar dari oven dewaxing untuk memindahkan kuantitas ke rak buffer.
+                Pindai QR Code atau Barcode Traveler Card pohon. Sistem akan menampilkan popup verifikasi sebelum menyelesaikan proses dewaxing.
             </div>
 
             <div id="resultArea" class="hidden space-y-4 mt-6"></div>
         </div>
 
         {{-- Last Tree Info Card --}}
-        <div id="lastTreeInfo" class="bg-slate-900 text-white rounded-xl shadow-sm border border-slate-700 p-6 hidden">
+        <div id="lastTreeInfo" class="bg-slate-900 text-white rounded-xl shadow-sm border border-slate-700 p-5 sm:p-6 hidden">
             <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-2">
                 <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Hasil Pemindaian Terakhir</h2>
                 <span id="lastBadgeStatus" class="px-2.5 py-0.5 rounded text-xs font-bold font-mono"></span>
@@ -198,6 +209,116 @@
         </div>
     </div>
 
+    {{-- POPUP VERIFIKASI IDENTITAS BARANG SEBELUM KONFIRMASI (MODAL ANDROID-OPTIMIZED) --}}
+    <div id="verifyModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border-2 border-emerald-500 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+            {{-- Modal Header --}}
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-lg">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-black tracking-tight leading-tight uppercase">VERIFIKASI BARANG SELESAI DEWAXING</h2>
+                        <p class="text-[11px] text-emerald-100 font-medium">Cocokkan label fisik pada pohon dengan data di bawah</p>
+                    </div>
+                </div>
+                <button type="button" onclick="cancelVerification()" class="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Batal & Tutup">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+
+            {{-- Modal Body --}}
+            <div class="p-4 sm:p-5 overflow-y-auto space-y-3.5">
+                {{-- Primary Item Highlight Card --}}
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+                    <div class="flex items-start justify-between gap-2">
+                        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">1. Nama Produk / Item:</span>
+                        <span id="modalAisiBadge" class="px-2 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-700 font-mono">AISI: -</span>
+                    </div>
+                    <div id="modalProductName" class="text-lg sm:text-xl font-black text-slate-900 leading-snug">
+                        -
+                    </div>
+                    <div class="flex items-center gap-2 pt-1 border-t border-slate-200">
+                        <span class="text-xs text-slate-500 font-semibold">2. Kode Produksi / Item:</span>
+                        <span id="modalCode" class="text-sm font-black font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">-</span>
+                    </div>
+                </div>
+
+                {{-- Grid Details --}}
+                <div class="grid grid-cols-2 gap-3">
+                    {{-- Barcode Traveler --}}
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase block mb-1">3. Barcode Traveler:</span>
+                        <span id="modalBarcode" class="text-sm sm:text-base font-black font-mono text-slate-800 block break-all">-</span>
+                    </div>
+
+                    {{-- Customer --}}
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase block mb-1">4. Customer:</span>
+                        <span id="modalCustomer" class="text-xs sm:text-sm font-bold text-slate-800 block truncate" title="-">-</span>
+                    </div>
+
+                    {{-- Quantity PCS Aktual --}}
+                    <div class="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-3 col-span-1">
+                        <span class="text-[10px] font-extrabold text-emerald-800 uppercase block mb-0.5">5. Jumlah PCS Aktual:</span>
+                        <div class="flex items-baseline gap-1.5">
+                            <span id="modalQuantityPcs" class="text-2xl sm:text-3xl font-black text-emerald-700">0</span>
+                            <span class="text-xs font-bold text-emerald-800">PCS LAYAK</span>
+                        </div>
+                        <span id="modalDefectNote" class="text-[10px] text-emerald-700/80 block mt-0.5">Bruto: - | Cacat: -</span>
+                    </div>
+
+                    {{-- Lokasi Rak / Buffer --}}
+                    <div class="bg-amber-50/70 border-2 border-amber-300 rounded-xl p-3 col-span-1">
+                        <span class="text-[10px] font-extrabold text-amber-900 uppercase block mb-0.5">6. Asal Rak / Lokasi Buffer:</span>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <i class="fas fa-map-marker-alt text-amber-600 text-sm shrink-0"></i>
+                            <span id="modalRackLocation" class="text-sm sm:text-base font-black text-amber-950">Belum ditentukan</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Warning / Attention Notice --}}
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2.5 text-xs text-blue-900">
+                    <i class="fas fa-info-circle text-blue-600 text-sm mt-0.5 shrink-0"></i>
+                    <div class="leading-relaxed">
+                        Periksa apakah fisik pohon yang keluar dari oven sesuai dengan <strong>Nama Item</strong> dan <strong>Barcode</strong> di atas sebelum menekan Konfirmasi.
+                    </div>
+                </div>
+
+                {{-- Error Message inside Modal (if confirm fails) --}}
+                <div id="modalConfirmError" class="hidden bg-red-50 border border-red-300 rounded-xl p-3 text-xs text-red-800 font-bold flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-sm shrink-0"></i>
+                    <span id="modalConfirmErrorText">Terjadi kesalahan.</span>
+                </div>
+            </div>
+
+            {{-- Modal Footer Actions (Large Finger-Friendly Buttons for Android Screen) --}}
+            <div class="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-3 shrink-0">
+                <button
+                    type="button"
+                    id="modalCancelBtn"
+                    onclick="cancelVerification()"
+                    class="w-full py-3.5 px-4 rounded-xl font-black text-sm bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 border border-slate-300 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                    <i class="fas fa-times text-base"></i>
+                    <span>BATAL</span>
+                </button>
+                <button
+                    type="button"
+                    id="modalConfirmBtn"
+                    onclick="executeConfirmation()"
+                    class="w-full py-3.5 px-4 rounded-xl font-black text-sm bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <span id="modalConfirmBtnSpinner" class="hidden"><i class="fas fa-spinner fa-spin text-base"></i></span>
+                    <i id="modalConfirmBtnIcon" class="fas fa-check-circle text-base"></i>
+                    <span id="modalConfirmBtnText">KONFIRMASI</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const scanInput = document.getElementById('scanInput');
         const scanForm = document.getElementById('scanForm');
@@ -212,9 +333,32 @@
         const feedbackItemName = document.getElementById('feedbackItemName');
         const feedbackSubDetail = document.getElementById('feedbackSubDetail');
 
+        // Modal Elements
+        const verifyModal = document.getElementById('verifyModal');
+        const modalProductName = document.getElementById('modalProductName');
+        const modalCode = document.getElementById('modalCode');
+        const modalBarcode = document.getElementById('modalBarcode');
+        const modalCustomer = document.getElementById('modalCustomer');
+        const modalQuantityPcs = document.getElementById('modalQuantityPcs');
+        const modalDefectNote = document.getElementById('modalDefectNote');
+        const modalRackLocation = document.getElementById('modalRackLocation');
+        const modalAisiBadge = document.getElementById('modalAisiBadge');
+        const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+        const modalConfirmBtnSpinner = document.getElementById('modalConfirmBtnSpinner');
+        const modalConfirmBtnIcon = document.getElementById('modalConfirmBtnIcon');
+        const modalConfirmBtnText = document.getElementById('modalConfirmBtnText');
+        const modalConfirmError = document.getElementById('modalConfirmError');
+        const modalConfirmErrorText = document.getElementById('modalConfirmErrorText');
+
         let feedbackTimeoutId = null;
         let requestSeq = 0;
         let latestHandledRequestSeq = 0;
+
+        // Modal state tracking
+        let modalIsOpen = false;
+        let pendingBarcode = null;
+        let isSubmitting = false;
 
         // Audio Configuration & Native Audio Elements
         const AUDIO_VOLUME = 0.8;
@@ -260,7 +404,9 @@
                 icon.className = "fas fa-volume-mute text-slate-500 text-xs";
                 text.innerText = "AKTIFKAN SUARA";
             }
-            scanInput.focus();
+            if (!modalIsOpen) {
+                scanInput.focus();
+            }
         }
 
         function playSound(isSuccess) {
@@ -276,14 +422,16 @@
             } catch (e) {}
         }
 
-        // Form submission & barcode processing
+        // Form submission & barcode preview request
         scanForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            if (modalIsOpen || isSubmitting) return;
+
             const barcode = scanInput.value.trim();
             if (!barcode) return;
 
             scanInput.value = '';
-            scanInput.focus();
+            scanInput.blur();
 
             requestSeq++;
             const thisRequestSeq = requestSeq;
@@ -291,12 +439,13 @@
             errorArea.classList.add('hidden');
             resultArea.classList.add('hidden');
             resultArea.innerHTML = '';
-            statusIndicator.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> MEMPROSES SCAN...';
-            statusIndicator.className = 'text-lg font-bold text-amber-600';
+            statusIndicator.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> MEMERIKSA DATA TRAVELER...';
+            statusIndicator.className = 'text-base sm:text-lg font-bold text-amber-600';
 
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-            fetch('{{ route('lost-wax.scan-siap-cor.process') }}', {
+            // Call PREVIEW endpoint (No database changes)
+            fetch('{{ route('lost-wax.scan-siap-cor.preview') }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -324,7 +473,7 @@
                 latestHandledRequestSeq = thisRequestSeq;
 
                 if (data.success === true) {
-                    showSuccess(data, barcode, thisRequestSeq);
+                    openVerificationModal(data, barcode);
                 } else {
                     showError(data, barcode, thisRequestSeq);
                 }
@@ -335,15 +484,143 @@
                 showError({ reason: 'GAGAL — KONEKSI SERVER TERPUTUS' }, barcode, thisRequestSeq);
             })
             .finally(() => {
-                scanInput.focus();
+                if (!modalIsOpen) {
+                    scanInput.focus();
+                }
             });
         });
+
+        // Open Verification Modal with Preview Data
+        function openVerificationModal(data, barcode) {
+            const ti = data.tree_info || {};
+            pendingBarcode = barcode;
+            modalIsOpen = true;
+
+            // Populate Modal Content
+            modalProductName.innerText = ti.product_name || '-';
+            modalCode.innerText = ti.code || '-';
+            modalBarcode.innerText = barcode;
+            modalCustomer.innerText = ti.customer || '-';
+            modalQuantityPcs.innerText = Number(ti.quantity_usable || 0).toLocaleString();
+            modalDefectNote.innerText = `Bruto: ${Number(ti.quantity_gross || 0).toLocaleString()} | Cacat: ${Number(ti.total_defects || 0).toLocaleString()}`;
+            modalRackLocation.innerText = ti.rack_location || 'Belum ditentukan';
+            modalAisiBadge.innerText = 'AISI: ' + (ti.aisi || '-');
+
+            // Reset modal error alert
+            modalConfirmError.classList.add('hidden');
+            modalConfirmErrorText.innerText = '';
+
+            // Reset button states
+            modalConfirmBtn.disabled = false;
+            modalCancelBtn.disabled = false;
+            modalConfirmBtnSpinner.classList.add('hidden');
+            modalConfirmBtnIcon.classList.remove('hidden');
+            modalConfirmBtnText.innerText = 'KONFIRMASI';
+
+            // Show modal
+            verifyModal.classList.remove('hidden');
+
+            statusIndicator.innerHTML = '<i class="fas fa-exclamation-circle mr-2 text-indigo-600"></i> MENUNGGU VERIFIKASI OPERATOR';
+            statusIndicator.className = 'text-base sm:text-lg font-bold text-indigo-700';
+        }
+
+        // Action: BATAL
+        function cancelVerification() {
+            if (isSubmitting) return;
+
+            verifyModal.classList.add('hidden');
+            modalIsOpen = false;
+            pendingBarcode = null;
+
+            statusIndicator.innerHTML = '<i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
+            statusIndicator.className = 'text-base sm:text-lg font-bold text-slate-600';
+
+            scanInput.value = '';
+            scanInput.focus();
+        }
+
+        // Action: KONFIRMASI (Calls process endpoint to save transaction)
+        function executeConfirmation() {
+            if (isSubmitting || !pendingBarcode) return;
+            isSubmitting = true;
+
+            modalConfirmBtn.disabled = true;
+            modalCancelBtn.disabled = true;
+            modalConfirmBtnSpinner.classList.remove('hidden');
+            modalConfirmBtnIcon.classList.add('hidden');
+            modalConfirmBtnText.innerText = 'MENYIMPAN...';
+            modalConfirmError.classList.add('hidden');
+
+            const barcodeToConfirm = pendingBarcode;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            requestSeq++;
+            const thisRequestSeq = requestSeq;
+
+            fetch('{{ route('lost-wax.scan-siap-cor.process') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ barcode: barcodeToConfirm }),
+            })
+            .then(async r => {
+                if (!r.ok) {
+                    let errJson = null;
+                    try { errJson = await r.json(); } catch(e) {}
+                    const reason = (errJson && (errJson.reason || errJson.message))
+                        ? (errJson.reason || errJson.message)
+                        : `Terjadi kesalahan server (HTTP ${r.status}).`;
+                    return { success: false, reason: reason };
+                }
+                return r.json();
+            })
+            .then(data => {
+                latestHandledRequestSeq = thisRequestSeq;
+
+                if (data.success === true) {
+                    // Close modal and show success feedback
+                    verifyModal.classList.add('hidden');
+                    modalIsOpen = false;
+                    pendingBarcode = null;
+                    isSubmitting = false;
+
+                    showSuccess(data, barcodeToConfirm, thisRequestSeq);
+                } else {
+                    // Reject confirmation: close modal and show error banner
+                    verifyModal.classList.add('hidden');
+                    modalIsOpen = false;
+                    pendingBarcode = null;
+                    isSubmitting = false;
+
+                    showError(data, barcodeToConfirm, thisRequestSeq);
+                }
+            })
+            .catch(err => {
+                modalConfirmErrorText.innerText = 'GAGAL — KONEKSI SERVER TERPUTUS';
+                modalConfirmError.classList.remove('hidden');
+
+                modalConfirmBtn.disabled = false;
+                modalCancelBtn.disabled = false;
+                modalConfirmBtnSpinner.classList.add('hidden');
+                modalConfirmBtnIcon.classList.remove('hidden');
+                modalConfirmBtnText.innerText = 'KONFIRMASI ULANG';
+                isSubmitting = false;
+            })
+            .finally(() => {
+                if (!modalIsOpen) {
+                    scanInput.focus();
+                }
+            });
+        }
 
         function showSuccess(data, barcode, thisRequestSeq) {
             const ti = data.tree_info || {};
 
             statusIndicator.innerHTML = '<i class="fas fa-check-circle mr-2 text-emerald-600"></i> BERHASIL';
-            statusIndicator.className = 'text-lg font-bold text-emerald-700';
+            statusIndicator.className = 'text-base sm:text-lg font-bold text-emerald-700';
 
             playSound(true);
 
@@ -354,7 +631,7 @@
             // Banner
             fullFeedbackBanner.className = 'rounded-2xl p-6 sm:p-8 text-center shadow-lg border-2 bg-emerald-100 border-emerald-400 text-emerald-900 block';
             feedbackIcon.className = 'fas fa-check-circle text-emerald-600';
-            feedbackStatusTitle.innerText = data.message || 'BERHASIL — SIAP COR';
+            feedbackStatusTitle.innerText = data.message || 'BERHASIL — SELESAI DEWAXING';
             feedbackItemName.innerText = (ti.code ? ti.code + ' — ' : '') + (ti.product_name || 'Item Terverifikasi');
             feedbackSubDetail.innerText = `${barcode} | Pohon #${ti.tree_number || '-'} | ${Number(ti.quantity_usable || 0).toLocaleString()} PCS Layak`;
 
@@ -369,16 +646,16 @@
                 product: ti.product_name || '-',
                 usableQty: Number(ti.quantity_usable || 0).toLocaleString() + ' PCS',
                 isSuccess: true,
-                keterangan: 'Siap Cor'
+                keterangan: 'Selesai Dewaxing'
             });
 
             clearTimeout(feedbackTimeoutId);
             feedbackTimeoutId = setTimeout(() => {
-                if (thisRequestSeq === latestHandledRequestSeq) {
+                if (thisRequestSeq === latestHandledRequestSeq && !modalIsOpen) {
                     document.body.classList.remove('scanner-feedback-success');
                     fullFeedbackBanner.classList.add('hidden');
-                    statusIndicator.innerHTML = '<i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
-                    statusIndicator.className = 'text-lg font-bold text-slate-600';
+                    statusIndicator.innerHTML = '<i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
+                    statusIndicator.className = 'text-base sm:text-lg font-bold text-slate-600';
                 }
             }, 5000);
         }
@@ -388,7 +665,7 @@
             const reason = data.reason || 'GAGAL — TERJADI KESALAHAN';
 
             statusIndicator.innerHTML = '<i class="fas fa-times-circle mr-2 text-rose-600"></i> ' + reason;
-            statusIndicator.className = 'text-lg font-bold text-rose-700';
+            statusIndicator.className = 'text-base sm:text-lg font-bold text-rose-700';
 
             playSound(false);
 
@@ -424,12 +701,12 @@
 
             clearTimeout(feedbackTimeoutId);
             feedbackTimeoutId = setTimeout(() => {
-                if (thisRequestSeq === latestHandledRequestSeq) {
+                if (thisRequestSeq === latestHandledRequestSeq && !modalIsOpen) {
                     document.body.classList.remove('scanner-feedback-failed');
                     fullFeedbackBanner.classList.add('hidden');
                     errorArea.classList.add('hidden');
-                    statusIndicator.innerHTML = '<i class="fas fa-check-double mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
-                    statusIndicator.className = 'text-lg font-bold text-slate-600';
+                    statusIndicator.innerHTML = '<i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
+                    statusIndicator.className = 'text-base sm:text-lg font-bold text-slate-600';
                 }
             }, 5000);
         }
@@ -484,16 +761,28 @@
             }
         }
 
-        // Re-focus protection when clicking outside or window active
+        // Re-focus protection when clicking outside or window active (Disabled when modal is open)
         document.addEventListener('click', function(e) {
+            if (modalIsOpen) return;
             if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && e.target.tagName !== 'INPUT') {
                 scanInput.focus();
             }
         });
 
         window.addEventListener('focus', function() {
-            scanInput.focus();
+            if (!modalIsOpen) {
+                scanInput.focus();
+            }
+        });
+
+        // Keyboard navigation inside modal (ESC to Cancel, Enter to Confirm)
+        document.addEventListener('keydown', function(e) {
+            if (!modalIsOpen) return;
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelVerification();
+            }
         });
     </script>
 @endsection
-
