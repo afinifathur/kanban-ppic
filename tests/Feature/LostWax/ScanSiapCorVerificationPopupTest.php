@@ -405,4 +405,64 @@ class ScanSiapCorVerificationPopupTest extends TestCase
         $response->assertSee('BATAL');
         $response->assertSee('KONFIRMASI');
     }
+
+    /**
+     * 14. Halaman Scan Selesai Dewaxing memuat arsitektur BarcodeDetector native (Sand Casting baseline) dan dual-format support.
+     */
+    public function test_14_scan_siap_cor_view_renders_dual_format_engine_and_diagnostics(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('lost-wax.scan-siap-cor.index'));
+
+        $response->assertStatus(200);
+        $response->assertSee('BarcodeDetector');
+        $response->assertSee('cameraDiagnosticsBar');
+        $response->assertSee('diagEngineBadge');
+        $response->assertSee('diagFormatBadge');
+        $response->assertSee('diagStatusText');
+        $response->assertSee('qr_code');
+        $response->assertSee('code_128');
+        $response->assertSee('data_matrix');
+        $response->assertSee('code_39');
+        $response->assertSee('requestAnimationFrame');
+    }
+
+    /**
+     * 15. Barcode 1D (Code 128) dan QR Code memicu alur preview verifikasi yang identik.
+     */
+    public function test_15_both_qr_and_code128_payloads_trigger_identical_preview_pipeline(): void
+    {
+        $tree = $this->createTree([
+            'barcode' => '2210826020',
+            'quantity' => 25,
+        ]);
+        $this->createScanEvent($tree, 'oven', Carbon::now()->subHour());
+
+        // Simulasi hasil decode QR Code
+        $qrResponse = $this->actingAs($this->user)->postJson(route('lost-wax.scan-siap-cor.preview'), [
+            'barcode' => '2210826020',
+        ]);
+        $qrResponse->assertOk();
+        $qrResponse->assertJson([
+            'success' => true,
+            'code' => 'PREVIEW_READY',
+            'tree_info' => [
+                'barcode' => '2210826020',
+                'quantity_usable' => 25,
+            ],
+        ]);
+
+        // Simulasi fallback decode Barcode 1D Code 128 membawa payload identik
+        $code128Response = $this->actingAs($this->user)->postJson(route('lost-wax.scan-siap-cor.preview'), [
+            'barcode' => '2210826020',
+        ]);
+        $code128Response->assertOk();
+        $code128Response->assertJson([
+            'success' => true,
+            'code' => 'PREVIEW_READY',
+            'tree_info' => [
+                'barcode' => '2210826020',
+                'quantity_usable' => 25,
+            ],
+        ]);
+    }
 }

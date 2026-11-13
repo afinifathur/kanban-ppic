@@ -154,6 +154,20 @@
                     </div>
                 </div>
 
+                {{-- Diagnostics Info Bar (Non-intrusive) --}}
+                <div id="cameraDiagnosticsBar" class="px-3 py-1.5 bg-slate-950/95 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between font-mono">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-slate-500">ENGINE:</span>
+                        <span id="diagEngineBadge" class="px-1.5 py-0.2 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">NATIVE HW</span>
+                        <span class="text-slate-500 ml-1">FORMAT:</span>
+                        <span id="diagFormatBadge" class="text-slate-300 font-bold">QR / C128 / DUAL</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="diagStatusText" class="text-slate-400">Siap</span>
+                        <span id="diagElapsedText" class="text-emerald-400 font-bold"></span>
+                    </div>
+                </div>
+
                 {{-- Bottom Camera Control --}}
                 <div class="bg-slate-900 p-2.5 flex items-center justify-center gap-2">
                     <button
@@ -504,8 +518,30 @@
         }
 
         // =========================================================================
-        // CAMERA SCANNER ENGINE (ZXing Browser)
+        // CAMERA SCANNER ENGINE (Native BarcodeDetector with ZXing Fallback)
+        // Baseline: Sand Casting High-Performance Architecture
+        // Dual-format continuous scanning: QR_CODE, CODE_128, DATA_MATRIX, CODE_39,
+        // EAN_13, EAN_8, UPC_A, ITF
         // =========================================================================
+
+        const SUPPORTED_FORMATS_NATIVE = [
+            'qr_code',
+            'code_128',
+            'data_matrix',
+            'code_39',
+            'ean_13',
+            'ean_8',
+            'upc_a',
+            'itf'
+        ];
+
+        let isScanning = false;
+        let barcodeDetector = null;
+        let cameraStream = null;
+        let scanAnimationId = null;
+        let activeScannerEngine = 'none'; // 'native' | 'zxing'
+        let scanSessionStartTime = null;
+
         async function toggleCamera() {
             if (isCameraActive) {
                 stopCamera();
@@ -527,18 +563,9 @@
                 return;
             }
 
-            if (typeof ZXingBrowser === 'undefined') {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Library Scanner Belum Siap',
-                    text: 'Library pemindai barcode ZXing gagal dimuat. Muat ulang halaman.',
-                    confirmButtonColor: '#059669',
-                });
-                return;
-            }
-
             try {
                 isDecodingLocked = false;
+                isScanning = true;
                 cameraScannerArea.classList.remove('hidden');
 
                 // Update button UI
@@ -550,13 +577,9 @@
                 statusIndicator.innerHTML = '<i class="fas fa-camera mr-2 text-emerald-600"></i> KAMERA SCANNER AKTIF &mdash; MENCARI BARCODE...';
                 statusIndicator.className = 'text-base sm:text-lg font-bold text-emerald-700';
 
-                if (!codeReader) {
-                    codeReader = new ZXingBrowser.BrowserMultiFormatReader(null, {
-                        delayBetweenScanAttempts: 100,
-                        delayBetweenScanSuccess: 500
-                    });
-                }
+                scanSessionStartTime = performance.now();
 
+                // Video constraints matching Sand Casting baseline
                 const constraints = {
                     video: {
                         facingMode: { ideal: 'environment' },
@@ -566,23 +589,46 @@
                     audio: false
                 };
 
-                cameraControls = await codeReader.decodeFromConstraints(constraints, cameraVideo, (result, error, controls) => {
-                    if (result && !isDecodingLocked && !modalIsOpen && !isSubmitting) {
-                        const text = result.getText().trim();
-                        if (text) {
-                            isDecodingLocked = true;
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                cameraVideo.srcObject = cameraStream;
+                await cameraVideo.play();
 
-                            // 1. Stop camera and release media stream
-                            stopCamera();
-
-                            // 2. Put detected barcode into input
-                            scanInput.value = text;
-
-                            // 3. Trigger preview scan flow (opens verification popup without auto-confirm)
-                            triggerPreviewScan(text);
+                // Hardware continuous autofocus if supported by device
+                try {
+                    const track = cameraStream.getVideoTracks ? cameraStream.getVideoTracks()[0] : null;
+                    if (track && track.getCapabilities) {
+                        const caps = track.getCapabilities();
+                        if (caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+                            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
                         }
                     }
-                });
+                } catch (e) {
+                    // Ignore if continuous focus constraint is unsupported
+                }
+
+                // Dual-format continuous engine initialization
+                if ('BarcodeDetector' in window) {
+                    activeScannerEngine = 'native';
+                    updateDiagnostics('NATIVE HW', 'QR / C128 / DUAL', 'Memindai...', 0);
+
+                    let formatsToUse = SUPPORTED_FORMATS_NATIVE;
+                    if (typeof BarcodeDetector.getSupportedFormats === 'function') {
+                        try {
+                            const supported = await BarcodeDetector.getSupportedFormats();
+                            const filtered = SUPPORTED_FORMATS_NATIVE.filter(f => supported.includes(f));
+                            if (filtered.length > 0) {
+                                formatsToUse = filtered;
+                            }
+                        } catch (e) {}
+                    }
+
+                    barcodeDetector = new BarcodeDetector({ formats: formatsToUse });
+                    detectBarcodeLoop(barcodeDetector);
+                } else {
+                    activeScannerEngine = 'zxing';
+                    updateDiagnostics('ZXING JS', 'QR / C128 / DUAL', 'Memindai...', 0);
+                    await startZxingScanner();
+                }
 
             } catch (err) {
                 console.error('Camera start error:', err);
@@ -613,9 +659,98 @@
             }
         }
 
+        async function detectBarcodeLoop(detector) {
+            if (!isScanning || !isCameraActive || isDecodingLocked || modalIsOpen || isSubmitting) return;
+
+            try {
+                if (cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
+                    const barcodes = await detector.detect(cameraVideo);
+                    if (barcodes && barcodes.length > 0) {
+                        // Prioritize QR_CODE if both are in the frame, otherwise take first detected (e.g. Code 128)
+                        const match = barcodes.find(b => b.format === 'qr_code') || barcodes[0];
+                        const detectedValue = (match.rawValue || '').trim();
+                        if (detectedValue) {
+                            const elapsed = Math.round(performance.now() - (scanSessionStartTime || performance.now()));
+                            const formatName = (match.format || 'BARCODE').toUpperCase();
+                            handleDetectedBarcode(detectedValue, formatName, elapsed);
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                // Silently ignore frame drop / detection glitch (matching Sand Casting baseline)
+            }
+
+            if (isScanning && isCameraActive && !isDecodingLocked) {
+                scanAnimationId = requestAnimationFrame(() => detectBarcodeLoop(detector));
+            }
+        }
+
+        async function startZxingScanner() {
+            if (typeof ZXingBrowser === 'undefined') {
+                console.warn('ZXingBrowser is not loaded in window.');
+                return;
+            }
+
+            const hints = new Map();
+            const zxingFormats = [
+                ZXingBrowser.BarcodeFormat.QR_CODE,
+                ZXingBrowser.BarcodeFormat.CODE_128,
+                ZXingBrowser.BarcodeFormat.DATA_MATRIX,
+                ZXingBrowser.BarcodeFormat.CODE_39,
+                ZXingBrowser.BarcodeFormat.EAN_13,
+                ZXingBrowser.BarcodeFormat.EAN_8,
+                ZXingBrowser.BarcodeFormat.UPC_A,
+                ZXingBrowser.BarcodeFormat.ITF
+            ];
+            hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, zxingFormats);
+            hints.set(ZXingBrowser.DecodeHintType.TRY_HARDER, true);
+
+            codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints, {
+                delayBetweenScanAttempts: 80,
+                delayBetweenScanSuccess: 500
+            });
+
+            cameraControls = await codeReader.decodeFromVideoElement(cameraVideo, (result, error) => {
+                if (result && isCameraActive && !isDecodingLocked && !modalIsOpen && !isSubmitting) {
+                    const detectedValue = result.getText().trim();
+                    if (detectedValue) {
+                        const elapsed = Math.round(performance.now() - (scanSessionStartTime || performance.now()));
+                        const formatName = result.getBarcodeFormat() ? result.getBarcodeFormat().toString() : 'BARCODE';
+                        handleDetectedBarcode(detectedValue, formatName, elapsed);
+                    }
+                }
+            });
+        }
+
+        function handleDetectedBarcode(barcodeText, formatName, elapsedMs) {
+            if (isDecodingLocked || modalIsOpen || isSubmitting) return;
+            isDecodingLocked = true;
+
+            updateDiagnostics(activeScannerEngine === 'native' ? 'NATIVE HW' : 'ZXING JS', formatName, `Terdeteksi (${elapsedMs}ms)`, elapsedMs);
+
+            // Play sound confirmation
+            playSound(true);
+
+            // 1. Stop camera and release media stream
+            stopCamera();
+
+            // 2. Put detected barcode into input
+            scanInput.value = barcodeText;
+
+            // 3. Trigger preview scan flow (opens verification popup without auto-confirm)
+            triggerPreviewScan(barcodeText);
+        }
+
         function stopCamera() {
-            isDecodingLocked = false;
+            isScanning = false;
             isCameraActive = false;
+            isDecodingLocked = false;
+
+            if (scanAnimationId) {
+                cancelAnimationFrame(scanAnimationId);
+                scanAnimationId = null;
+            }
 
             if (cameraControls) {
                 try {
@@ -626,23 +761,27 @@
                 cameraControls = null;
             }
 
+            if (cameraStream) {
+                try {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                } catch (e) {
+                    console.warn('Error releasing camera stream:', e);
+                }
+                cameraStream = null;
+            }
+
             if (cameraVideo) {
                 try {
-                    if (cameraVideo.srcObject) {
-                        const stream = cameraVideo.srcObject;
-                        if (stream && stream.getTracks) {
-                            stream.getTracks().forEach(track => track.stop());
-                        }
-                        cameraVideo.srcObject = null;
-                    }
+                    cameraVideo.srcObject = null;
                     cameraVideo.pause();
                     cameraVideo.removeAttribute('src');
                     cameraVideo.load();
                 } catch (e) {
-                    console.warn('Error releasing video tracks:', e);
+                    console.warn('Error releasing video element:', e);
                 }
             }
 
+            barcodeDetector = null;
             cameraScannerArea.classList.add('hidden');
 
             // Reset button UI
@@ -654,6 +793,29 @@
                 statusIndicator.innerHTML = '<i class="fas fa-qrcode mr-2 text-emerald-600"></i> SIAP SCAN SELESAI DEWAXING';
                 statusIndicator.className = 'text-base sm:text-lg font-bold text-slate-600';
                 scanInput.focus();
+            }
+        }
+
+        function updateDiagnostics(engine, format, status, elapsedMs) {
+            const diagEngineBadge = document.getElementById('diagEngineBadge');
+            const diagFormatBadge = document.getElementById('diagFormatBadge');
+            const diagStatusText = document.getElementById('diagStatusText');
+            const diagElapsedText = document.getElementById('diagElapsedText');
+
+            if (diagEngineBadge && engine) {
+                diagEngineBadge.textContent = engine;
+                diagEngineBadge.className = engine.includes('NATIVE')
+                    ? 'px-1.5 py-0.2 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60'
+                    : 'px-1.5 py-0.2 rounded font-bold bg-amber-950 text-amber-400 border border-amber-800/60';
+            }
+            if (diagFormatBadge && format) {
+                diagFormatBadge.textContent = format;
+            }
+            if (diagStatusText && status) {
+                diagStatusText.textContent = status;
+            }
+            if (diagElapsedText) {
+                diagElapsedText.textContent = (elapsedMs && elapsedMs > 0) ? `${elapsedMs}ms` : '';
             }
         }
 
