@@ -1674,10 +1674,11 @@ class ReadyForOvenPhase1Test extends TestCase
         $web->assertSee('Cetak Hasil Filter');
         $web->assertSee('Cetak Semua');
 
-        // 2. Print View
+        // 2. Print View (Minimalist Header without filter list in title)
         $print = $this->actingAs($this->user)->get(route('lost-wax.reports.ready-for-oven.print', $params));
         $print->assertStatus(200);
-        $print->assertSee('LAPORAN ANTREAN SIAP OVEN DEWAXING — Kode: CODE-LEBIH | Status PO: COMPLETED | Customer: CUST-A');
+        $print->assertSee('LAPORAN ANTREAN SIAP OVEN DEWAXING');
+        $print->assertDontSee('LAPORAN ANTREAN SIAP OVEN DEWAXING — Kode:');
         $print->assertSee('CODE-LEBIH');
         $print->assertDontSee('CODE-KURANG');
         $print->assertDontSee('CODE-SESUAI');

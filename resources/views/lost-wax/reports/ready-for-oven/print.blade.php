@@ -10,6 +10,10 @@
             margin: 8mm 10mm 8mm 10mm;
         }
 
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: Arial, Helvetica, sans-serif;
             font-size: 9.5px;
@@ -63,16 +67,16 @@
             background: #334155;
         }
 
-        /* Document Header */
+        /* Document Header (Minimalist & Compact) */
         .doc-header {
             text-align: center;
             border-bottom: 2px solid #0f172a;
-            padding-bottom: 6px;
+            padding-bottom: 5px;
             margin-bottom: 8px;
         }
 
         .doc-header .company {
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: bold;
             color: #475569;
             letter-spacing: 0.8px;
@@ -82,7 +86,7 @@
 
         .doc-header h1 {
             margin: 0;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 900;
             color: #0f172a;
             letter-spacing: 0.5px;
@@ -93,47 +97,11 @@
             margin-top: 4px;
             display: flex;
             justify-content: space-between;
-            font-size: 9px;
+            font-size: 8.5px;
             color: #475569;
         }
 
-        /* Summary KPI Cards for Print */
-        .summary-box {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 8px;
-        }
-
-        .kpi-cell {
-            flex: 1;
-            border: 1px solid #cbd5e1;
-            background: #f8fafc;
-            padding: 4px 6px;
-            border-radius: 4px;
-            text-align: center;
-        }
-
-        .kpi-label {
-            font-size: 7.5px;
-            font-weight: bold;
-            color: #64748b;
-            text-transform: uppercase;
-        }
-
-        .kpi-value {
-            font-size: 12px;
-            font-weight: 900;
-            color: #0f172a;
-            margin-top: 1px;
-        }
-
-        .kpi-sub {
-            font-size: 7.5px;
-            color: #64748b;
-            margin-top: 1px;
-        }
-
-        /* Data Table */
+        /* Data Table (Dominant Visual Focus) */
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -164,19 +132,6 @@
 
         .data-table tbody tr:nth-child(even) {
             background-color: #f8fafc;
-        }
-
-        .data-table tfoot {
-            display: table-footer-group;
-            font-weight: bold;
-            background-color: #f1f5f9;
-        }
-
-        .data-table tfoot td {
-            border-top: 2px solid #0f172a;
-            border-bottom: 2px solid #0f172a;
-            padding: 5px;
-            font-size: 9.5px;
         }
 
         .text-center {
@@ -216,26 +171,82 @@
             margin-top: 1px;
         }
 
-        .badge-batch-full {
-            display: inline-block;
-            font-size: 7.5px;
-            font-weight: bold;
-            padding: 1px 4px;
-            border-radius: 2px;
-            background: #dcfce7;
-            color: #166534;
-            border: 1px solid #86efac;
+        /* Summary Section (Last Page Only) */
+        .summary-section {
+            margin-top: 10px;
+            page-break-inside: avoid;
         }
 
-        .badge-batch-partial {
-            display: inline-block;
+        .summary-title {
+            font-size: 8.5px;
+            font-weight: 900;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+            border-bottom: 1.5px solid #0f172a;
+            padding-bottom: 2px;
+        }
+
+        .summary-grid {
+            display: flex;
+            gap: 8px;
+        }
+
+        .summary-card {
+            flex: 1;
+            border: 1px solid #cbd5e1;
+            background-color: #f8fafc;
+            padding: 5px 8px;
+            border-radius: 4px;
+        }
+
+        .summary-card-header {
             font-size: 7.5px;
             font-weight: bold;
-            padding: 1px 4px;
-            border-radius: 2px;
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .summary-card-val {
+            font-size: 13px;
+            font-weight: 900;
+            color: #0f172a;
+            margin-top: 1px;
+            line-height: 1.2;
+        }
+
+        .summary-unit {
+            font-size: 8.5px;
+            font-weight: normal;
+        }
+
+        .summary-card-sub {
+            font-size: 7.5px;
+            color: #64748b;
+            margin-top: 2px;
+            line-height: 1.25;
+        }
+
+        .text-emerald {
+            color: #047857 !important;
+        }
+
+        .text-indigo {
+            color: #4338ca !important;
+        }
+
+        .text-slate {
+            color: #475569 !important;
+        }
+
+        .report-notes {
+            margin-top: 6px;
+            font-size: 7.5px;
+            color: #64748b;
+            font-style: italic;
+            page-break-inside: avoid;
         }
 
         /* Signature block */
@@ -261,7 +272,7 @@
             font-weight: bold;
             color: #334155;
             text-transform: uppercase;
-            margin-bottom: 40px;
+            margin-bottom: 38px;
         }
 
         .sign-name {
@@ -283,6 +294,11 @@
             .data-table tr {
                 page-break-inside: avoid;
             }
+            .summary-section,
+            .report-notes,
+            .sign-section {
+                page-break-inside: avoid;
+            }
         }
     </style>
 </head>
@@ -290,7 +306,7 @@
     <!-- Floating On-Screen Toolbar -->
     <div class="no-print-toolbar">
         <div>
-            <strong style="font-size: 13px;">Preview Dokumen Cetak A4 Landscape &mdash; LAPORAN ANTREAN SIAP OVEN DEWAXING{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</strong>
+            <strong style="font-size: 13px;">Preview Dokumen Cetak A4 Landscape &mdash; LAPORAN ANTREAN SIAP OVEN DEWAXING</strong>
             <span style="font-size: 10.5px; color: #94a3b8; margin-left: 8px;">
                 ({{ number_format($summary['total_unique_trees']) }} Pohon, {{ number_format($summary['total_usable_pcs'], 0, ',', '.') }} / {{ number_format($summary['total_po_pcs'], 0, ',', '.') }} Pcs Layak/PO, {{ $summary['total_weight_kg_formatted'] }} kg)
             </span>
@@ -306,79 +322,28 @@
         </div>
     </div>
 
-    <!-- Header Dokumen -->
+    <!-- Header Dokumen Minimalis -->
     <div class="doc-header">
         <div class="company">PT. PERONI KARYA SENTRA &bull; KANBAN PPIC LOST WAX</div>
-        <h1>LAPORAN ANTREAN SIAP OVEN DEWAXING{{ $summary['is_filtered'] ? ' — ' . $summary['active_filter_text'] : '' }}</h1>
+        <h1>LAPORAN ANTREAN SIAP OVEN DEWAXING</h1>
         <div class="meta-bar">
             <span><strong>Waktu Cetak:</strong> {{ $summary['generated_at_formatted'] }} WIB</span>
             <span><strong>Prioritas:</strong> FIFO (Waktu Selesai Lapisan Terawal)</span>
-            @if($summary['is_filtered'])
-                <span><strong>Filter:</strong> {{ $summary['active_filter_text'] }} ({{ $summary['total_groups'] }} Kode)</span>
-            @endif
             <span><strong>Dicetak Oleh:</strong> {{ auth()->user()->name ?? 'Operator' }}</span>
         </div>
     </div>
 
-    <!-- Summary Box -->
-    <div class="summary-box">
-        <div class="kpi-cell">
-            <div class="kpi-label">Pohon Fisik Unik {{ $summary['is_filtered'] ? '(Filter)' : '' }}</div>
-            <div class="kpi-value">{{ number_format($summary['total_unique_trees']) }} <span style="font-size: 8.5px; font-weight: normal;">Pohon</span></div>
-            <div class="kpi-sub">{{ number_format($summary['total_rangkai']) }} Rangkai</div>
-        </div>
-        <div class="kpi-cell">
-            <div class="kpi-label">Siap Oven / PO {{ $summary['is_filtered'] ? '(Filter)' : '' }}</div>
-            <div class="kpi-value" style="color: #047857;">
-                {{ number_format($summary['total_usable_pcs'], 0, ',', '.') }} <span style="font-size: 8.5px; font-weight: normal; color: #475569;">/ {{ number_format($summary['total_po_pcs'], 0, ',', '.') }}</span>
-            </div>
-            <div class="kpi-sub">
-                Bruto: {{ number_format($summary['total_gross_pcs'], 0, ',', '.') }} | Afkir: {{ number_format($summary['total_defect_pcs'], 0, ',', '.') }}
-                @if($summary['overall_po_variance_text'])
-                    &bull; <strong>{{ $summary['overall_po_variance_text'] }}</strong>
-                @endif
-            </div>
-        </div>
-        <div class="kpi-cell">
-            <div class="kpi-label">Total Berat Siap Oven {{ $summary['is_filtered'] ? '(Filter)' : '' }}</div>
-            <div class="kpi-value">{{ $summary['total_weight_kg_formatted'] }} <span style="font-size: 8.5px; font-weight: normal;">Kg</span></div>
-            <div class="kpi-sub">
-                @if($summary['has_incomplete_weights'])
-                    <span style="color: #b45309;">*{{ $summary['groups_without_weight_count'] }} item belum ada berat</span>
-                @else
-                    <span>Dari {{ number_format($summary['groups_with_weight_count']) }} kelompok item valid</span>
-                @endif
-            </div>
-        </div>
-        <div class="kpi-cell">
-            <div class="kpi-label">Estimasi Coverage {{ $summary['is_filtered'] ? '(Filter)' : '' }}</div>
-            <div class="kpi-value" style="color: #4338ca;">{{ $summary['coverage_days_formatted'] }} <span style="font-size: 8.5px; font-weight: normal;">Hari</span></div>
-            <div class="kpi-sub">Target: {{ $summary['daily_target_kg_formatted'] }} kg/hari</div>
-        </div>
-        <div class="kpi-cell">
-            <div class="kpi-label">Kode Produksi {{ $summary['is_filtered'] ? '(Filter)' : '' }}</div>
-            <div class="kpi-value">{{ number_format($summary['total_groups']) }} <span style="font-size: 8.5px; font-weight: normal;">Kode</span></div>
-            <div class="kpi-sub">
-                @if($summary['is_filtered'])
-                    Dari {{ number_format($summary['queue_total_groups']) }} total kode
-                @else
-                    {{ number_format($summary['total_spk_count']) }} SPK Rangkai
-                @endif
-            </div>
-        </div>
-    </div>
-
-    <!-- Table Data -->
+    <!-- Table Data (Fokus Utama Dokumen) -->
     <table class="data-table">
         <thead>
             <tr>
-                <th style="width: 24px;" class="text-center">No</th>
+                <th style="width: 26px;" class="text-center">No</th>
                 <th style="width: 110px;">Kode Produksi</th>
                 <th>Nama Item</th>
                 <th style="width: 55px;" class="text-center">Customer</th>
                 <th style="width: 55px;" class="text-center">Jumlah Rangkai</th>
-                <th style="width: 105px;" class="text-right">SIAP OVEN / PO</th>
-                <th style="width: 90px;" class="text-center">Waktu FIFO</th>
+                <th style="width: 110px;" class="text-right">SIAP OVEN / PO</th>
+                <th style="width: 95px;" class="text-center">Waktu FIFO<br><span style="font-size: 7px; font-weight: normal; text-transform: none;">(Selesai Lapisan)</span></th>
             </tr>
         </thead>
         <tbody>
@@ -507,37 +472,68 @@
                 </tr>
             @endforelse
         </tbody>
-        @if($items->isNotEmpty())
-            <tfoot>
-                <tr>
-                    <td colspan="4" class="text-right" style="letter-spacing: 0.5px;">
-                        TOTAL {{ $summary['is_filtered'] ? 'HASIL FILTER (' . $summary['active_filter_text'] . ')' : 'KESELURUHAN' }}:
-                    </td>
-                    <td class="text-center">
-                        <div style="font-size: 10px;">{{ number_format($summary['total_rangkai']) }}</div>
-                        <div style="font-size: 7px; font-weight: normal; color: #64748b;">({{ number_format($summary['total_unique_trees']) }} Pohon Fisik)</div>
-                    </td>
-                    <td class="text-right" style="font-size: 10px;">
-                        <div style="font-weight: bold; color: #047857;">
-                            {{ number_format($summary['total_usable_pcs'], 0, ',', '.') }} / {{ number_format($summary['total_po_pcs'], 0, ',', '.') }} PCS
-                        </div>
-                        @if($summary['overall_po_variance_text'])
-                            <div style="font-size: 7.5px; font-weight: bold; color: {{ $summary['overall_po_variance_status'] === 'KURANG' ? '#9f1239' : '#166534' }};">
-                                {{ $summary['overall_po_variance_text'] }}
-                            </div>
-                        @endif
-                    </td>
-                    <td class="text-center" style="font-size: 7.5px; font-weight: normal; color: #64748b;">
-                        {{ $summary['total_groups'] }} Kode ({{ $summary['total_spk_count'] }} SPK)<br>
-                        Berat: {{ $summary['total_weight_kg_formatted'] }} kg<br>
-                        Coverage: {{ $summary['coverage_days_formatted'] }} Hari
-                    </td>
-                </tr>
-            </tfoot>
-        @endif
     </table>
 
-    <div style="margin-top: 4px; font-size: 7.5px; color: #64748b; font-style: italic;">
+    <!-- Ringkasan Total Operasional (Hanya Tampil Sekali di Halaman Terakhir) -->
+    @if($items->isNotEmpty())
+        <div class="summary-section">
+            <div class="summary-title">RINGKASAN TOTAL AKUMULASI ANTREAN</div>
+            <div class="summary-grid">
+                <!-- 1. Pohon Fisik Unik & Rangkai -->
+                <div class="summary-card">
+                    <div class="summary-card-header">Pohon Fisik &amp; Rangkai</div>
+                    <div class="summary-card-val">
+                        {{ number_format($summary['total_unique_trees']) }} <span class="summary-unit">Pohon</span>
+                    </div>
+                    <div class="summary-card-sub">
+                        {{ number_format($summary['total_rangkai']) }} Rangkai &bull; {{ number_format($summary['total_groups']) }} Kode ({{ number_format($summary['total_spk_count']) }} SPK)
+                    </div>
+                </div>
+
+                <!-- 2. Siap Oven / PO (PCS) -->
+                <div class="summary-card">
+                    <div class="summary-card-header">Siap Oven / PO</div>
+                    <div class="summary-card-val text-emerald">
+                        {{ number_format($summary['total_usable_pcs'], 0, ',', '.') }} <span class="summary-unit text-slate">/ {{ number_format($summary['total_po_pcs'], 0, ',', '.') }} PCS</span>
+                    </div>
+                    <div class="summary-card-sub">
+                        Bruto: {{ number_format($summary['total_gross_pcs'], 0, ',', '.') }} | Afkir: {{ number_format($summary['total_defect_pcs'], 0, ',', '.') }}
+                        @if($summary['overall_po_variance_text'])
+                            &bull; <strong style="color: {{ $summary['overall_po_variance_status'] === 'KURANG' ? '#9f1239' : '#166534' }};">{{ $summary['overall_po_variance_text'] }}</strong>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- 3. Total Berat Siap Oven -->
+                <div class="summary-card">
+                    <div class="summary-card-header">Total Berat Siap Oven</div>
+                    <div class="summary-card-val">
+                        {{ $summary['total_weight_kg_formatted'] }} <span class="summary-unit">Kg</span>
+                    </div>
+                    <div class="summary-card-sub">
+                        @if($summary['has_incomplete_weights'])
+                            <span style="color: #b45309;">*{{ $summary['groups_without_weight_count'] }} item belum ada berat</span>
+                        @else
+                            <span>Dari {{ number_format($summary['groups_with_weight_count']) }} kelompok item valid</span>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- 4. Estimasi Coverage Oven -->
+                <div class="summary-card">
+                    <div class="summary-card-header">Estimasi Coverage Oven</div>
+                    <div class="summary-card-val text-indigo">
+                        {{ $summary['coverage_days_formatted'] }} <span class="summary-unit">Hari</span>
+                    </div>
+                    <div class="summary-card-sub">
+                        Target Dapur: {{ $summary['daily_target_kg_formatted'] }} kg/hari
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <div class="report-notes">
         *Catatan: Pohon fisik unik dihitung dari nomor barcode fisik unik. Antrean diurutkan berdasarkan FIFO per Kode Produksi. Kolom SIAP OVEN / PO membandingkan akumulasi PCS layak antrean dengan PO resmi. Rincian SPK disajikan di bawah masing-masing kode produksi.
     </div>
 
