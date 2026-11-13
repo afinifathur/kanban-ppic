@@ -336,9 +336,9 @@ class ThermalPrintTest extends TestCase
         $this->assertStringContainsString('SIZE 90 mm, 50 mm', $tspl);
         $this->assertStringContainsString('GAP 3 mm, 0', $tspl);
         $this->assertStringContainsString('BOX 20,10,700,390,3', $tspl);
-        $this->assertStringContainsString('BARCODE 60,195,"128",90,0,0,2,4,"260821001"', $tspl);
-        $this->assertStringContainsString('TEXT 150,298,"2",0,1,1,2,"260821001"', $tspl);
-        $this->assertStringContainsString('QRCODE 330,198,M,4,A,0,"260821001"', $tspl);
+        $this->assertStringContainsString('BARCODE 60,205,"128",90,0,0,2,4,"260821001"', $tspl);
+        $this->assertStringContainsString('TEXT 150,312,"2",0,1,1,2,"260821001"', $tspl);
+        $this->assertStringContainsString('QRCODE 306,210,M,6,A,0,"260821001"', $tspl);
         $this->assertStringContainsString('FORM BARCODE LAPISAN', $tspl);
         $this->assertStringContainsString('KODE PRODUKSI : ST-001', $tspl);
         $this->assertStringContainsString('KODE ITEM     : AB01', $tspl);

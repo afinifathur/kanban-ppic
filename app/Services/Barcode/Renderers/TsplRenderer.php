@@ -48,54 +48,54 @@ class TsplRenderer
         // Outer Border Box
         $cmds[] = 'BOX 20,10,700,390,3';
 
-        // Y=18: Title Header (centered at X=360)
-        $cmds[] = 'TEXT 360,18,"'.self::FONT_TITLE.'",0,1,1,2,"FORM BARCODE LAPISAN"';
+        // Title Header (centered at X=360)
+        $cmds[] = 'TEXT 360,13,"'.self::FONT_TITLE.'",0,1,1,2,"FORM BARCODE LAPISAN"';
 
         // Horizontal Dividers
-        $cmds[] = 'BAR 20,45,680,3';
-        $cmds[] = 'BAR 20,190,680,3';
-        $cmds[] = 'BAR 20,320,680,3';
+        $cmds[] = 'BAR 20,38,680,3';
+        $cmds[] = 'BAR 20,183,680,3';
+        $cmds[] = 'BAR 20,360,680,3';
 
         // Vertical Dividers
-        $cmds[] = 'BAR 275,190,3,130';
-        $cmds[] = 'BAR 460,190,3,130';
-        $cmds[] = 'BAR 360,320,3,70';
+        $cmds[] = 'BAR 275,183,3,177';
+        $cmds[] = 'BAR 460,183,3,177';
+        $cmds[] = 'BAR 360,360,3,30';
 
-        // Y=55: Production Info Block
+        // Production Info Block
         if ($productNameLines[1] !== '') {
-            $cmds[] = 'TEXT 30,52,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
-            $cmds[] = 'TEXT 30,72,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
-            $cmds[] = 'TEXT 30,92,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
-            $cmds[] = 'TEXT 30,112,"'.self::FONT_NORMAL.'",0,1,1,"                '.$productNameLines[1].'"';
-            $cmds[] = 'TEXT 30,132,"'.self::FONT_NORMAL.'",0,1,1,"UKURAN        : '.$size.'"';
-            $cmds[] = 'TEXT 30,152,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
-            $cmds[] = 'TEXT 30,172,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
+            $cmds[] = 'TEXT 30,42,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
+            $cmds[] = 'TEXT 30,62,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
+            $cmds[] = 'TEXT 30,82,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
+            $cmds[] = 'TEXT 30,102,"'.self::FONT_NORMAL.'",0,1,1,"                '.$productNameLines[1].'"';
+            $cmds[] = 'TEXT 30,122,"'.self::FONT_NORMAL.'",0,1,1,"UKURAN        : '.$size.'"';
+            $cmds[] = 'TEXT 30,142,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
+            $cmds[] = 'TEXT 30,162,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
         } else {
-            $cmds[] = 'TEXT 30,55,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
-            $cmds[] = 'TEXT 30,77,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
-            $cmds[] = 'TEXT 30,99,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
-            $cmds[] = 'TEXT 30,121,"'.self::FONT_NORMAL.'",0,1,1,"UKURAN        : '.$size.'"';
-            $cmds[] = 'TEXT 30,143,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
-            $cmds[] = 'TEXT 30,165,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
+            $cmds[] = 'TEXT 30,45,"'.self::FONT_NORMAL.'",0,1,1,"KODE PRODUKSI : '.$productionCode.'"';
+            $cmds[] = 'TEXT 30,67,"'.self::FONT_NORMAL.'",0,1,1,"KODE ITEM     : '.$itemCode.'"';
+            $cmds[] = 'TEXT 30,89,"'.self::FONT_NORMAL.'",0,1,1,"NAMA ITEM     : '.$productNameLines[0].'"';
+            $cmds[] = 'TEXT 30,111,"'.self::FONT_NORMAL.'",0,1,1,"UKURAN        : '.$size.'"';
+            $cmds[] = 'TEXT 30,133,"'.self::FONT_NORMAL.'",0,1,1,"AISI          : '.$aisi.'"';
+            $cmds[] = 'TEXT 30,155,"'.self::FONT_NORMAL.'",0,1,1,"KODE CUST     : '.$custCode.'"';
         }
 
         // Barcode & Isi Rangkaian
         // Left side: Barcode 1D & Human-readable number
-        $cmds[] = 'BARCODE 60,195,"128",90,0,0,2,4,"'.$barcode.'"';
-        $cmds[] = 'TEXT 150,298,"'.self::FONT_NORMAL.'",0,1,1,2,"'.$barcode.'"';
+        $cmds[] = 'BARCODE 60,205,"128",90,0,0,2,4,"'.$barcode.'"';
+        $cmds[] = 'TEXT 150,312,"'.self::FONT_NORMAL.'",0,1,1,2,"'.$barcode.'"';
 
-        // QR Code (Kanan, berdampingan dengan Barcode 1D)
-        $cmds[] = 'QRCODE 330,198,M,4,A,0,"'.$barcode.'"';
+        // QR Code (Center: Enlarged 1.5x with cell_width = 6, ISO 4-module quiet zone)
+        $cmds[] = 'QRCODE 306,210,M,6,A,0,"'.$barcode.'"';
 
         // Right side: Isi Rangkaian
-        $cmds[] = 'TEXT 580,205,"'.self::FONT_NORMAL.'",0,1,1,2,"ISI RANGKAIAN"';
-        $cmds[] = 'TEXT 580,240,"4",0,1,1,2,"'.$qty.' PCS"';
+        $cmds[] = 'TEXT 580,225,"'.self::FONT_NORMAL.'",0,1,1,2,"ISI RANGKAIAN"';
+        $cmds[] = 'TEXT 580,265,"4",0,1,1,2,"'.$qty.' PCS"';
 
-        // Bottom Metadata
-        $cmds[] = 'TEXT 30,332,"'.self::FONT_NORMAL.'",0,1,1,"TGL PRINT     : '.$printDate.'"';
-        $cmds[] = 'TEXT 30,362,"'.self::FONT_NORMAL.'",0,1,1,"JAM PRINT     : '.$printTime.'"';
-        $cmds[] = 'TEXT 380,332,"'.self::FONT_NORMAL.'",0,1,1,"KODE RAK : '.$rackPlaceholder.'"';
-        $cmds[] = 'TEXT 380,362,"'.self::FONT_NORMAL.'",0,1,1,"KETERANGAN: '.$descPlaceholder.'"';
+        // Bottom Metadata (Font 1)
+        $cmds[] = 'TEXT 30,364,"'.self::FONT_SMALL.'",0,1,1,"TGL PRINT     : '.$printDate.'"';
+        $cmds[] = 'TEXT 30,376,"'.self::FONT_SMALL.'",0,1,1,"JAM PRINT     : '.$printTime.'"';
+        $cmds[] = 'TEXT 380,364,"'.self::FONT_SMALL.'",0,1,1,"KODE RAK : '.$rackPlaceholder.'"';
+        $cmds[] = 'TEXT 380,376,"'.self::FONT_SMALL.'",0,1,1,"KETERANGAN: '.$descPlaceholder.'"';
 
         $cmds[] = 'PRINT 1,1';
 

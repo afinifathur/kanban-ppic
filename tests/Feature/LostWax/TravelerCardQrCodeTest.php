@@ -244,11 +244,19 @@ class TravelerCardQrCodeTest extends TestCase
         $this->assertStringContainsString('BOX 20,10,700,390,3', $tspl);
 
         // Verify 1D Barcode with narrow 2 dots and centered text
-        $this->assertStringContainsString('BARCODE 60,195,"128",90,0,0,2,4,"2210826020"', $tspl);
-        $this->assertStringContainsString('TEXT 150,298,"2",0,1,1,2,"2210826020"', $tspl);
+        $this->assertStringContainsString('BARCODE 60,205,"128",90,0,0,2,4,"2210826020"', $tspl);
+        $this->assertStringContainsString('TEXT 150,312,"2",0,1,1,2,"2210826020"', $tspl);
 
-        // Verify native TSPL QRCODE side-by-side with identical plain barcode payload
-        $this->assertStringContainsString('QRCODE 330,198,M,4,A,0,"2210826020"', $tspl);
+        // Verify native TSPL QRCODE enlarged 1.5x (cell_width=6, 126x126 dots, ISO 4-module quiet zone)
+        $this->assertStringContainsString('QRCODE 306,210,M,6,A,0,"2210826020"', $tspl);
+
+        // Verify dividers
+        $this->assertStringContainsString('BAR 20,38,680,3', $tspl);
+        $this->assertStringContainsString('BAR 20,183,680,3', $tspl);
+        $this->assertStringContainsString('BAR 20,360,680,3', $tspl);
+        $this->assertStringContainsString('BAR 275,183,3,177', $tspl);
+        $this->assertStringContainsString('BAR 460,183,3,177', $tspl);
+        $this->assertStringContainsString('BAR 360,360,3,30', $tspl);
 
         // Verify no URL, JSON, or extra wrapping in TSPL
         $this->assertStringNotContainsString('http://', $tspl);
@@ -266,8 +274,8 @@ class TravelerCardQrCodeTest extends TestCase
         $this->assertStringContainsString('NAMA ITEM     :', $tspl);
         $this->assertStringContainsString('UKURAN        :', $tspl);
         $this->assertStringContainsString('AISI          :', $tspl);
-        $this->assertStringContainsString('TGL PRINT     :', $tspl);
-        $this->assertStringContainsString('JAM PRINT     :', $tspl);
+        $this->assertStringContainsString('TEXT 30,364,"1",0,1,1,"TGL PRINT', $tspl);
+        $this->assertStringContainsString('TEXT 30,376,"1",0,1,1,"JAM PRINT', $tspl);
     }
 
     public function test_traveler_card_thermal_format_mode_renders_correctly(): void
