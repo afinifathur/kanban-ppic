@@ -34,8 +34,12 @@ class SandCastingDashboardController extends Controller
             return true;
         }
 
+        if ($user->hasRole('auditor')) {
+            return true;
+        }
+
         try {
-            if ($user->hasPermissionTo('access_planning') || $user->hasPermissionTo('access_execution')) {
+            if ($user->hasPermissionTo('access_planning') || $user->hasPermissionTo('access_execution') || $user->hasPermissionTo('access_auditor_visibility')) {
                 return true;
             }
         } catch (\Throwable $e) {

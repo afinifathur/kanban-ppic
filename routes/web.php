@@ -24,6 +24,10 @@ Route::middleware(['auth'])->group(function () {
             return redirect()->route('sand-casting.production-status.index');
         }
 
+        if (auth()->user() && auth()->user()->hasRole('auditor')) {
+            return redirect()->route('sand-casting.dashboard');
+        }
+
         return redirect()->route('dashboard');
     });
 
@@ -207,6 +211,17 @@ Route::middleware(['auth'])->group(function () {
             // Rack Monitoring
             Route::get('/rack-monitor', [\App\Http\Controllers\LostWax\RackMonitorController::class, 'index'])->name('rack-monitor.index');
 
+            // Antrean & Dokumen Barang Siap Oven
+            Route::get('/reports/ready-for-oven', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'index'])->name('reports.ready-for-oven.index');
+            Route::get('/reports/ready-for-oven/print', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'print'])->name('reports.ready-for-oven.print');
+
+            // Antrean & Dokumen Barang Siap Cor (Phase 3)
+            Route::get('/reports/ready-for-casting', [\App\Http\Controllers\LostWax\ReadyForCastingController::class, 'index'])->name('reports.ready-for-casting.index');
+            Route::get('/reports/ready-for-casting/print', [\App\Http\Controllers\LostWax\ReadyForCastingController::class, 'print'])->name('reports.ready-for-casting.print');
+        });
+
+        // Lost Wax Quality & Production Reports (Execution & Auditor access)
+        Route::middleware(['permission:access_execution|access_auditor_visibility'])->group(function () {
             // Quality Control - Rekap Kerusakan
             Route::get('/quality/defects', [\App\Http\Controllers\LostWax\DefectReportController::class, 'index'])->name('quality.defects.index');
             Route::get('/quality/defects/export/excel', [\App\Http\Controllers\LostWax\DefectReportController::class, 'exportExcel'])->name('quality.defects.export.excel');
@@ -216,14 +231,6 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/report/production', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'index'])->name('report.production.index');
             Route::get('/report/production/export/excel', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportExcel'])->name('report.production.export.excel');
             Route::get('/report/production/export/pdf', [\App\Http\Controllers\LostWax\ProductionReportController::class, 'exportPdf'])->name('report.production.export.pdf');
-
-            // Antrean & Dokumen Barang Siap Oven
-            Route::get('/reports/ready-for-oven', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'index'])->name('reports.ready-for-oven.index');
-            Route::get('/reports/ready-for-oven/print', [\App\Http\Controllers\LostWax\ReadyForOvenController::class, 'print'])->name('reports.ready-for-oven.print');
-
-            // Antrean & Dokumen Barang Siap Cor (Phase 3)
-            Route::get('/reports/ready-for-casting', [\App\Http\Controllers\LostWax\ReadyForCastingController::class, 'index'])->name('reports.ready-for-casting.index');
-            Route::get('/reports/ready-for-casting/print', [\App\Http\Controllers\LostWax\ReadyForCastingController::class, 'print'])->name('reports.ready-for-casting.print');
         });
 
         // Input Hasil Cor & Transaksi Heat (Phase 4) - accessible by planning and execution roles (admin, ppic, spv, admin_qc_fitting)
@@ -234,11 +241,13 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/casting-results/daily-report', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'dailyReport'])->name('casting-results.daily-report');
             Route::get('/casting-results/{castingResult}', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'show'])->name('casting-results.show');
             Route::get('/casting-results/{castingResult}/print', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'print'])->name('casting-results.print');
+            Route::get('/casting-results/{castingResult}/print-thermal', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'printThermal'])->name('casting-results.print-thermal');
+            Route::post('/casting-results/{castingResult}/print-thermal', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'queueThermalPrint'])->name('casting-results.queue-thermal');
             Route::post('/casting-results/{castingResult}/cancel', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'cancel'])->name('casting-results.cancel');
         });
 
         // Production Status (Lost Wax Read Model) - accessible with execution or production visibility
-        Route::middleware(['permission:access_execution|access_production_visibility'])->group(function () {
+        Route::middleware(['permission:access_execution|access_production_visibility|access_auditor_visibility'])->group(function () {
             Route::get('/production-status', [ProductionStatusController::class, 'index'])->name('production-status');
             Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
             Route::get('/production-status/export', [ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
@@ -287,7 +296,7 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Operational Kanban Routes (Sand Casting Floor)
-        Route::prefix('kanban')->name('kanban.')->middleware(['permission:access_execution|access_production_visibility|access_all_sand_casting_kanban'])->group(function () {
+        Route::prefix('kanban')->name('kanban.')->middleware(['permission:access_execution|access_production_visibility|access_all_sand_casting_kanban|access_auditor_visibility'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'index'])->name('index');
             Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'reorder'])->name('reorder');
             Route::get('/stage/{stage}/print', [\App\Http\Controllers\SandCasting\ProductionFloorKanbanController::class, 'print'])->name('print');
@@ -324,29 +333,31 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // Production Report Routes (Sand Casting)
-        Route::prefix('report/production')->name('report.production.')->middleware(['permission:access_planning|access_execution'])->group(function () {
+        Route::prefix('report/production')->name('report.production.')->middleware(['permission:access_planning|access_execution|access_auditor_visibility'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'index'])->name('index');
             Route::get('/export/excel', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportExcel'])->name('export.excel');
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportPdf'])->name('export.pdf');
         });
 
         // QC Defect Detail Report Routes (Sand Casting)
-        Route::prefix('report/qc-defects')->name('report.qc-defects.')->middleware(['permission:access_planning|access_execution'])->group(function () {
+        Route::prefix('report/qc-defects')->name('report.qc-defects.')->middleware(['permission:access_planning|access_execution|access_auditor_visibility'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'index'])->name('index');
             Route::get('/export/excel', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'exportExcel'])->name('export.excel');
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'exportPdf'])->name('export.pdf');
         });
 
         // Production Status (Sand Casting Read Model)
-        Route::middleware(['permission:access_planning|access_production_visibility'])->group(function () {
+        Route::middleware(['permission:access_planning|access_production_visibility|access_auditor_visibility'])->group(function () {
             Route::get('/production-status', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'index'])->name('production-status.index');
             Route::get('/production-status/export', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
             Route::get('/production-status/details', [\App\Http\Controllers\SandCasting\ProductionStatusController::class, 'details'])->name('production-status.details');
         });
 
         // Sand Casting Dashboard (Phase 1 Backend Foundation)
-        Route::get('/dashboard', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'index'])->name('dashboard');
-        Route::get('/dashboard/data', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'data'])->name('dashboard.data');
+        Route::middleware(['permission:access_planning|access_execution|access_auditor_visibility'])->group(function () {
+            Route::get('/dashboard', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'index'])->name('dashboard');
+            Route::get('/dashboard/data', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'data'])->name('dashboard.data');
+        });
     });
 
     // Generic Scanner Endpoints (Direct alias)

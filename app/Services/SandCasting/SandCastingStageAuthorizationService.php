@@ -61,12 +61,12 @@ class SandCastingStageAuthorizationService
             return false;
         }
 
-        if ($user->hasRole('sales')) {
+        if ($user->hasRole('sales') || $user->hasRole('auditor')) {
             return true;
         }
 
         try {
-            if ($user->hasPermissionTo('access_production_visibility') || $user->hasPermissionTo('access_all_sand_casting_kanban')) {
+            if ($user->hasPermissionTo('access_production_visibility') || $user->hasPermissionTo('access_all_sand_casting_kanban') || $user->hasPermissionTo('access_auditor_visibility')) {
                 return true;
             }
         } catch (\Throwable $e) {

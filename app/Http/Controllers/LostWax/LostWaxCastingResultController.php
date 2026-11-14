@@ -154,6 +154,94 @@ class LostWaxCastingResultController extends Controller
     }
 
     /**
+     * Display printable/preview 90x50 mm thermal basket label document.
+     */
+    public function printThermal(Request $request, LostWaxCastingResult $castingResult)
+    {
+        $castingResult->load(['trees.tree', 'recorder', 'voider']);
+
+        $fontMode = $request->query('font') === '2'
+            ? \App\Services\Barcode\Renderers\LostWaxBasketLabelTsplRenderer::FONT_MODE_FONT2
+            : \App\Services\Barcode\Renderers\LostWaxBasketLabelTsplRenderer::FONT_MODE_FONT1;
+
+        $renderer = new \App\Services\Barcode\Renderers\LostWaxBasketLabelTsplRenderer;
+        $chunks = $renderer->chunkItems($castingResult->trees, $fontMode);
+        $totalPages = max(1, count($chunks));
+
+        return view('lost-wax.casting-results.print-thermal', [
+            'castingResult' => $castingResult,
+            'chunks' => $chunks,
+            'totalPages' => $totalPages,
+            'fontMode' => $fontMode,
+        ]);
+    }
+
+    /**
+     * Queue TSPL print job for thermal basket label (90x50 mm).
+     */
+    public function queueThermalPrint(Request $request, LostWaxCastingResult $castingResult)
+    {
+        if ($castingResult->is_cancelled) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaksi hasil cor telah dibatalkan (VOID) dan tidak dapat dicetak.',
+            ], 422);
+        }
+
+        $castingResult->load(['trees.tree']);
+
+        if ($castingResult->trees->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaksi tidak memiliki detail pohon/Traveler Card untuk dicetak.',
+            ], 422);
+        }
+
+        $fontMode = $request->input('font') === '2'
+            ? \App\Services\Barcode\Renderers\LostWaxBasketLabelTsplRenderer::FONT_MODE_FONT2
+            : \App\Services\Barcode\Renderers\LostWaxBasketLabelTsplRenderer::FONT_MODE_FONT1;
+
+        $renderer = new \App\Services\Barcode\Renderers\LostWaxBasketLabelTsplRenderer;
+        $payloadTspl = $renderer->render($castingResult, $fontMode);
+        $payloadHash = hash('sha256', $payloadTspl);
+
+        $printerName = config('lost_wax.printer_name', 'TSC TE200');
+        $printJobService = new \App\Services\Barcode\PrintJobService;
+
+        $job = \Illuminate\Support\Facades\DB::transaction(function () use ($printJobService, $payloadTspl, $payloadHash, $printerName) {
+            $existingJob = \App\Models\PrintJob::where('template_type', 'BASKET_LABEL_90X50')
+                ->where('payload_hash', $payloadHash)
+                ->where('status', 'pending')
+                ->where('created_at', '>=', now()->subSeconds(15))
+                ->lockForUpdate()
+                ->first();
+
+            if ($existingJob) {
+                return $existingJob;
+            }
+
+            return $printJobService->createTscJob(
+                $payloadTspl,
+                $printerName,
+                'BASKET_LABEL_90X50',
+                1
+            );
+        });
+
+        $treeCount = $castingResult->trees->count();
+        $chunks = $renderer->chunkItems($castingResult->trees);
+        $labelCount = max(1, count($chunks));
+
+        return response()->json([
+            'success' => true,
+            'message' => "Label keranjang untuk Heat [{$castingResult->heat_number}] berhasil masuk antrean printer thermal ({$labelCount} label, {$treeCount} item).",
+            'job_id' => $job->id,
+            'label_count' => $labelCount,
+            'tree_count' => $treeCount,
+        ]);
+    }
+
+    /**
      * Display printable A4 aggregate daily casting report document.
      */
     public function dailyReport(Request $request)

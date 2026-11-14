@@ -30,14 +30,27 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center flex-wrap gap-2.5">
             <a href="{{ route('lost-wax.casting-results.print', $castingResult) }}"
                target="_blank"
-               class="inline-flex items-center px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-sm">
-                <i class="fas fa-print mr-2"></i> Cetak Bukti Hasil Cor
+               class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors shadow-sm">
+                <i class="fas fa-file-alt mr-1.5 text-slate-500"></i> Cetak Bukti A4
+            </a>
+
+            <a href="{{ route('lost-wax.casting-results.print-thermal', $castingResult) }}"
+               target="_blank"
+               class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 transition-colors shadow-sm">
+                <i class="fas fa-eye mr-1.5 text-amber-500"></i> Preview Thermal
             </a>
 
             @if($castingResult->is_completed)
+            <button type="button"
+                    id="btn-queue-thermal"
+                    onclick="queueThermalPrintJob()"
+                    class="inline-flex items-center px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-sm">
+                <i class="fas fa-print mr-2"></i> Cetak Label Keranjang (TSC)
+            </button>
+
             <button type="button"
                     onclick="openCancelModal()"
                     class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors shadow-sm">
@@ -279,6 +292,52 @@ function openCancelModal() {
 }
 function closeCancelModal() {
     document.getElementById('cancelModal').classList.add('hidden');
+}
+
+async function queueThermalPrintJob() {
+    const btn = document.getElementById('btn-queue-thermal');
+    if (!btn || btn.disabled) return;
+
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mengirim ke Printer...';
+
+    try {
+        const response = await fetch("{{ route('lost-wax.casting-results.queue-thermal', $castingResult) }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': "{{ csrf_token() }}"
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Antrean Cetak Berhasil',
+                text: data.message,
+                confirmButtonColor: '#f59e0b'
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal Mengantrekan Cetak',
+                text: data.message || 'Terjadi kesalahan sistem saat mengirim ke printer thermal.'
+            });
+        }
+    } catch (err) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Koneksi Terputus',
+            text: 'Gagal menghubungi server: ' + err.message
+        });
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
 }
 </script>
 @endif

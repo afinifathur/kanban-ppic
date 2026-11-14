@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between w-full">
         <div>
             <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; PRODUCTION STATUS</h1>
-            <p class="text-gray-500 text-[10px]">Posisi produksi per Kode Cust / Work Order</p>
+            <p class="text-gray-500 text-[10px]">Posisi produksi per Kode Produksi / Work Order</p>
         </div>
         <div class="flex gap-2 no-print">
             <button onclick="window.print()"
@@ -202,6 +202,20 @@
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
             }
+            .ps-cell-siap-cor {
+                background: #e0e7ff !important;
+                color: #3730a3 !important;
+                font-weight: 700;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .ps-cell-cor {
+                background: #ffedd5 !important;
+                color: #9a3412 !important;
+                font-weight: 700;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
 
             .ps-status-cell {
                 padding: 1px 1px !important;
@@ -220,6 +234,21 @@
                 letter-spacing: 0.02em;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            .ps-badge-active {
+                background: #dbeafe !important;
+                color: #1e40af !important;
+                border: 0.5px solid #93c5fd !important;
+            }
+            .ps-badge-completed {
+                background: #dcfce7 !important;
+                color: #166534 !important;
+                border: 0.5px solid #86efac !important;
+            }
+            .ps-badge-closed {
+                background: #f1f5f9 !important;
+                color: #475569 !important;
+                border: 0.5px solid #cbd5e1 !important;
             }
             .ps-badge-normal {
                 background: #dcfce7 !important;
@@ -263,9 +292,9 @@
                             class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 bg-white">
                     </form>
 
-                    {{-- Kode Cust Filter Trigger --}}
+                    {{-- Kode Produksi Filter Trigger --}}
                     <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1.5 {{ !empty($codes) ? 'border-amber-500 text-amber-700 bg-amber-50/20' : '' }}" data-filter-type="codes">
-                        <i class="fas fa-barcode"></i> Kode Cust
+                        <i class="fas fa-barcode"></i> Kode Produksi
                         @if(!empty($codes)) <span class="bg-amber-100 text-amber-800 text-[9px] px-1 rounded-full">{{ count($codes) }}</span> @endif
                         <i class="fas fa-chevron-down text-[9px]"></i>
                     </button>
@@ -364,7 +393,7 @@
                         <tr class="bg-slate-800 text-white">
                             <th class="compact-th text-left min-w-[58px] relative">
                                 <div class="flex items-center justify-between">
-                                    <span>Kode Cust</span>
+                                    <span>Kode Produksi</span>
                                     <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="codes">
                                         <i class="fas fa-filter text-[9px] {{ !empty($codes) ? 'text-amber-400' : '' }}"></i>
                                     </button>
@@ -379,16 +408,9 @@
                                     </button>
                                 </div>
                             </th>
-                            <th class="compact-th text-right min-w-[42px] relative">
-                                <div class="flex items-center justify-between">
-                                    <span>PO</span>
-                                    <button type="button" class="filter-dropdown-trigger text-slate-400 hover:text-white ml-1 p-0.5 rounded" data-filter-type="po_numbers">
-                                        <i class="fas fa-filter text-[9px] {{ !empty($po_numbers) ? 'text-amber-400' : '' }}"></i>
-                                    </button>
-                                </div>
-                            </th>
-                            <th class="compact-th text-right min-w-[45px]">Plan</th>
-                            <th class="compact-th text-center min-w-[45px]" title="Total Lapisan">Total</th>
+                            <th class="compact-th text-right min-w-[42px]">PO Qty</th>
+                            <th class="compact-th text-right min-w-[45px]">Plan Qty</th>
+                            <th class="compact-th text-center min-w-[45px]" title="Total Terdistribusi">Total</th>
                             <th class="compact-th text-center min-w-[45px]">Tot Rsk</th>
                             
                             <!-- Cetak/Rangkai flow columns -->
@@ -414,7 +436,13 @@
                             <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
                             <th class="compact-th text-center min-w-[38px]">Oven</th>
                             <th class="compact-th text-center text-slate-400 min-w-[20px]">R</th>
-                            <th class="compact-th text-center min-w-[70px]">Status</th>
+
+                            <!-- Final stage flow columns -->
+                            <th class="compact-th text-center min-w-[45px] bg-slate-700/80">Siap Cor</th>
+                            <th class="compact-th text-center min-w-[45px] bg-amber-700/80">Cor</th>
+
+                            <!-- Statuses -->
+                            <th class="compact-th text-center min-w-[70px]">Kecukupan</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -431,8 +459,8 @@
                                     <div class="prod-name-cell" title="{{ $row['product_name'] }}">{{ $row['product_name'] }}</div>
                                 </td>
                                 <td class="compact-td text-slate-600">{{ $row['aisi'] }}</td>
+                                <td class="compact-td text-right font-mono text-slate-700">{{ $row['po_quantity'] !== null && $row['po_quantity'] > 0 ? number_format($row['po_quantity'], 0, ',', '.') : '-' }}</td>
                                 <td class="compact-td text-right font-mono text-slate-700">{{ $row['planned_qty'] > 0 ? number_format($row['planned_qty'], 0, ',', '.') : '-' }}</td>
-                                <td class="compact-td text-right font-mono text-slate-700">{{ $row['scheduled_qty'] > 0 ? number_format($row['scheduled_qty'], 0, ',', '.') : '-' }}</td>
                                 <td class="compact-td text-center font-mono font-bold {{ $row['total_lap']>0?'text-slate-900 bg-slate-50/70':'text-slate-400' }}">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
                                 <td class="compact-td text-center font-mono {{ $row['overall_defect']>0?'text-red-600 font-bold bg-red-50/30':'text-slate-400' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
                                 
@@ -454,6 +482,16 @@
                                 <td class="compact-td text-center font-mono {{ $row['oven_qty']>0?'cell-oven':'text-slate-400' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
                                 @php $rOven = $row['r_oven'] ?? 0; @endphp
                                 <td class="compact-td text-center font-mono {{ $rOven > 0 ? 'font-bold text-red-600 bg-red-50/50' : 'text-slate-400' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
+                                
+                                <!-- Siap Cor & Cor -->
+                                <td class="compact-td text-center font-mono {{ ($row['siap_cor_qty'] ?? 0) > 0 ? 'font-bold text-sky-800 bg-sky-50/70' : 'text-slate-400' }}">
+                                    {{ ($row['siap_cor_qty'] ?? 0) > 0 ? $row['siap_cor_qty'] : '-' }}
+                                </td>
+                                <td class="compact-td text-center font-mono {{ ($row['cor_qty'] ?? 0) > 0 ? 'font-bold text-amber-900 bg-amber-100/60' : 'text-slate-400' }}">
+                                    {{ ($row['cor_qty'] ?? 0) > 0 ? $row['cor_qty'] : '-' }}
+                                </td>
+
+                                <!-- Kecukupan -->
                                 <td class="compact-td text-center whitespace-nowrap">
                                     @php
                                         $qStat = $row['quality_status'] ?? 'WATCH';
@@ -478,16 +516,16 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="28" class="px-6 py-12 text-center text-slate-500"><i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>Tidak ada data.</td></tr>
+                            <tr><td colspan="30" class="px-6 py-12 text-center text-slate-500"><i class="fas fa-inbox text-3xl mb-2 block opacity-30"></i>Tidak ada data.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
         <div class="text-xs text-slate-500">
-            {{ count($rows) }} Kode Cust ditampilkan.
+            {{ count($rows) }} Kode Produksi ditampilkan.
             @if($search) Filter: <strong>"{{ $search }}"</strong> @endif
-            @if(!empty($codes)) &middot; Kode Cust: <strong>{{ implode(', ', $codes) }}</strong> @endif
+            @if(!empty($codes)) &middot; Kode Produksi: <strong>{{ implode(', ', $codes) }}</strong> @endif
             @if(!empty($customers)) &middot; Customer: <strong>{{ implode(', ', $customers) }}</strong> @endif
             @if(!empty($po_numbers)) &middot; PO: <strong>{{ implode(', ', $po_numbers) }}</strong> @endif
             @if(!empty($aisis)) &middot; AISI: <strong>{{ implode(', ', $aisis) }}</strong> @endif
@@ -502,7 +540,7 @@
                 <div>
                     <p class="company">PT. PERONI KARYA SENTRA</p>
                     <h1 class="title">LOST WAX &mdash; PRODUCTION STATUS REPORT</h1>
-                    <p class="subtitle">Posisi produksi per Kode Cust / Work Order</p>
+                    <p class="subtitle">Posisi produksi per Kode Produksi / Work Order</p>
                 </div>
                 <div style="text-align: right; font-size: 8px; color: #475569; line-height: 1.3;">
                     <div>Dicetak: <strong>{{ now()->format('d/m/Y H:i') }}</strong></div>
@@ -512,7 +550,7 @@
             @if($search || !empty($codes) || !empty($customers) || !empty($po_numbers) || !empty($aisis))
                 <div class="meta">
                     @if($search) Search: <strong>"{{ $search }}"</strong> &nbsp;|&nbsp; @endif
-                    @if(!empty($codes)) Kode Cust: <strong>{{ implode(', ', $codes) }}</strong> &nbsp;|&nbsp; @endif
+                    @if(!empty($codes)) Kode Produksi: <strong>{{ implode(', ', $codes) }}</strong> &nbsp;|&nbsp; @endif
                     @if(!empty($customers)) Customer: <strong>{{ implode(', ', $customers) }}</strong> &nbsp;|&nbsp; @endif
                     @if(!empty($po_numbers)) PO: <strong>{{ implode(', ', $po_numbers) }}</strong> &nbsp;|&nbsp; @endif
                     @if(!empty($aisis)) AISI: <strong>{{ implode(', ', $aisis) }}</strong> @endif
@@ -522,48 +560,50 @@
 
         <table class="ps-table">
             <colgroup>
-                <col style="width: 22mm;"> <!-- Kode Cust -->
-                <col style="width: 58mm;"> <!-- Product Name -->
-                <col style="width: 10mm;"> <!-- AISI -->
-                <col style="width: 11mm;"> <!-- PO -->
-                <col style="width: 11mm;"> <!-- Plan -->
-                <col style="width: 13mm;"> <!-- TOTAL -->
-                <col style="width: 11mm;"> <!-- Tot Rsk -->
-                <col style="width: 8mm;">  <!-- Cetak -->
-                <col style="width: 5.5mm;"><!-- R -->
-                <col style="width: 8mm;">  <!-- Rangkai -->
-                <col style="width: 5.5mm;"><!-- R -->
-                <col style="width: 7.5mm;"><!-- L1 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 7.5mm;"><!-- L2 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 7.5mm;"><!-- L3 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 7.5mm;"><!-- L4 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 7.5mm;"><!-- L5 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 7.5mm;"><!-- L6 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 7.5mm;"><!-- L7 -->
-                <col style="width: 5mm;">  <!-- R -->
-                <col style="width: 9mm;">  <!-- Oven -->
-                <col style="width: 5.5mm;"><!-- R -->
-                <col style="width: 18mm;"> <!-- Status -->
+                <col style="width: 22mm;"> <!-- Kode Produksi -->
+                <col style="width: 48mm;"> <!-- Product Name -->
+                <col style="width: 9mm;">  <!-- AISI -->
+                <col style="width: 10mm;"> <!-- PO Qty -->
+                <col style="width: 10mm;"> <!-- Plan Qty -->
+                <col style="width: 11mm;"> <!-- TOTAL -->
+                <col style="width: 9mm;">  <!-- Tot Rsk -->
+                <col style="width: 7mm;">  <!-- CTK -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 7mm;">  <!-- RGKI -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L1 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L2 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L3 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L4 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L5 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L6 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 6.5mm;"><!-- L7 -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 7mm;">  <!-- Oven -->
+                <col style="width: 4.5mm;"><!-- R -->
+                <col style="width: 9.5mm;"><!-- Siap Cor -->
+                <col style="width: 9.5mm;"><!-- Cor -->
+                <col style="width: 14mm;"> <!-- Kecukupan -->
             </colgroup>
             <thead>
                 <tr>
-                    <th class="left">Kode Cust</th>
+                    <th class="left">Kode Produksi</th>
                     <th class="left">Product Name</th>
                     <th>AISI</th>
-                    <th>PO</th>
-                    <th>Plan</th>
-                    <th>TOTAL<span style="display:none"> Total Lap.</span></th>
-                    <th>TOTAL<br>RUSAK</th>
+                    <th>PO Qty</th>
+                    <th>Plan Qty</th>
+                    <th>TOTAL</th>
+                    <th>TOT<br>RSK</th>
                     
                     <!-- Cetak/Rangkai flow columns -->
                     <th>CTK</th><th>R</th>
-                    <th>RANG-<br>KAI</th><th>R</th>
+                    <th>RGKI</th><th>R</th>
                     
                     <!-- Coating flow columns -->
                     <th>L1</th><th>R</th>
@@ -574,7 +614,9 @@
                     <th>L6</th><th>R</th>
                     <th>L7</th><th>R</th>
                     <th>Oven</th><th>R</th>
-                    <th>Status</th>
+                    <th>Siap Cor</th>
+                    <th>Cor</th>
+                    <th>Kecukupan</th>
                 </tr>
             </thead>
             <tbody>
@@ -589,9 +631,9 @@
                             </div>
                         </td>
                         <td style="white-space: nowrap;">{{ $row['aisi'] }}</td>
+                        <td class="right">{{ $row['po_quantity'] > 0 ? number_format($row['po_quantity'],0,',','.') : '-' }}</td>
                         <td class="right">{{ $row['planned_qty'] > 0 ? number_format($row['planned_qty'],0,',','.') : '-' }}</td>
-                        <td class="right">{{ $row['scheduled_qty'] > 0 ? number_format($row['scheduled_qty'],0,',','.') : '-' }}</td>
-                        <td class="right ps-cell-total">{{ $row['total_lap'] > 0 ? $row['total_lap'] : '-' }}</td>
+                        <td class="right ps-cell-total">{{ $row['total_distributed'] > 0 ? $row['total_distributed'] : '-' }}</td>
                         <td class="{{ $row['overall_defect'] > 0 ? 'ps-cell-red' : '' }}">{{ $row['overall_defect'] > 0 ? $row['overall_defect'] : '-' }}</td>
                         
                         <!-- Cetak/Rangkai values -->
@@ -610,11 +652,12 @@
                         <td class="{{ $row['oven_qty']>0?'ps-cell-oven':'' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
                         @php $rOven = $row['r_oven'] ?? 0; @endphp
                         <td class="{{ $rOven > 0 ? 'ps-cell-red' : '' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
+
+                        <td class="{{ $row['siap_cor_qty']>0?'ps-cell-siap-cor':'' }}">{{ $row['siap_cor_qty'] > 0 ? $row['siap_cor_qty'] : '-' }}</td>
+                        <td class="{{ $row['cor_qty']>0?'ps-cell-cor':'' }}">{{ $row['cor_qty'] > 0 ? $row['cor_qty'] : '-' }}</td>
                         
                         <td class="ps-status-cell">
-                            @php
-                                $qStat = $row['quality_status'] ?? 'WATCH';
-                            @endphp
+                            @php $qStat = $row['quality_status'] ?? 'WATCH'; @endphp
                             @if($qStat === 'NORMAL')
                                 <span class="ps-badge ps-badge-normal">NORMAL</span>
                             @elseif($qStat === 'WATCH')
@@ -627,14 +670,14 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="28" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
+                    <tr><td colspan="30" style="text-align:center;padding:10px;">Tidak ada data.</td></tr>
                 @endforelse
             </tbody>
         </table>
     </div>
 
     {{-- Excel Dropdowns --}}
-    @foreach(['codes' => ['title' => 'Filter Kode Cust', 'options' => $allCodes, 'active' => $codes], 
+    @foreach(['codes' => ['title' => 'Filter Kode Produksi', 'options' => $allCodes, 'active' => $codes], 
               'customers' => ['title' => 'Filter Customer', 'options' => $allCustomers, 'active' => $customers],
               'po_numbers' => ['title' => 'Filter PO Number', 'options' => $allPos, 'active' => $po_numbers],
               'aisis' => ['title' => 'Filter AISI', 'options' => $allAisi, 'active' => $aisis]] as $type => $conf)
@@ -674,7 +717,7 @@
     <div id="etDetailModal" class="fixed inset-0 z-50 hidden no-print" style="background:rgba(0,0,0,0.5)">
         <div class="absolute right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl overflow-y-auto">
             <div class="sticky top-0 bg-slate-800 text-white px-5 py-4 flex items-center justify-between z-10">
-                <div><h3 class="font-bold text-sm" id="modalTitle">Detail Kode Cust</h3><p class="text-xs text-slate-400" id="modalSubtitle"></p></div>
+                <div><h3 class="font-bold text-sm" id="modalTitle">Detail Kode Produksi</h3><p class="text-xs text-slate-400" id="modalSubtitle"></p></div>
                 <button onclick="closeETDetail()" class="text-white hover:text-slate-300 text-xl leading-none">&times;</button>
             </div>
             <div id="etDetailContent" class="p-5"><div class="text-center py-8 text-slate-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div></div>
@@ -823,7 +866,7 @@
             var m=document.getElementById('etDetailModal'),c=document.getElementById('etDetailContent'),t=document.getElementById('modalTitle'),s=document.getElementById('modalSubtitle');
             m.classList.remove('hidden');
             c.innerHTML='<div class="text-center py-8 text-slate-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
-            t.textContent='Detail Kode Cust';
+            t.textContent='Detail Kode Produksi';
             s.textContent='';
             var url = '{{ route('lost-wax.production-status.trees') }}';
             if (sourceType === 'legacy_work_order') {
@@ -832,9 +875,9 @@
                 url += '?print_order_line_id=' + sourceId;
             }
             fetch(url).then(function(r){return r.json()}).then(function(d){
-                t.textContent='Detail Kode Cust: '+(d.et_code||'-');
+                t.textContent='Detail Kode Produksi: '+(d.et_code||'-');
                 s.textContent=d.item_name||d.tree_count+' Trees';
-                if(!d.trees||d.trees.length===0){c.innerHTML='<p class="text-slate-500 text-sm text-center py-8">Belum ada Tree untuk Kode Cust ini.</p>';return}
+                if(!d.trees||d.trees.length===0){c.innerHTML='<p class="text-slate-500 text-sm text-center py-8">Belum ada Tree untuk Kode Produksi ini.</p>';return}
                 var h='<div class="space-y-3"><div class="text-xs text-slate-500 mb-3">'+d.trees.length+' Tree</div>';
                 d.trees.forEach(function(x){
                     var sc=x.current_stage==='oven'?'bg-teal-100 text-teal-800':'bg-amber-100 text-amber-800';

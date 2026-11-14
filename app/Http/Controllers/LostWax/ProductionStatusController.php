@@ -202,7 +202,7 @@ class ProductionStatusController extends Controller
         $sheet->setCellValue('H4', empty($po_numbers) ? '-' : implode(', ', $po_numbers));
         $sheet->setCellValue('J4', 'AISI:');
         $sheet->setCellValue('K4', empty($aisis) ? '-' : implode(', ', $aisis));
-        $sheet->setCellValue('M4', 'Kode Cust:');
+        $sheet->setCellValue('M4', 'Kode Produksi:');
         $sheet->setCellValue('N4', empty($codes) ? '-' : implode(', ', $codes));
 
         $sheet->getStyle('A4')->getFont()->setBold(true);
@@ -216,10 +216,11 @@ class ProductionStatusController extends Controller
 
         // Table Headers (Row 6)
         $headers = [
-            'Kode Cust', 'Product Name', 'AISI', 'PO Qty', 'Plan Qty',
+            'Kode Produksi', 'Product Name', 'AISI', 'PO Qty', 'Plan Qty',
             'Total (pcs)', 'Total Rusak (pcs)', 'Cetak (pcs)', 'Rangkai (pcs)',
             'Lapisan 1 (pcs)', 'Lapisan 2 (pcs)', 'Lapisan 3 (pcs)', 'Lapisan 4 (pcs)',
-            'Lapisan 5 (pcs)', 'Lapisan 6 (pcs)', 'Lapisan 7 (pcs)', 'Oven (pcs)', 'Status',
+            'Lapisan 5 (pcs)', 'Lapisan 6 (pcs)', 'Lapisan 7 (pcs)', 'Oven (pcs)',
+            'Siap Cor (pcs)', 'Cor (pcs)', 'Kecukupan',
         ];
 
         $headerRow = 6;
@@ -248,7 +249,7 @@ class ProductionStatusController extends Controller
                 ],
             ],
         ];
-        $sheet->getStyle('A'.$headerRow.':R'.$headerRow)->applyFromArray($headerStyle);
+        $sheet->getStyle('A'.$headerRow.':T'.$headerRow)->applyFromArray($headerStyle);
         $sheet->getRowDimension($headerRow)->setRowHeight(28);
 
         // Data Rows
@@ -259,8 +260,8 @@ class ProductionStatusController extends Controller
             $sheet->setCellValue('A'.$currentRow, $row['code']);
             $sheet->setCellValue('B'.$currentRow, $row['product_name']);
             $sheet->setCellValue('C'.$currentRow, $row['aisi']);
-            $sheet->setCellValue('D'.$currentRow, $row['planned_qty']);
-            $sheet->setCellValue('E'.$currentRow, $row['scheduled_qty']);
+            $sheet->setCellValue('D'.$currentRow, $row['po_quantity'] !== null && $row['po_quantity'] > 0 ? $row['po_quantity'] : '-');
+            $sheet->setCellValue('E'.$currentRow, $row['planned_qty']);
             $sheet->setCellValue('F'.$currentRow, $row['total_lap']);
             $sheet->setCellValue('G'.$currentRow, $row['overall_defect']);
             $sheet->setCellValue('H'.$currentRow, $row['ctk_display']);
@@ -273,17 +274,19 @@ class ProductionStatusController extends Controller
             $sheet->setCellValue('O'.$currentRow, $row['layer_6']);
             $sheet->setCellValue('P'.$currentRow, $row['layer_7']);
             $sheet->setCellValue('Q'.$currentRow, $row['oven_qty']);
-            $sheet->setCellValue('R'.$currentRow, $row['quality_status'] ?? 'WATCH');
+            $sheet->setCellValue('R'.$currentRow, ($row['siap_cor_qty'] ?? 0) > 0 ? $row['siap_cor_qty'] : '-');
+            $sheet->setCellValue('S'.$currentRow, ($row['cor_qty'] ?? 0) > 0 ? $row['cor_qty'] : '-');
+            $sheet->setCellValue('T'.$currentRow, $row['quality_status'] ?? 'WATCH');
 
             // Zebra styling
             if ($currentRow % 2 === 0) {
-                $sheet->getStyle('A'.$currentRow.':R'.$currentRow)->getFill()
+                $sheet->getStyle('A'.$currentRow.':T'.$currentRow)->getFill()
                     ->setFillType(Fill::FILL_SOLID)
                     ->getStartColor()->setRGB('F8FAFC'); // slate-50
             }
 
             // Cell borders
-            $sheet->getStyle('A'.$currentRow.':R'.$currentRow)->getBorders()
+            $sheet->getStyle('A'.$currentRow.':T'.$currentRow)->getBorders()
                 ->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E2E8F0');
 
             $currentRow++;
@@ -292,24 +295,24 @@ class ProductionStatusController extends Controller
         $lastRow = $currentRow - 1;
 
         if ($lastRow >= $startRow) {
-            // Number formatting for numeric columns (D to Q)
-            $sheet->getStyle('D'.$startRow.':Q'.$lastRow)->getNumberFormat()->setFormatCode('#,##0;(#,##0);"-"');
+            // Number formatting for numeric columns (D to S)
+            $sheet->getStyle('D'.$startRow.':S'.$lastRow)->getNumberFormat()->setFormatCode('#,##0;(#,##0);"-"');
 
             // Alignments
             $sheet->getStyle('A'.$startRow.':A'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
             $sheet->getStyle('C'.$startRow.':C'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-            $sheet->getStyle('D'.$startRow.':Q'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle('R'.$startRow.':R'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('D'.$startRow.':S'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('T'.$startRow.':T'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
             // Auto filter
-            $sheet->setAutoFilter('A'.$headerRow.':R'.$lastRow);
+            $sheet->setAutoFilter('A'.$headerRow.':T'.$lastRow);
         }
 
         // Freeze pane (keep header row visible)
         $sheet->freezePane('A'.($headerRow + 1));
 
         // Auto widths & wrap text for Product Name
-        foreach (range('A', 'R') as $col) {
+        foreach (range('A', 'T') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
         $sheet->getColumnDimension('B')->setAutoSize(false)->setWidth(32);
@@ -462,13 +465,18 @@ class ProductionStatusController extends Controller
                 $before_scan_qty = $rangkai_good;
             }
 
-            if ($totalTreeQty > 0) {
+            $totalDistributed = $ctk_display + $rgki_display + $totalLap + $ovenQty;
+            $wipBeforeCor = $totalDistributed;
+            $siapCorQty = 0;
+            $corQty = 0;
+
+            if (strtolower((string) $wo->status) === 'closed') {
+                $prodStatus = 'CLOSED (MANUAL)';
+            } elseif ($totalTreeQty > 0) {
                 $prodStatus = ($ovenQty > 0 && $ovenQty === $totalTreeQty) ? 'COMPLETED' : 'ACTIVE';
             } else {
                 $prodStatus = strtoupper($wo->status);
             }
-
-            $totalDistributed = $ctk_display + $rgki_display + $totalLap + $ovenQty;
 
             $legacyPo = $wo->po_quantity !== null ? (int) $wo->po_quantity : null;
             $legacyPlan = (int) ($wo->moulding_output_quantity ?: ($wo->total_target_quantity ?: $wo->po_quantity));
@@ -490,7 +498,8 @@ class ProductionStatusController extends Controller
                 'product_name' => optional($wo->itemReference)->item_name_snapshot ?? '-',
                 'aisi' => optional($wo->itemReference)->aisi_snapshot ?? '-',
                 'size' => '-',
-                'planned_qty' => (int) $wo->po_quantity,
+                'po_quantity' => $legacyPo,
+                'planned_qty' => $legacyPlan,
                 'scheduled_qty' => $scheduledQty,
                 'actual_good' => $cetak_good,
                 'actual_defect' => $cetak_defect,
@@ -502,6 +511,7 @@ class ProductionStatusController extends Controller
                 'r_rgki_display' => $r_rgki_display,
                 'overall_defect' => $cetak_defect + $rangkai_defect,
                 'total_lap' => $totalDistributed,
+                'total_distributed' => $totalDistributed,
                 'tree_count' => $wo->trees_count, // Use trees_count eager-loaded from withCount
                 'layer_1' => $layerQtys['layer_1'],
                 'r_layer_1' => $layerDefects['layer_1'],
@@ -519,6 +529,9 @@ class ProductionStatusController extends Controller
                 'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
                 'r_oven' => $stageDefectMap['oven'],
+                'siap_cor_qty' => $siapCorQty,
+                'cor_qty' => $corQty,
+                'wip_before_cor' => $wipBeforeCor,
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
                 'quality_status' => $legacyQualityStatus,
@@ -530,7 +543,9 @@ class ProductionStatusController extends Controller
             'printOrderLines.printOrder',
             'printOrderLines.executions',
             'printOrderLines.trees.defects',
+            'printOrderLines.trees.activeCastingResultTree.castingResult',
             'printOrderLines.treeAllocations.tree.defects',
+            'printOrderLines.treeAllocations.tree.activeCastingResultTree.castingResult',
         ])->whereHas('printOrderLines.printOrder', function ($q) {
             $q->where('status', '!=', 'CANCELLED');
         });
@@ -600,6 +615,8 @@ class ProductionStatusController extends Controller
                 'layer_6' => 0,
                 'layer_7' => 0,
                 'oven' => 0,
+                'siap_cor' => 0,
+                'cor' => 0,
             ];
 
             $stageDefectMap = [
@@ -615,7 +632,17 @@ class ProductionStatusController extends Controller
             ];
 
             foreach ($activeTrees as $tree) {
-                $stageKey = $tree->current_stage ?: 'sebelum_scan';
+                $hasActiveCor = $tree->activeCastingResultTree !== null
+                    && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
+
+                if ($hasActiveCor) {
+                    $stageKey = 'cor';
+                } elseif ($tree->current_stage === 'siap_cor') {
+                    $stageKey = 'siap_cor';
+                } else {
+                    $stageKey = $tree->current_stage ?: 'sebelum_scan';
+                }
+
                 $stageMap[$stageKey] = ($stageMap[$stageKey] ?? 0) + $tree->usable_quantity;
 
                 foreach ($tree->defects as $d) {
@@ -633,6 +660,8 @@ class ProductionStatusController extends Controller
             }
 
             $ovenQty = $stageMap['oven'] ?? 0;
+            $siapCorQty = $stageMap['siap_cor'] ?? 0;
+            $corQty = $stageMap['cor'] ?? 0;
             $ovenDefect = $stageDefectMap['oven'] ?? 0;
             $assemblyDefect = $stageDefectMap['assembly'] ?? 0;
             $totalLap = array_sum($layerQtys);
@@ -647,9 +676,15 @@ class ProductionStatusController extends Controller
             $qUsable = $breakdown['q_usable'];
             $qualityStatus = $breakdown['status'];
 
-            $totalDistributed = $qStandby + $stageMap['sebelum_scan'] + $totalLap + $ovenQty;
+            $wipBeforeCor = $qStandby + ($stageMap['sebelum_scan'] ?? 0) + $totalLap + $ovenQty + $siapCorQty;
+            $totalDistributed = $wipBeforeCor + $corQty;
 
-            if ($qUsable >= $plan->qty_planned && $ovenQty > 0 && $ovenQty === $qUsable) {
+            $isWipEmpty = ($wipBeforeCor <= 0.000001);
+            $hasCorOutput = ($corQty > 0.000001);
+
+            if ((bool) ($plan->is_closed ?? false)) {
+                $prodStatus = 'CLOSED (MANUAL)';
+            } elseif ($hasCorOutput && $isWipEmpty) {
                 $prodStatus = 'COMPLETED';
             } else {
                 $prodStatus = 'ACTIVE';
@@ -680,6 +715,7 @@ class ProductionStatusController extends Controller
                 'r_rgki_display' => $assemblyDefect,
                 'overall_defect' => $qPrintDefect + $qTreeDefect,
                 'total_lap' => $totalDistributed,
+                'total_distributed' => $totalDistributed,
                 'tree_count' => $activeTrees->count(),
                 'layer_1' => $layerQtys['layer_1'],
                 'r_layer_1' => $layerDefects['layer_1'],
@@ -697,6 +733,9 @@ class ProductionStatusController extends Controller
                 'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
                 'r_oven' => $ovenDefect,
+                'siap_cor_qty' => $siapCorQty,
+                'cor_qty' => $corQty,
+                'wip_before_cor' => $wipBeforeCor,
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
                 'q_standby' => $qStandby,
