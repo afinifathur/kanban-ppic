@@ -115,6 +115,34 @@ class LostWaxTree extends Model
         return $this->hasOne(\App\Models\LostWaxCastingResultTree::class, 'active_tree_id');
     }
 
+    /**
+     * All historical cutoff detail records for this tree.
+     */
+    public function historicalCutoffTrees()
+    {
+        return $this->hasMany(\App\Models\LostWaxHistoricalCutoffTree::class, 'lost_wax_tree_id');
+    }
+
+    /**
+     * Direct link to the active historical cutoff record via active_tree_id constraint column.
+     */
+    public function activeHistoricalCutoffTree()
+    {
+        return $this->hasOne(\App\Models\LostWaxHistoricalCutoffTree::class, 'active_tree_id');
+    }
+
+    /**
+     * Check if the tree currently has an active historical cutoff.
+     */
+    public function getIsHistoricalCutoffAttribute(): bool
+    {
+        if ($this->relationLoaded('activeHistoricalCutoffTree')) {
+            return $this->activeHistoricalCutoffTree !== null;
+        }
+
+        return $this->status === 'historical_cutoff';
+    }
+
     public function getTotalDefectQuantityAttribute(): int
     {
         if ($this->relationLoaded('defects')) {

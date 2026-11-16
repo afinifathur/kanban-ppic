@@ -6,7 +6,7 @@
             <h1 class="text-lg font-bold text-slate-800 leading-tight">LOST WAX &mdash; PRODUCTION STATUS</h1>
             <p class="text-gray-500 text-[10px]">Posisi produksi per Kode Produksi / Work Order</p>
         </div>
-        <div class="flex gap-2 no-print">
+        <div class="flex items-center gap-2 no-print">
             <button onclick="window.print()"
                 class="text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded">
                 <i class="fas fa-print mr-1"></i> Print
@@ -250,6 +250,11 @@
                 color: #475569 !important;
                 border: 0.5px solid #cbd5e1 !important;
             }
+            .ps-badge-cutoff {
+                background: #f3e8ff !important;
+                color: #6b21a8 !important;
+                border: 0.5px solid #d8b4fe !important;
+            }
             .ps-badge-normal {
                 background: #dcfce7 !important;
                 color: #166534 !important;
@@ -451,9 +456,17 @@
                                 data-source-type="{{ $row['source_type'] }}" 
                                 data-source-id="{{ $row['source_id'] }}">
                                 <td class="compact-td font-mono font-bold text-slate-800">
-                                    <a href="#" class="hover:text-amber-600 et-detail-link" 
-                                        data-source-type="{{ $row['source_type'] }}" 
-                                        data-source-id="{{ $row['source_id'] }}">{{ $row['code'] }}</a>
+                                    <div class="flex items-center gap-1.5">
+                                        <a href="#" class="hover:text-amber-600 et-detail-link" 
+                                            data-source-type="{{ $row['source_type'] }}" 
+                                            data-source-id="{{ $row['source_id'] }}">{{ $row['code'] }}</a>
+                                        @if(!empty($row['has_anomaly']))
+                                            <span class="inline-flex items-center text-amber-500 hover:text-amber-600 cursor-help" 
+                                                  title="Peringatan Anomali: {{ $row['anomaly_message'] ?? 'Terdapat pohon dengan stage atau status tidak dikenal' }}">
+                                                <i class="fas fa-exclamation-triangle text-xs text-amber-500"></i>
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="compact-td text-slate-700">
                                     <div class="prod-name-cell" title="{{ $row['product_name'] }}">{{ $row['product_name'] }}</div>
@@ -624,6 +637,9 @@
                     <tr>
                         <td class="left" style="font-weight: 700; white-space: nowrap;">
                             {{ $row['code'] }}
+                            @if(!empty($row['has_anomaly']))
+                                <span style="color: #d97706; font-size: 8px;" title="{{ $row['anomaly_message'] ?? 'Peringatan Anomali' }}">&#9888;</span>
+                            @endif
                         </td>
                         <td class="prod-name left">
                             <div style="max-height: 2.3em; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; word-wrap: break-word;">
@@ -878,13 +894,137 @@
                 t.textContent='Detail Kode Produksi: '+(d.et_code||'-');
                 s.textContent=d.item_name||d.tree_count+' Trees';
                 if(!d.trees||d.trees.length===0){c.innerHTML='<p class="text-slate-500 text-sm text-center py-8">Belum ada Tree untuk Kode Produksi ini.</p>';return}
-                var h='<div class="space-y-3"><div class="text-xs text-slate-500 mb-3">'+d.trees.length+' Tree</div>';
+                c.innerHTML = '';
+                var container = document.createElement('div');
+                container.className = 'space-y-3';
+
+                var headerDiv = document.createElement('div');
+                headerDiv.className = 'text-xs text-slate-500 mb-3';
+                headerDiv.textContent = d.trees.length + ' Tree';
+                container.appendChild(headerDiv);
+
                 d.trees.forEach(function(x){
-                    var sc=x.current_stage==='oven'?'bg-teal-100 text-teal-800':'bg-amber-100 text-amber-800';
-                    var ai=x.aging_status==='too_fast'?'\u26A0\uFE0F':(x.aging_status==='too_long'?'\u274C':'');
-                    h+='<div class="border border-slate-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="font-mono font-bold text-sm">'+x.tree_number+' &mdash; '+(x.barcode||'-')+'</span><span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold '+sc+'">'+(x.current_stage_label||'-')+'</span></div><div class="grid grid-cols-3 gap-2 text-xs text-slate-600"><div><span class="text-slate-400">Qty:</span> <span class="font-bold">'+x.quantity+' PCS</span></div><div><span class="text-slate-400">Last Scan:</span> '+(x.last_scan_at||'-')+'</div><div><span class="text-slate-400">Aging:</span> '+(x.aging_label||'-')+' '+ai+'</div></div></div>';
+                    var sc = 'bg-amber-100 text-amber-800 border border-amber-200';
+                    if (x.is_anomaly) {
+                        sc = 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold';
+                    } else if (x.is_cancelled) {
+                        sc = 'bg-slate-200 text-slate-600 border border-slate-300';
+                    } else if (x.is_cutoff) {
+                        sc = 'bg-purple-100 text-purple-800 border border-purple-300 font-bold';
+                    } else if (x.current_stage === 'cor') {
+                        sc = 'bg-amber-200 text-amber-900 border border-amber-300';
+                    } else if (x.current_stage === 'siap_cor') {
+                        sc = 'bg-sky-100 text-sky-800 border border-sky-300';
+                    } else if (x.current_stage === 'oven') {
+                        sc = 'bg-teal-100 text-teal-800 border border-teal-300';
+                    }
+
+                    var card = document.createElement('div');
+                    card.className = 'border ' + (x.is_anomaly ? 'border-rose-300 bg-rose-50/20' : (x.is_cutoff ? 'border-purple-200 bg-purple-50/20' : 'border-slate-200')) + ' rounded-lg p-3';
+
+                    var topRow = document.createElement('div');
+                    topRow.className = 'flex items-center justify-between mb-2';
+
+                    var titleSpan = document.createElement('span');
+                    titleSpan.className = 'font-mono font-bold text-sm';
+                    titleSpan.textContent = (x.tree_number != null ? x.tree_number : '-') + ' \u2014 ' + (x.barcode || '-');
+                    if (x.is_cancelled) {
+                        var cancelSpan = document.createElement('span');
+                        cancelSpan.className = 'text-rose-600 font-bold text-[10px] ml-1';
+                        cancelSpan.textContent = '(DIBATALKAN)';
+                        titleSpan.appendChild(cancelSpan);
+                    }
+                    topRow.appendChild(titleSpan);
+
+                    var badge = document.createElement('span');
+                    badge.className = 'inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ' + sc;
+                    badge.textContent = (x.is_anomaly ? '\u26A0\uFE0F ' : '') + (x.current_stage_label || '-');
+                    topRow.appendChild(badge);
+
+                    card.appendChild(topRow);
+
+                    var grid = document.createElement('div');
+                    grid.className = 'grid grid-cols-3 gap-2 text-xs text-slate-600';
+
+                    var col1 = document.createElement('div');
+                    var lbl1 = document.createElement('span');
+                    lbl1.className = 'text-slate-400';
+                    lbl1.textContent = 'Qty: ';
+                    var val1 = document.createElement('span');
+                    val1.className = 'font-bold';
+                    val1.textContent = (x.quantity != null ? x.quantity : '-') + ' PCS';
+                    col1.appendChild(lbl1);
+                    col1.appendChild(val1);
+                    grid.appendChild(col1);
+
+                    var col2 = document.createElement('div');
+                    var lbl2 = document.createElement('span');
+                    lbl2.className = 'text-slate-400';
+                    lbl2.textContent = 'Last Scan: ';
+                    var val2 = document.createElement('span');
+                    val2.textContent = x.last_scan_at || '-';
+                    col2.appendChild(lbl2);
+                    col2.appendChild(val2);
+                    grid.appendChild(col2);
+
+                    var col3 = document.createElement('div');
+                    var lbl3 = document.createElement('span');
+                    lbl3.className = 'text-slate-400';
+                    lbl3.textContent = 'Aging: ';
+                    var val3 = document.createElement('span');
+                    var ai = x.aging_status === 'too_fast' ? ' \u26A0\uFE0F' : (x.aging_status === 'too_long' ? ' \u274C' : '');
+                    val3.textContent = (x.aging_label || '-') + ai;
+                    col3.appendChild(lbl3);
+                    col3.appendChild(val3);
+                    grid.appendChild(col3);
+
+                    card.appendChild(grid);
+
+                    if (x.is_cutoff && x.cutoff_info) {
+                        var cutoffDiv = document.createElement('div');
+                        cutoffDiv.className = 'mt-2 pt-2 border-t border-purple-100 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-purple-900 bg-purple-50/50 px-2 py-1.5 rounded';
+
+                        var spanNum = document.createElement('span');
+                        var strongNum = document.createElement('strong');
+                        strongNum.className = 'text-purple-950';
+                        strongNum.textContent = 'Cut-off: ';
+                        spanNum.appendChild(strongNum);
+                        spanNum.appendChild(document.createTextNode(x.cutoff_info.cutoff_number || '-'));
+                        cutoffDiv.appendChild(spanNum);
+
+                        var spanSC = document.createElement('span');
+                        var strongSC = document.createElement('strong');
+                        strongSC.className = 'text-purple-950';
+                        strongSC.textContent = 'Siap Cor: ';
+                        spanSC.appendChild(strongSC);
+                        spanSC.appendChild(document.createTextNode(x.cutoff_info.siap_cor_milestone_date || '-'));
+                        cutoffDiv.appendChild(spanSC);
+
+                        var spanC = document.createElement('span');
+                        var strongC = document.createElement('strong');
+                        strongC.className = 'text-purple-950';
+                        strongC.textContent = 'Cor: ';
+                        spanC.appendChild(strongC);
+                        spanC.appendChild(document.createTextNode(x.cutoff_info.cor_milestone_date || '-'));
+                        cutoffDiv.appendChild(spanC);
+
+                        if (x.cutoff_info.reason) {
+                            var spanR = document.createElement('span');
+                            var strongR = document.createElement('strong');
+                            strongR.className = 'text-purple-950';
+                            strongR.textContent = 'Alasan: ';
+                            spanR.appendChild(strongR);
+                            spanR.appendChild(document.createTextNode(x.cutoff_info.reason));
+                            cutoffDiv.appendChild(spanR);
+                        }
+
+                        card.appendChild(cutoffDiv);
+                    }
+
+                    container.appendChild(card);
                 });
-                c.innerHTML=h+'</div>';
+
+                c.appendChild(container);
             }).catch(function(){c.innerHTML='<p class="text-red-500 text-sm text-center py-8">Gagal memuat data.</p>'});
         }
         function closeETDetail(){document.getElementById('etDetailModal').classList.add('hidden')}

@@ -90,7 +90,7 @@ class ProductionStatusController extends Controller
                 return response()->json(['trees' => []]);
             }
 
-            $trees = LostWaxTree::with(['workOrder.itemReference'])
+            $trees = LostWaxTree::with(['workOrder.itemReference', 'activeCastingResultTree.castingResult', 'activeHistoricalCutoffTree.cutoff'])
                 ->where('work_order_id', $wo->id)
                 ->orderBy('tree_number')
                 ->get();
@@ -109,7 +109,7 @@ class ProductionStatusController extends Controller
                 ->pluck('id')
                 ->toArray();
 
-            $trees = LostWaxTree::with(['printOrderLine.printOrder', 'printOrderLine.productionPlan'])
+            $trees = LostWaxTree::with(['printOrderLine.printOrder', 'printOrderLine.productionPlan', 'activeCastingResultTree.castingResult', 'activeHistoricalCutoffTree.cutoff'])
                 ->whereIn('lost_wax_print_order_line_id', $lineIds)
                 ->orderBy('tree_number')
                 ->get();
@@ -143,13 +143,76 @@ class ProductionStatusController extends Controller
             'trees' => $trees->map(function ($tree) use ($latestEvents) {
                 $event = $latestEvents->get($tree->id);
 
+                $rawStatus = trim((string) ($tree->status ?? 'generated'));
+                $statusLower = strtolower($rawStatus);
+                $isCancelled = ($statusLower === 'cancelled');
+                $isCutoff = ($statusLower === 'historical_cutoff' || $tree->activeHistoricalCutoffTree !== null);
+                $validActiveStatuses = ['generated', 'in_coating', 'ready_for_coating', 'in_dewaxing', 'active', 'in_process', 'completed'];
+                $isUnknownStatus = (! $isCancelled && ! $isCutoff && ! in_array($statusLower, $validActiveStatuses, true));
+
+                $hasActiveCor = $tree->activeCastingResultTree !== null
+                    && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
+
+                $rawStage = $tree->current_stage;
+                $isUnknownStage = false;
+
+                if ($isCancelled) {
+                    $stageKey = 'cancelled';
+                    $stageLabel = 'DIBATALKAN';
+                    $isUnknownStage = false;
+                    $isAnomaly = false;
+                } elseif ($isCutoff) {
+                    $stageKey = 'historical_cutoff';
+                    $stageLabel = 'HISTORICAL CUTOFF';
+                    $isUnknownStage = false;
+                    $isAnomaly = false;
+                } else {
+                    if ($hasActiveCor) {
+                        $stageKey = 'cor';
+                        $stageLabel = 'Cor';
+                    } elseif ($rawStage === 'siap_cor') {
+                        $stageKey = 'siap_cor';
+                        $stageLabel = 'Siap Cor';
+                    } elseif ($rawStage === 'oven') {
+                        $stageKey = 'oven';
+                        $stageLabel = 'Oven';
+                    } elseif (is_string($rawStage) && in_array($rawStage, ['layer_1', 'layer_2', 'layer_3', 'layer_4', 'layer_5', 'layer_6', 'layer_7'], true)) {
+                        $stageKey = $rawStage;
+                        $stageLabel = $tree->current_stage_label;
+                    } elseif ($rawStage === null || $rawStage === '' || $rawStage === 'sebelum_scan') {
+                        $stageKey = 'sebelum_scan';
+                        $stageLabel = 'Sebelum Lapisan 1';
+                    } else {
+                        $stageKey = 'unknown';
+                        $stageLabel = 'ANOMALI: '.$rawStage;
+                        $isUnknownStage = true;
+                    }
+
+                    if ($isUnknownStatus) {
+                        $stageLabel .= ' (STATUS: '.$rawStatus.')';
+                    }
+
+                    $isAnomaly = $isUnknownStage || $isUnknownStatus;
+                }
+
+                $cutoffDetail = $tree->activeHistoricalCutoffTree;
+
                 return [
                     'id' => $tree->id,
                     'barcode' => $tree->barcode,
                     'tree_number' => $tree->tree_number,
                     'quantity' => $tree->quantity,
-                    'current_stage' => $tree->current_stage,
-                    'current_stage_label' => $tree->current_stage_label,
+                    'current_stage' => $stageKey,
+                    'current_stage_label' => $stageLabel,
+                    'status' => $rawStatus,
+                    'is_cancelled' => $isCancelled,
+                    'is_cutoff' => $isCutoff,
+                    'is_anomaly' => $isAnomaly,
+                    'cutoff_number' => $cutoffDetail?->cutoff?->cutoff_number,
+                    'cutoff_cor_date' => $cutoffDetail?->cor_date?->format('d/m/Y'),
+                    'cutoff_cor_date_source' => $cutoffDetail?->cor_date_source,
+                    'cutoff_siap_cor_date' => $cutoffDetail?->siap_cor_date?->format('d/m/Y'),
+                    'cutoff_siap_cor_date_source' => $cutoffDetail?->siap_cor_date_source,
                     'last_scan_at' => $tree->last_scan_at?->format('d/m/Y H:i'),
                     'aging_minutes' => $event->aging_minutes ?? null,
                     'aging_status' => $event->aging_status ?? null,
@@ -336,8 +399,15 @@ class ProductionStatusController extends Controller
 
     private function getAggregatedRows(string $search = '', string $filter = 'all', array $codes = [], array $customers = [], array $po_numbers = [], array $aisis = []): array
     {
-        // 1. Fetch Legacy Work Orders (Eager load itemReference, plans, wipEntries & withCount('trees') to prevent N+1)
-        $woQuery = LostWaxWorkOrder::with(['itemReference', 'plans', 'wipEntries'])->withCount('trees');
+        // 1. Fetch Legacy Work Orders (Eager load itemReference, plans, wipEntries, trees.defects, trees.activeCastingResultTree.castingResult & withCount('trees') to prevent N+1)
+        $woQuery = LostWaxWorkOrder::with([
+            'itemReference',
+            'plans',
+            'wipEntries',
+            'trees.defects',
+            'trees.activeCastingResultTree.castingResult',
+            'trees.activeHistoricalCutoffTree',
+        ])->withCount('trees');
         if ($search !== '') {
             $woQuery->where(function ($q) use ($search) {
                 $q->where('et_code', 'like', "%{$search}%")
@@ -365,8 +435,8 @@ class ProductionStatusController extends Controller
         }
 
         // Apply RBAC Product Scope
-        $scope = auth()->user()->product_scope;
-        if (auth()->user()->hasRole('ppic') && $scope) {
+        $scope = auth()->user()?->product_scope;
+        if (auth()->user()?->hasRole('ppic') && $scope) {
             if ($scope === 'FLANGE_STAINLESS') {
                 $woQuery->whereIn('family_code', ['3', '4']);
             } elseif ($scope === 'FLANGE_BESI') {
@@ -380,21 +450,32 @@ class ProductionStatusController extends Controller
 
         $legacyWos = $woQuery->orderBy('et_code')->get();
 
-        $woIds = $legacyWos->pluck('id')->toArray();
-        $legacyTreeStats = collect();
-        if ($woIds !== []) {
-            $legacyTreeStats = LostWaxTree::whereIn('work_order_id', $woIds)
-                ->selectRaw("work_order_id, COALESCE(current_stage, 'sebelum_scan') as stage_key, SUM(quantity) as total_qty")
-                ->groupBy('work_order_id', 'current_stage')
-                ->get()
-                ->groupBy('work_order_id');
-        }
-
         $rows = [];
 
         foreach ($legacyWos as $wo) {
-            $stages = $legacyTreeStats->get($wo->id, collect());
-            $stageMap = [];
+            $scheduledQty = (int) $wo->planned_quantity;
+            $cetak_good = (int) $wo->moulding_output_quantity;
+            $cetak_defect = ($cetak_good > 0) ? max(0, $scheduledQty - $cetak_good) : 0;
+            $assembly_output = (int) $wo->assembly_output_quantity;
+
+            // Total Gross trees ever generated (including cancelled and unknown status)
+            $allTreesEverGeneratedGross = (int) $wo->trees->sum('quantity');
+            $remainingUnallocated = max(0, $assembly_output - $allTreesEverGeneratedGross);
+
+            $stageMap = [
+                'sebelum_scan' => 0,
+                'layer_1' => 0,
+                'layer_2' => 0,
+                'layer_3' => 0,
+                'layer_4' => 0,
+                'layer_5' => 0,
+                'layer_6' => 0,
+                'layer_7' => 0,
+                'oven' => 0,
+                'siap_cor' => 0,
+                'cor' => 0,
+            ];
+
             $stageDefectMap = [
                 'assembly' => 0,
                 'layer_1' => 0,
@@ -407,79 +488,136 @@ class ProductionStatusController extends Controller
                 'oven' => 0,
             ];
 
-            foreach ($stages as $stat) {
-                $stageMap[$stat->stage_key] = (int) $stat->total_qty;
+            $treeDefectTotal = 0;
+            $cutoffQty = 0;
+            $unknownStageQty = 0;
+            $unknownStatusQty = 0;
+            $hasAnomaly = false;
+            $anomalyMessages = [];
+            $activeTreeCount = 0;
+
+            foreach ($wo->trees as $tree) {
+                $rawStatus = trim((string) ($tree->status ?? 'generated'));
+                $statusLower = strtolower($rawStatus);
+
+                if ($statusLower === 'cancelled') {
+                    // Tree cancelled: excluded from active floor buckets and its defect is excluded from totals.
+                    // Its gross quantity is already counted in $allTreesEverGeneratedGross.
+                    continue;
+                }
+
+                $isCutoff = ($statusLower === 'historical_cutoff' || $tree->activeHistoricalCutoffTree !== null);
+                if ($isCutoff) {
+                    $activeTreeCount++;
+                    $usableQty = (int) $tree->usable_quantity;
+                    $cutoffQty += $usableQty;
+
+                    // Sum defects across cutoff trees for Tot Rsk
+                    foreach ($tree->defects as $d) {
+                        $defectQty = (int) $d->defect_qty;
+                        $treeDefectTotal += $defectQty;
+                        if (isset($stageDefectMap[$d->stage])) {
+                            $stageDefectMap[$d->stage] += $defectQty;
+                        }
+                    }
+
+                    continue;
+                }
+
+                // Sum defects across non-cancelled trees (generated and unknown status) for Tot Rsk
+                foreach ($tree->defects as $d) {
+                    $defectQty = (int) $d->defect_qty;
+                    $treeDefectTotal += $defectQty;
+                    if (isset($stageDefectMap[$d->stage])) {
+                        $stageDefectMap[$d->stage] += $defectQty;
+                    }
+                }
+
+                $validActiveStatuses = ['generated', 'in_coating', 'ready_for_coating', 'in_dewaxing', 'active', 'in_process', 'completed'];
+                if (! in_array($statusLower, $validActiveStatuses, true)) {
+                    // Unknown status anomaly!
+                    $hasAnomaly = true;
+                    $unknownStatusQty += (int) $tree->usable_quantity;
+                    $anomalyMessages[] = "Pohon {$tree->barcode}: Status '{$rawStatus}'";
+                    \Illuminate\Support\Facades\Log::error("Legacy Work Order {$wo->et_code} has tree {$tree->barcode} with unknown status '{$rawStatus}'.");
+
+                    continue;
+                }
+
+                // Tree is active (generated)
+                $activeTreeCount++;
+                $usableQty = (int) $tree->usable_quantity;
+
+                $hasActiveCor = $tree->activeCastingResultTree !== null
+                    && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
+
+                $rawStage = $tree->current_stage;
+
+                if ($hasActiveCor) {
+                    $stageMap['cor'] += $usableQty;
+                } elseif ($rawStage === 'siap_cor') {
+                    $stageMap['siap_cor'] += $usableQty;
+                } elseif ($rawStage === 'oven') {
+                    $stageMap['oven'] += $usableQty;
+                } elseif (is_string($rawStage) && in_array($rawStage, ['layer_1', 'layer_2', 'layer_3', 'layer_4', 'layer_5', 'layer_6', 'layer_7'])) {
+                    $stageMap[$rawStage] += $usableQty;
+                } elseif ($rawStage === null || $rawStage === '' || $rawStage === 'sebelum_scan') {
+                    $stageMap['sebelum_scan'] += $usableQty;
+                } else {
+                    // Unknown stage anomaly!
+                    $hasAnomaly = true;
+                    $unknownStageQty += $usableQty;
+                    $anomalyMessages[] = "Pohon {$tree->barcode}: Stage '{$rawStage}'";
+                    \Illuminate\Support\Facades\Log::warning("Legacy Work Order {$wo->et_code} has tree {$tree->barcode} with unknown stage '{$rawStage}'.");
+                }
             }
 
             $layerQtys = [];
             $layerDefects = [];
             for ($i = 1; $i <= 7; $i++) {
-                $layerQtys["layer_{$i}"] = $stageMap["layer_{$i}"] ?? 0;
-                $layerDefects["layer_{$i}"] = $stageDefectMap["layer_{$i}"] ?? 0;
+                $layerQtys["layer_{$i}"] = $stageMap["layer_{$i}"];
+                $layerDefects["layer_{$i}"] = $stageDefectMap["layer_{$i}"];
             }
 
-            $ovenQty = $stageMap['oven'] ?? 0;
+            $ovenQty = $stageMap['oven'];
+            $siapCorQty = $stageMap['siap_cor'];
+            $corQty = $stageMap['cor'];
+            $ovenDefect = $stageDefectMap['oven'];
+            $assemblyDefect = $stageDefectMap['assembly'];
             $totalLap = array_sum($layerQtys);
-            $totalTreeQty = $totalLap + $ovenQty + ($stageMap['sebelum_scan'] ?? 0);
 
-            $scheduledQty = (int) $wo->planned_quantity;
-            $cetak_good = (int) $wo->moulding_output_quantity;
-            $cetak_defect = ($cetak_good > 0) ? max(0, $scheduledQty - $cetak_good) : 0;
+            // CTK = Moulding Output - Assembly Output, minimum nol.
+            $ctk_display = max(0, $cetak_good - $assembly_output);
+            $r_ctk_display = $cetak_defect;
 
-            $rangkai_good = (int) $wo->assembly_output_quantity;
-            if ($totalTreeQty > 0) {
-                $rangkai_good = $totalTreeQty;
-            }
-            $rangkai_defect = ($rangkai_good > 0) ? max(0, $cetak_good - $rangkai_good) : 0;
+            // RGKI = Remaining Unallocated + Sebelum Scan.
+            $before_scan_qty = $stageMap['sebelum_scan'];
+            $rgki_display = $remainingUnallocated + $before_scan_qty;
+            $r_rgki_display = $assemblyDefect;
 
-            // Display values based on stage movement:
-            $ctk_display = 0;
-            $r_ctk_display = 0;
-            if ($rangkai_good > 0) {
-                if ($rangkai_good < $cetak_good) {
-                    $ctk_display = $cetak_good;
-                    $r_ctk_display = $cetak_defect;
-                }
-            } else {
-                $ctk_display = $cetak_good;
-                $r_ctk_display = $cetak_defect;
-            }
+            // Total = Net Good Distributed = CTK + RGKI + Layer 1-7 + Oven + Siap Cor + Cor + Cutoff Qty
+            // Tot Rsk = Cetak Defect + seluruh Tree Defect
+            $wipBeforeCor = $ctk_display + $rgki_display + $totalLap + $ovenQty + $siapCorQty + $unknownStageQty + $unknownStatusQty;
+            $totalDistributed = $wipBeforeCor + $corQty + $cutoffQty;
+            $overallDefect = $cetak_defect + $treeDefectTotal;
 
-            $total_scanned = $totalLap + $ovenQty;
-            $rgki_display = 0;
-            $r_rgki_display = 0;
-            if ($total_scanned > 0) {
-                if ($total_scanned < $rangkai_good) {
-                    $rgki_display = $rangkai_good;
-                    $r_rgki_display = $rangkai_defect;
-                }
-            } else {
-                if ($rangkai_good > 0) {
-                    $rgki_display = $rangkai_good;
-                    $r_rgki_display = $rangkai_defect;
-                }
-            }
-
-            $before_scan_qty = $stageMap['sebelum_scan'] ?? 0;
-            if ($totalTreeQty == 0 && $rangkai_good > 0) {
-                $before_scan_qty = $rangkai_good;
-            }
-
-            $totalDistributed = $ctk_display + $rgki_display + $totalLap + $ovenQty;
-            $wipBeforeCor = $totalDistributed;
-            $siapCorQty = 0;
-            $corQty = 0;
+            $isWipEmpty = ($wipBeforeCor <= 0.000001);
+            $hasCorOutput = ($corQty > 0.000001);
+            $hasCutoffOutput = ($cutoffQty > 0.000001);
+            $hasNoAnomalies = ($unknownStageQty <= 0 && $unknownStatusQty <= 0);
 
             if (strtolower((string) $wo->status) === 'closed') {
                 $prodStatus = 'CLOSED (MANUAL)';
-            } elseif ($totalTreeQty > 0) {
-                $prodStatus = ($ovenQty > 0 && $ovenQty === $totalTreeQty) ? 'COMPLETED' : 'ACTIVE';
+            } elseif ($hasCutoffOutput && $isWipEmpty && $hasNoAnomalies) {
+                $prodStatus = 'COMPLETED (HISTORICAL CUTOFF)';
+            } elseif ($hasCorOutput && ! $hasCutoffOutput && $isWipEmpty && $hasNoAnomalies) {
+                $prodStatus = 'COMPLETED (COR VERIFIED)';
             } else {
-                $prodStatus = strtoupper($wo->status);
+                $prodStatus = 'ACTIVE';
             }
 
             $legacyPo = $wo->po_quantity !== null ? (int) $wo->po_quantity : null;
-            $legacyPlan = (int) ($wo->moulding_output_quantity ?: ($wo->total_target_quantity ?: $wo->po_quantity));
+            $legacyPlan = (int) ($wo->moulding_output_quantity ?: ($wo->planned_quantity ?: $wo->po_quantity));
             if ($legacyPo !== null && $totalDistributed < $legacyPo) {
                 $legacyQualityStatus = 'KURANG';
             } elseif ($totalDistributed > $legacyPlan) {
@@ -503,16 +641,16 @@ class ProductionStatusController extends Controller
                 'scheduled_qty' => $scheduledQty,
                 'actual_good' => $cetak_good,
                 'actual_defect' => $cetak_defect,
-                'assembly_qty' => $rangkai_good,
+                'assembly_qty' => $allTreesEverGeneratedGross,
                 'before_scan_qty' => $before_scan_qty,
                 'ctk_display' => $ctk_display,
                 'r_ctk_display' => $r_ctk_display,
                 'rgki_display' => $rgki_display,
                 'r_rgki_display' => $r_rgki_display,
-                'overall_defect' => $cetak_defect + $rangkai_defect,
+                'overall_defect' => $overallDefect,
                 'total_lap' => $totalDistributed,
                 'total_distributed' => $totalDistributed,
-                'tree_count' => $wo->trees_count, // Use trees_count eager-loaded from withCount
+                'tree_count' => $activeTreeCount,
                 'layer_1' => $layerQtys['layer_1'],
                 'r_layer_1' => $layerDefects['layer_1'],
                 'layer_2' => $layerQtys['layer_2'],
@@ -528,13 +666,18 @@ class ProductionStatusController extends Controller
                 'layer_7' => $layerQtys['layer_7'],
                 'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
-                'r_oven' => $stageDefectMap['oven'],
+                'r_oven' => $ovenDefect,
                 'siap_cor_qty' => $siapCorQty,
                 'cor_qty' => $corQty,
+                'cutoff_qty' => $cutoffQty,
                 'wip_before_cor' => $wipBeforeCor,
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
                 'quality_status' => $legacyQualityStatus,
+                'has_anomaly' => $hasAnomaly,
+                'anomaly_message' => implode('; ', $anomalyMessages),
+                'unknown_stage_qty' => $unknownStageQty,
+                'unknown_status_qty' => $unknownStatusQty,
             ];
         }
 
@@ -544,8 +687,10 @@ class ProductionStatusController extends Controller
             'printOrderLines.executions',
             'printOrderLines.trees.defects',
             'printOrderLines.trees.activeCastingResultTree.castingResult',
+            'printOrderLines.trees.activeHistoricalCutoffTree',
             'printOrderLines.treeAllocations.tree.defects',
             'printOrderLines.treeAllocations.tree.activeCastingResultTree.castingResult',
+            'printOrderLines.treeAllocations.tree.activeHistoricalCutoffTree',
         ])->whereHas('printOrderLines.printOrder', function ($q) {
             $q->where('status', '!=', 'CANCELLED');
         });
@@ -631,24 +776,74 @@ class ProductionStatusController extends Controller
                 'oven' => 0,
             ];
 
-            foreach ($activeTrees as $tree) {
-                $hasActiveCor = $tree->activeCastingResultTree !== null
-                    && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
+            $cutoffQty = 0;
+            $unknownStageQty = 0;
+            $unknownStatusQty = 0;
+            $hasAnomaly = false;
+            $anomalyMessages = [];
 
-                if ($hasActiveCor) {
-                    $stageKey = 'cor';
-                } elseif ($tree->current_stage === 'siap_cor') {
-                    $stageKey = 'siap_cor';
-                } else {
-                    $stageKey = $tree->current_stage ?: 'sebelum_scan';
+            foreach ($activeTrees as $tree) {
+                $rawStatus = trim((string) ($tree->status ?? 'generated'));
+                $statusLower = strtolower($rawStatus);
+
+                if ($statusLower === 'cancelled') {
+                    continue;
                 }
 
-                $stageMap[$stageKey] = ($stageMap[$stageKey] ?? 0) + $tree->usable_quantity;
+                $isCutoff = ($statusLower === 'historical_cutoff' || $tree->activeHistoricalCutoffTree !== null);
 
+                if ($isCutoff) {
+                    $cutoffQty += (int) $tree->usable_quantity;
+
+                    foreach ($tree->defects as $d) {
+                        if (isset($stageDefectMap[$d->stage])) {
+                            $stageDefectMap[$d->stage] += (int) $d->defect_qty;
+                        }
+                    }
+
+                    continue;
+                }
+
+                // Sum defects across non-cancelled trees for stageDefectMap
                 foreach ($tree->defects as $d) {
                     if (isset($stageDefectMap[$d->stage])) {
                         $stageDefectMap[$d->stage] += (int) $d->defect_qty;
                     }
+                }
+
+                $validActiveStatuses = ['generated', 'in_coating', 'ready_for_coating', 'in_dewaxing', 'active', 'in_process', 'completed'];
+                if (! in_array($statusLower, $validActiveStatuses, true)) {
+                    // Unknown status anomaly!
+                    $hasAnomaly = true;
+                    $unknownStatusQty += (int) $tree->usable_quantity;
+                    $anomalyMessages[] = "Pohon {$tree->barcode}: Status '{$rawStatus}'";
+                    \Illuminate\Support\Facades\Log::error("Production Plan {$plan->code} has tree {$tree->barcode} with unknown status '{$rawStatus}'.");
+
+                    continue;
+                }
+
+                $usableQty = (int) $tree->usable_quantity;
+                $hasActiveCor = $tree->activeCastingResultTree !== null
+                    && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
+
+                $rawStage = $tree->current_stage;
+
+                if ($hasActiveCor) {
+                    $stageMap['cor'] += $usableQty;
+                } elseif ($rawStage === 'siap_cor') {
+                    $stageMap['siap_cor'] += $usableQty;
+                } elseif ($rawStage === 'oven') {
+                    $stageMap['oven'] += $usableQty;
+                } elseif (is_string($rawStage) && in_array($rawStage, ['layer_1', 'layer_2', 'layer_3', 'layer_4', 'layer_5', 'layer_6', 'layer_7'], true)) {
+                    $stageMap[$rawStage] += $usableQty;
+                } elseif ($rawStage === null || $rawStage === '' || $rawStage === 'sebelum_scan') {
+                    $stageMap['sebelum_scan'] += $usableQty;
+                } else {
+                    // Unknown stage anomaly!
+                    $hasAnomaly = true;
+                    $unknownStageQty += $usableQty;
+                    $anomalyMessages[] = "Pohon {$tree->barcode}: Stage '{$rawStage}'";
+                    \Illuminate\Support\Facades\Log::warning("Production Plan {$plan->code} has tree {$tree->barcode} with unknown stage '{$rawStage}'.");
                 }
             }
 
@@ -676,16 +871,20 @@ class ProductionStatusController extends Controller
             $qUsable = $breakdown['q_usable'];
             $qualityStatus = $breakdown['status'];
 
-            $wipBeforeCor = $qStandby + ($stageMap['sebelum_scan'] ?? 0) + $totalLap + $ovenQty + $siapCorQty;
-            $totalDistributed = $wipBeforeCor + $corQty;
+            $wipBeforeCor = $qStandby + ($stageMap['sebelum_scan'] ?? 0) + $totalLap + $ovenQty + $siapCorQty + $unknownStageQty + $unknownStatusQty;
+            $totalDistributed = $wipBeforeCor + $corQty + $cutoffQty;
 
             $isWipEmpty = ($wipBeforeCor <= 0.000001);
             $hasCorOutput = ($corQty > 0.000001);
+            $hasCutoffOutput = ($cutoffQty > 0.000001);
+            $hasNoAnomalies = ($unknownStageQty <= 0 && $unknownStatusQty <= 0);
 
             if ((bool) ($plan->is_closed ?? false)) {
                 $prodStatus = 'CLOSED (MANUAL)';
-            } elseif ($hasCorOutput && $isWipEmpty) {
-                $prodStatus = 'COMPLETED';
+            } elseif ($hasCutoffOutput && $isWipEmpty && $hasNoAnomalies) {
+                $prodStatus = 'COMPLETED (HISTORICAL CUTOFF)';
+            } elseif ($hasCorOutput && ! $hasCutoffOutput && $isWipEmpty && $hasNoAnomalies) {
+                $prodStatus = 'COMPLETED (COR VERIFIED)';
             } else {
                 $prodStatus = 'ACTIVE';
             }
@@ -735,6 +934,7 @@ class ProductionStatusController extends Controller
                 'r_oven' => $ovenDefect,
                 'siap_cor_qty' => $siapCorQty,
                 'cor_qty' => $corQty,
+                'cutoff_qty' => $cutoffQty,
                 'wip_before_cor' => $wipBeforeCor,
                 'status' => $prodStatus,
                 'prod_status' => $prodStatus,
@@ -745,6 +945,10 @@ class ProductionStatusController extends Controller
                 'quality_status' => $qualityStatus,
                 'deficit_vs_plan' => $breakdown['deficit_vs_plan'],
                 'deficit_vs_po' => $breakdown['deficit_vs_po'],
+                'has_anomaly' => $hasAnomaly,
+                'anomaly_message' => implode('; ', $anomalyMessages),
+                'unknown_stage_qty' => $unknownStageQty,
+                'unknown_status_qty' => $unknownStatusQty,
             ];
         }
 
@@ -752,7 +956,7 @@ class ProductionStatusController extends Controller
         if ($filter === 'active') {
             $rows = array_values(array_filter($rows, fn ($r) => $r['status'] === 'ACTIVE'));
         } elseif ($filter === 'completed') {
-            $rows = array_values(array_filter($rows, fn ($r) => $r['status'] === 'COMPLETED'));
+            $rows = array_values(array_filter($rows, fn ($r) => str_starts_with($r['status'], 'COMPLETED') || $r['status'] === 'CLOSED (MANUAL)'));
         }
 
         return $rows;
