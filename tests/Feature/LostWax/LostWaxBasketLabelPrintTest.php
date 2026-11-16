@@ -19,12 +19,17 @@ class LostWaxBasketLabelPrintTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $ppicUser;
+
     protected User $spvUser;
+
     protected User $qcUser;
+
     protected User $salesUser;
 
     protected LostWaxBasketLabelTsplRenderer $renderer;
+
     protected static int $seq = 9500;
 
     protected function setUp(): void
@@ -73,7 +78,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
 
     protected function createCastingResultWithTrees(int $treeCount, array $treeOverrides = [], string $status = 'COMPLETED'): LostWaxCastingResult
     {
-        $heatNumber = 'HEAT-202611-' . (self::$seq++);
+        $heatNumber = 'HEAT-202611-'.(self::$seq++);
 
         $res = LostWaxCastingResult::create([
             'heat_number' => $heatNumber,
@@ -138,7 +143,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
         $this->assertStringNotContainsString('"HEAT NUMBER"', $tspl);
 
         // Contains the Heat Number value directly in Font 4 at Y=16
-        $this->assertStringContainsString('TEXT 30,16,"4",0,1,1,"' . $res->heat_number . '"', $tspl);
+        $this->assertStringContainsString('TEXT 30,16,"4",0,1,1,"'.$res->heat_number.'"', $tspl);
     }
 
     /**
@@ -150,9 +155,9 @@ class LostWaxBasketLabelPrintTest extends TestCase
 
         $tspl = $this->renderer->render($res);
 
-        $expectedMeta = 'HAL 1/1 | TGL: ' . $res->cast_date->format('d/m/Y');
+        $expectedMeta = 'HAL 1/1 | TGL: '.$res->cast_date->format('d/m/Y');
         $this->assertStringContainsString($expectedMeta, $tspl);
-        $this->assertStringContainsString(',22,"2",0,1,1,"' . $expectedMeta . '"', $tspl);
+        $this->assertStringContainsString(',22,"2",0,1,1,"'.$expectedMeta.'"', $tspl);
     }
 
     /**
@@ -230,8 +235,8 @@ class LostWaxBasketLabelPrintTest extends TestCase
         preg_match_all('/TEXT ([0-9]+),[0-9]+,"1",0,1,1,"([0-9]+)"/', $tspl, $matches);
         $xCoords = $matches[1];
         foreach ($xCoords as $x) {
-            $this->assertGreaterThan(490, (int) $x, "Qty berada di sebelah kiri batas kolom QTY!");
-            $this->assertLessThan(570, (int) $x, "Qty melewati batas garis pemisah dan masuk ke kolom Rusak!");
+            $this->assertGreaterThan(490, (int) $x, 'Qty berada di sebelah kiri batas kolom QTY!');
+            $this->assertLessThan(570, (int) $x, 'Qty melewati batas garis pemisah dan masuk ke kolom Rusak!');
         }
     }
 
@@ -581,7 +586,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
                 'active_tree_id' => $physicalTree->id,
                 'barcode' => sprintf('P26%04d', $treeNum),
                 'item_name' => $it['name'],
-                'production_code' => 'KODE-' . ($idx + 1),
+                'production_code' => 'KODE-'.($idx + 1),
                 'tree_order' => $idx + 1,
                 'quantity_pcs' => $it['qty'],
                 'gross_weight' => 10.5,
@@ -601,7 +606,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
         $this->assertStringContainsString('<col class="col-rusak" style="width: 16.25mm;">', $html);
 
         // 2. DOM parsing
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         libxml_use_internal_errors(true);
         $dom->loadHTML($html);
         libxml_clear_errors();
@@ -638,6 +643,132 @@ class LostWaxBasketLabelPrintTest extends TestCase
     }
 
     /**
+     * 19. Skenario A: Banyak nama pendek: 10 item muat di halaman 1, item ke-11 masuk ke halaman 2.
+     */
+    public function test_19_pagination_scenario_a_many_short_names_fill_page_normally(): void
+    {
+        // 10 short items in Font 1 fit on exactly 1 page
+        $res10 = $this->createCastingResultWithTrees(10);
+        $response10 = $this->actingAs($this->adminUser)->get(route('lost-wax.casting-results.print-thermal', ['castingResult' => $res10, 'font' => 1]));
+        $response10->assertStatus(200);
+        $html10 = $response10->getContent();
+        $this->assertStringContainsString('HAL 1/1', $html10);
+        $this->assertEquals(1, substr_count($html10, 'class="label-page'));
+
+        // 11 short items in Font 1 split cleanly across 2 pages
+        $res11 = $this->createCastingResultWithTrees(11);
+        $response11 = $this->actingAs($this->adminUser)->get(route('lost-wax.casting-results.print-thermal', ['castingResult' => $res11, 'font' => 1]));
+        $response11->assertStatus(200);
+        $html11 = $response11->getContent();
+        $this->assertStringContainsString('HAL 1/2', $html11);
+        $this->assertStringContainsString('HAL 2/2', $html11);
+        $this->assertEquals(2, substr_count($html11, 'class="label-page'));
+    }
+
+    /**
+     * 20. Skenario B, C, D: Campuran nama pendek dan panjang (termasuk 3 baris):
+     * Item di bagian bawah yang tidak cukup ruang pindah utuh bersama QTY & RUSAK ke halaman berikutnya.
+     */
+    public function test_20_pagination_scenario_b_c_d_mixed_and_3_line_items_move_entire_row_to_next_page(): void
+    {
+        // 8 short items (8 * 28 = 224 dots)
+        // Item 9: 3-line item (approx 60 dots). Total 224 + 60 = 284 <= 308 (Fits on Page 1)
+        // Item 10: 2-line item (approx 44 dots). 284 + 44 = 328 > 308 (Does NOT fit on Page 1 -> moves to Page 2)
+        $overrides = [];
+        for ($i = 1; $i <= 8; $i++) {
+            $overrides[] = ['item_name' => "SHORT ITEM {$i}", 'quantity_pcs' => 10 + $i];
+        }
+        $overrides[] = [
+            'item_name' => 'HOUSING FLANGE DN100 PN16 STAINLESS STEEL 316L SPECIAL FORGING LOT 24', // 3 lines
+            'quantity_pcs' => 99,
+        ];
+        $overrides[] = [
+            'item_name' => 'SS316 CASTED RAISED FLANGE JIS 10K 1/2 IN EXTRA SPECIFICATION', // 2 lines
+            'quantity_pcs' => 77,
+        ];
+
+        $res = $this->createCastingResultWithTrees(10, $overrides);
+
+        $response = $this->actingAs($this->adminUser)->get(route('lost-wax.casting-results.print-thermal', ['castingResult' => $res, 'font' => 1]));
+        $response->assertStatus(200);
+        $html = $response->getContent();
+
+        // 2 pages created
+        $this->assertStringContainsString('HAL 1/2', $html);
+        $this->assertStringContainsString('HAL 2/2', $html);
+
+        // Parse DOM per page
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($html);
+        libxml_clear_errors();
+
+        $xpath = new \DOMXPath($dom);
+        $pages = $xpath->query('//div[contains(@class, "label-page")]');
+        $this->assertEquals(2, $pages->length);
+
+        // Page 1 has 9 items
+        $page1Rows = $xpath->query('.//table[contains(@class, "basket-table")]/tbody/tr[contains(@class, "item-row") and not(contains(@class, "row-empty"))]', $pages->item(0));
+        $this->assertEquals(9, $page1Rows->length);
+
+        // Verify Item 9 (3 lines) is the last item on Page 1, intact without splitting
+        $lastRowP1 = $page1Rows->item(8);
+        $this->assertStringContainsString('HOUSING FLANGE DN100 PN16 STAINLESS STEEL 316L SPECIAL FORGING LOT 24', $lastRowP1->textContent);
+        $this->assertStringContainsString('99', $lastRowP1->textContent);
+
+        // Page 2 has 1 item (Item 10 moved in its entirety)
+        $page2Rows = $xpath->query('.//table[contains(@class, "basket-table")]/tbody/tr[contains(@class, "item-row") and not(contains(@class, "row-empty"))]', $pages->item(1));
+        $this->assertEquals(1, $page2Rows->length);
+
+        $item10Row = $page2Rows->item(0);
+        $this->assertStringContainsString('SS316 CASTED RAISED FLANGE JIS 10K 1/2 IN EXTRA SPECIFICATION', $item10Row->textContent);
+        $this->assertStringContainsString('77', $item10Row->textContent);
+    }
+
+    /**
+     * 21. Skenario E: Multi halaman (3 halaman): Nomor halaman dan total halaman konsisten (HAL 1/3, HAL 2/3, HAL 3/3).
+     */
+    public function test_21_pagination_scenario_e_multi_page_headers_have_correct_counters(): void
+    {
+        // 25 short items in Font 1 -> 11 on Page 1, 11 on Page 2, 3 on Page 3
+        $res = $this->createCastingResultWithTrees(25);
+
+        $response = $this->actingAs($this->adminUser)->get(route('lost-wax.casting-results.print-thermal', ['castingResult' => $res, 'font' => 1]));
+        $response->assertStatus(200);
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('HAL 1/3', $html);
+        $this->assertStringContainsString('HAL 2/3', $html);
+        $this->assertStringContainsString('HAL 3/3', $html);
+        $this->assertEquals(3, substr_count($html, 'class="label-page'));
+    }
+
+    /**
+     * 22. Skenario F: Satu item lebih tinggi dari kapasitas halaman: Tampilkan peringatan khusus dan tidak menghilangkan teks.
+     */
+    public function test_22_pagination_scenario_f_oversized_item_is_not_silently_truncated_and_has_warning(): void
+    {
+        // 30 repeats * 28 chars = 840+ chars (~23 lines > 308 dots height)
+        $hugeName = 'SPECIAL GIANT VALVE WITH EXTREMELY LONG SPECIFICATION THAT SPANS MULTIPLE PARAGRAPHS ' . str_repeat('TESTING HUGE CONTENT STRING ', 30);
+
+        $res = $this->createCastingResultWithTrees(1, [
+            0 => ['item_name' => $hugeName, 'quantity_pcs' => 5],
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->get(route('lost-wax.casting-results.print-thermal', ['castingResult' => $res, 'font' => 1]));
+        $response->assertStatus(200);
+        $html = $response->getContent();
+
+        // Contains the alert banner
+        $this->assertStringContainsString('[PERINGATAN: NAMA MELEBIHI 1 HALAMAN]', $html);
+        // Does NOT silently truncate text
+        $this->assertStringContainsString('SPECIAL GIANT VALVE WITH EXTREMELY LONG SPECIFICATION', $html);
+        $this->assertStringContainsString('TESTING HUGE CONTENT STRING', $html);
+        // QTY remains intact
+        $this->assertStringContainsString('5', $html);
+    }
+
+    /**
      * Helper to ensure Gate beforeCallbacks evaluate Spatie permissions cleanly in test environment.
      */
     protected function bypassRoleGateFix(): void
@@ -655,6 +786,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
                         return null;
                     }
                 }
+
                 return null;
             },
         ]);

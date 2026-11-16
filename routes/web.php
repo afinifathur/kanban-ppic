@@ -244,6 +244,10 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/casting-results/{castingResult}/print-thermal', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'printThermal'])->name('casting-results.print-thermal');
             Route::post('/casting-results/{castingResult}/print-thermal', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'queueThermalPrint'])->name('casting-results.queue-thermal');
             Route::post('/casting-results/{castingResult}/cancel', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'cancel'])->name('casting-results.cancel');
+
+            // Kitir Produksi Fitting (A4 Landscape)
+            Route::get('/casting-results/{castingResult}/kitir-all', [\App\Http\Controllers\LostWax\LostWaxKitirController::class, 'printAll'])->name('casting-results.kitir.all');
+            Route::get('/casting-results/{castingResult}/kitir/{code}', [\App\Http\Controllers\LostWax\LostWaxKitirController::class, 'print'])->where('code', '.*')->name('casting-results.kitir.print');
         });
 
         // Production Status (Lost Wax Read Model) - accessible with execution or production visibility

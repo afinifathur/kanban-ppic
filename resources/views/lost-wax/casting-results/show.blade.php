@@ -162,6 +162,128 @@
         </div>
     </div>
 
+    <!-- Kitir Produksi Fitting Section -->
+    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fas fa-id-card text-amber-500"></i>
+                    Kitir Produksi Fitting (Traveler Card Pasca-Cor)
+                </h2>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                    1 Dokumen Kitir (A4 Landscape) per Kode Produksi unik untuk pengiring proses lanjutan di departemen Fitting.
+                </p>
+            </div>
+            @if($castingResult->is_completed && !empty($kitirGroups) && $kitirGroups->isNotEmpty())
+            <a href="{{ route('lost-wax.casting-results.kitir.all', $castingResult) }}"
+               target="_blank"
+               class="inline-flex items-center justify-center px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-colors shadow-sm shrink-0">
+                <i class="fas fa-print mr-1.5"></i> Cetak Semua Kitir ({{ $kitirGroups->count() }} Dokumen A4)
+            </a>
+            @endif
+        </div>
+
+        @if(!empty($kitirError))
+        <div class="p-4 bg-rose-50 border-b border-rose-200 text-rose-800 text-xs flex items-center gap-2.5">
+            <i class="fas fa-exclamation-triangle text-rose-500 text-base shrink-0"></i>
+            <div>{{ $kitirError }}</div>
+        </div>
+        @endif
+
+        @if($castingResult->is_cancelled)
+        <div class="p-4 bg-slate-50 text-slate-500 text-xs italic">
+            Kitir Produksi tidak dapat diterbitkan karena transaksi ini telah dibatalkan.
+        </div>
+        @elseif(!empty($kitirGroups) && $kitirGroups->isNotEmpty())
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead class="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-center w-12">No</th>
+                        <th class="px-4 py-3">Kode Produksi</th>
+                        <th class="px-4 py-3">Customer</th>
+                        <th class="px-4 py-3">Nama Item</th>
+                        <th class="px-4 py-3 text-center">Pohon</th>
+                        <th class="px-4 py-3 text-right">Hasil Cor</th>
+                        <th class="px-4 py-3">Nomor Kitir</th>
+                        <th class="px-4 py-3 text-center">Status</th>
+                        <th class="px-4 py-3 text-right">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                    @foreach($kitirGroups as $idx => $grp)
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="px-4 py-3 text-center text-slate-400 font-medium">{{ $idx + 1 }}</td>
+                        <td class="px-4 py-3 font-mono font-bold text-slate-900">
+                            {{ $grp['production_code'] }}
+                        </td>
+                        <td class="px-4 py-3 text-slate-600">
+                            {{ $grp['customer'] }}
+                        </td>
+                        <td class="px-4 py-3 text-slate-700 font-medium">
+                            {{ $grp['item_name'] }}
+                        </td>
+                        <td class="px-4 py-3 text-center font-mono">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700">
+                                {{ $grp['tree_count'] }} Pohon
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right font-mono font-black text-slate-900">
+                            {{ number_format($grp['quantity_pcs']) }} <span class="text-[10px] text-slate-400 font-normal">PCS</span>
+                        </td>
+                        <td class="px-4 py-3 font-mono font-bold text-slate-900">
+                            @if($grp['is_issued'])
+                                <span class="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
+                                    {{ $grp['traveler_number'] }}
+                                </span>
+                            @else
+                                <span class="text-slate-400 italic text-[11px]">-</span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            @if($grp['is_issued'])
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <i class="fas fa-check-circle mr-1"></i> Diterbitkan
+                                    @if($grp['print_count'] > 0)
+                                        <span class="ml-1 text-[9px] text-emerald-600">({{ $grp['print_count'] }}x)</span>
+                                    @endif
+                                </span>
+                            @else
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                    Belum Terbit
+                                </span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-right whitespace-nowrap">
+                            <a href="{{ route('lost-wax.casting-results.kitir.print', ['castingResult' => $castingResult, 'code' => urlencode($grp['production_code'])]) }}"
+                               target="_blank"
+                               class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm {{ $grp['is_issued'] ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-500 hover:bg-amber-600 text-slate-950' }}">
+                                <i class="fas fa-print mr-1.5"></i>
+                                {{ $grp['is_issued'] ? 'Cetak Ulang' : 'Terbitkan & Cetak' }}
+                            </a>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+                <tfoot class="bg-slate-50 text-slate-900 font-bold border-t-2 border-slate-200">
+                    <tr>
+                        <td colspan="4" class="px-4 py-3 text-right uppercase tracking-wider text-slate-500">
+                            Total Kelompok: {{ $kitirGroups->count() }} Kitir
+                        </td>
+                        <td class="px-4 py-3 text-center font-mono">
+                            {{ $kitirGroups->sum('tree_count') }} Pohon
+                        </td>
+                        <td class="px-4 py-3 text-right text-amber-600 font-mono text-base">
+                            {{ number_format($kitirGroups->sum('quantity_pcs')) }} PCS
+                        </td>
+                        <td colspan="3" class="px-4 py-3"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        @endif
+    </div>
+
     <!-- Detail Traveler Cards Table -->
     <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">

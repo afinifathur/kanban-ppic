@@ -60,6 +60,18 @@
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.15);
             position: relative;
             overflow: hidden;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .label-page.page-oversized {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        .table-container.container-oversized {
+            overflow: visible !important;
         }
 
         /* Header: Heat Number prominent on left, HAL & TGL inline on right */
@@ -165,9 +177,12 @@
             font-weight: bold !important;
             font-size: {{ $isFont1 ? '6.5pt' : '7pt' }} !important;
             line-height: 1.15 !important;
-            overflow: hidden !important;
             word-break: break-word !important;
+            overflow-wrap: break-word !important;
+            word-wrap: break-word !important;
+            white-space: normal !important;
             width: 58.75mm !important;
+            padding: 0.4mm 0.8mm !important;
         }
 
         .basket-table td.td-qty {
@@ -188,23 +203,29 @@
             width: 16.25mm !important;
         }
 
+        .item-row {
+            height: auto;
+        }
+
         .item-row.row-single {
-            height: {{ $isFont1 ? '3.5mm' : '4.25mm' }};
+            min-height: {{ $isFont1 ? '3.5mm' : '4.25mm' }};
         }
 
         .item-row.row-double {
-            height: {{ $isFont1 ? '5.5mm' : '6.88mm' }};
+            min-height: {{ $isFont1 ? '5.5mm' : '6.88mm' }};
         }
 
         .item-row.row-empty {
             height: {{ $isFont1 ? '3.5mm' : '4.25mm' }};
         }
 
+        .item-name,
         .item-line {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.15;
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: break-word !important;
+            word-wrap: break-word !important;
+            line-height: 1.15 !important;
         }
 
         .qty-val {
@@ -228,8 +249,18 @@
             .label-page {
                 box-shadow: none !important;
                 margin: 0 !important;
-                page-break-after: always;
-                break-after: page;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .label-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
+            }
+            .item-row {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
         }
     </style>
@@ -272,19 +303,130 @@
         </div>
     </div>
 
-    <!-- Multi-label pages (Dynamic row height & wrapping) -->
-    @forelse($chunks as $pageIndex => $chunk)
-    <div class="label-page">
+    <!-- Multi-label pages (Dynamic row height & wrapping with zero item splitting across pages) -->
+    @php
+        $isFont1 = ($fontMode ?? 'font1') === 'font1';
+        $maxTableHeight = 270;
+        $singleHeight = $isFont1 ? 27 : 32;
+        $lineIncrement = $isFont1 ? 21 : 24;
+        $wrapLimit = $isFont1 ? 38 : 32;
+
+        // Word-aware line estimation matching browser CSS wrapping
+        $estimateLines = function (string $text, int $limit) {
+            $text = trim($text);
+            if ($text === '') return 1;
+            $words = preg_split('/\s+/', $text, -1, PREG_SPLIT_NO_EMPTY);
+            $lines = 1;
+            $currentLineLen = 0;
+            foreach ($words as $w) {
+                $wLen = mb_strlen($w);
+                if ($wLen > $limit) {
+                    $extraLines = (int) floor(($wLen - 1) / $limit);
+                    $lines += $extraLines;
+                    $currentLineLen = $wLen % $limit;
+                    if ($currentLineLen === 0) $currentLineLen = $limit;
+                    continue;
+                }
+                if ($currentLineLen === 0) {
+                    $currentLineLen = $wLen;
+                } elseif ($currentLineLen + 1 + $wLen <= $limit) {
+                    $currentLineLen += 1 + $wLen;
+                } else {
+                    $lines++;
+                    $currentLineLen = $wLen;
+                }
+            }
+            return max(1, $lines);
+        };
+
+        // Extract all tree records
+        $allTrees = collect();
+        if (isset($castingResult->trees) && $castingResult->trees->isNotEmpty()) {
+            $allTrees = $castingResult->trees;
+        } elseif (!empty($chunks)) {
+            foreach ($chunks as $c) {
+                foreach ($c as $it) {
+                    if (isset($it['tree'])) {
+                        $allTrees->push($it['tree']);
+                    }
+                }
+            }
+        }
+
+        // Partition into pages such that no item row is ever split across pages
+        $pages = [];
+        $currentPageItems = [];
+        $currentPageHeight = 0;
+        $pageHasOversized = false;
+
+        foreach ($allTrees as $tree) {
+            $name = $tree->item_name ?? $tree->production_code ?? '-';
+            $lines = $estimateLines($name, $wrapLimit);
+            $itemHeight = $singleHeight + max(0, $lines - 1) * $lineIncrement;
+            $isOversized = $itemHeight > $maxTableHeight;
+
+            // If current page is not empty and adding this item exceeds the page capacity:
+            // Move the entire item row to the next page!
+            if (!empty($currentPageItems) && ($currentPageHeight + $itemHeight > $maxTableHeight)) {
+                $pages[] = [
+                    'items' => $currentPageItems,
+                    'usedHeight' => $currentPageHeight,
+                    'isOversized' => $pageHasOversized,
+                ];
+                $currentPageItems = [];
+                $currentPageHeight = 0;
+                $pageHasOversized = false;
+            }
+
+            if ($isOversized) {
+                $pageHasOversized = true;
+            }
+
+            $currentPageItems[] = [
+                'tree' => $tree,
+                'name' => $name,
+                'lines' => $lines,
+                'height' => $itemHeight,
+                'isOversized' => $isOversized,
+            ];
+            $currentPageHeight += $itemHeight;
+
+            // If an oversized item was placed, finalize this page immediately so following items start fresh
+            if ($isOversized) {
+                $pages[] = [
+                    'items' => $currentPageItems,
+                    'usedHeight' => $currentPageHeight,
+                    'isOversized' => true,
+                ];
+                $currentPageItems = [];
+                $currentPageHeight = 0;
+                $pageHasOversized = false;
+            }
+        }
+
+        if (!empty($currentPageItems)) {
+            $pages[] = [
+                'items' => $currentPageItems,
+                'usedHeight' => $currentPageHeight,
+                'isOversized' => $pageHasOversized,
+            ];
+        }
+
+        $calculatedTotalPages = max(1, count($pages));
+    @endphp
+
+    @forelse($pages as $pageIndex => $page)
+    <div class="label-page {{ !empty($page['isOversized']) ? 'page-oversized' : '' }}">
         <!-- Header Section -->
         <div class="label-header">
             <div class="heat-value">{{ $castingResult->heat_number }}</div>
             <div class="meta-inline">
-                HAL {{ $pageIndex + 1 }}/{{ $totalPages }} | TGL: {{ $castingResult->cast_date ? $castingResult->cast_date->format('d/m/Y') : date('d/m/Y') }}
+                HAL {{ $pageIndex + 1 }}/{{ $calculatedTotalPages }} | TGL: {{ $castingResult->cast_date ? $castingResult->cast_date->format('d/m/Y') : date('d/m/Y') }}
             </div>
         </div>
 
         <!-- 3-Column Semantic Table Container -->
-        <div class="table-container">
+        <div class="table-container {{ !empty($page['isOversized']) ? 'container-oversized' : '' }}">
             <table class="basket-table">
                 <colgroup>
                     <col class="col-item" style="width: 58.75mm;">
@@ -299,23 +441,19 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @php
-                        $usedHeight = 0;
-                        $singleHeightDots = $isFont1 ? 28 : 34;
-                        $doubleHeightDots = $isFont1 ? 44 : 55;
-                    @endphp
-                    @foreach($chunk as $itemData)
+                    @foreach($page['items'] as $itemData)
                         @php
                             $tree = $itemData['tree'];
+                            $name = $itemData['name'];
                             $lines = $itemData['lines'];
-                            $isDouble = count($lines) > 1;
-                            $usedHeight += $itemData['height'] ?? ($isDouble ? $doubleHeightDots : $singleHeightDots);
+                            $isMultiLine = $lines > 1;
                         @endphp
-                        <tr class="item-row {{ $isDouble ? 'row-double' : 'row-single' }}">
+                        <tr class="item-row {{ $isMultiLine ? 'row-double' : 'row-single' }}">
                             <td class="td-item">
-                                @foreach($lines as $line)
-                                    <div class="item-line">{{ $line }}</div>
-                                @endforeach
+                                @if(!empty($itemData['isOversized']))
+                                    <div class="text-[7pt] font-black text-amber-900 bg-amber-100 border border-amber-400 px-1 py-0.5 mb-1 rounded">[PERINGATAN: NAMA MELEBIHI 1 HALAMAN]</div>
+                                @endif
+                                <div class="item-name">{{ $name }}</div>
                             </td>
                             <td class="td-qty">
                                 <span class="qty-val">{{ (int) $tree->quantity_pcs }}</span>
@@ -327,8 +465,8 @@
                     @endforeach
 
                     @php
-                        $remainingHeight = 308 - $usedHeight;
-                        $fillerCount = max(0, (int) floor($remainingHeight / $singleHeightDots));
+                        $remainingHeight = max(0, $maxTableHeight - $page['usedHeight']);
+                        $fillerCount = (int) floor($remainingHeight / $singleHeight);
                     @endphp
                     @for($i = 0; $i < $fillerCount; $i++)
                         <tr class="item-row row-empty {{ $i === $fillerCount - 1 ? 'row-last-filler' : '' }}">

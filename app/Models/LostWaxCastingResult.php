@@ -41,6 +41,14 @@ class LostWaxCastingResult extends Model
     }
 
     /**
+     * Issued Kitir Produksi records associated with this casting result.
+     */
+    public function kitirs()
+    {
+        return $this->hasMany(\App\Models\LostWaxKitir::class, 'lost_wax_casting_result_id');
+    }
+
+    /**
      * User who recorded this casting result.
      */
     public function recorder()

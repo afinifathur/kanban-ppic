@@ -134,10 +134,23 @@ class LostWaxCastingResultController extends Controller
      */
     public function show(LostWaxCastingResult $castingResult)
     {
-        $castingResult->load(['trees.tree', 'recorder', 'voider']);
+        $castingResult->load(['trees.tree', 'recorder', 'voider', 'kitirs']);
+
+        $kitirGroups = collect();
+        $kitirError = null;
+        if ($castingResult->is_completed) {
+            try {
+                $kitirResolver = app(\App\Services\LostWax\LostWaxKitirResolverService::class);
+                $kitirGroups = $kitirResolver->resolveGroups($castingResult);
+            } catch (\Throwable $e) {
+                $kitirError = $e->getMessage();
+            }
+        }
 
         return view('lost-wax.casting-results.show', [
             'castingResult' => $castingResult,
+            'kitirGroups' => $kitirGroups,
+            'kitirError' => $kitirError,
         ]);
     }
 
