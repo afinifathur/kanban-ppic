@@ -131,52 +131,52 @@ class LostWaxKitirResolverService
             throw new InvalidArgumentException('Kode Produksi tidak boleh kosong.');
         }
 
-        return DB::transaction(function () use ($castingResult, $productionCode, $user, $issueDate) {
-            // Lock parent casting result
-            $header = LostWaxCastingResult::where('id', $castingResult->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+        $targetDate = $issueDate ?? Carbon::today()->format('Y-m-d');
 
-            if ($header->status === 'CANCELLED') {
-                throw new InvalidArgumentException("Transaksi Hasil Cor Heat [{$header->heat_number}] berstatus DIBATALKAN dan tidak dapat menerbitkan Kitir Produksi.");
-            }
+        return LostWaxTravelerNumberGenerator::executeWithRetry(function (string $travelerNumber) use ($castingResult, $productionCode, $user) {
+            return DB::transaction(function () use ($castingResult, $productionCode, $user, $travelerNumber) {
+                // Lock parent casting result
+                $header = LostWaxCastingResult::where('id', $castingResult->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            // 1. Check if Kitir already exists
-            $existing = LostWaxKitir::where('lost_wax_casting_result_id', $header->id)
-                ->where('production_code', $productionCode)
-                ->lockForUpdate()
-                ->first();
+                if ($header->status === 'CANCELLED') {
+                    throw new InvalidArgumentException("Transaksi Hasil Cor Heat [{$header->heat_number}] berstatus DIBATALKAN dan tidak dapat menerbitkan Kitir Produksi.");
+                }
 
-            if ($existing) {
-                return $existing;
-            }
+                // 1. Check if Kitir already exists
+                $existing = LostWaxKitir::where('lost_wax_casting_result_id', $header->id)
+                    ->where('production_code', $productionCode)
+                    ->lockForUpdate()
+                    ->first();
 
-            // 2. Resolve groups to get validated snapshot data
-            $groups = $this->resolveGroups($header);
-            $targetGroup = $groups->firstWhere('production_code', $productionCode);
+                if ($existing) {
+                    return $existing;
+                }
 
-            if (! $targetGroup) {
-                throw new InvalidArgumentException("Kelompok Kode Produksi [{$productionCode}] tidak ditemukan pada Heat [{$header->heat_number}].");
-            }
+                // 2. Resolve groups to get validated snapshot data
+                $groups = $this->resolveGroups($header);
+                $targetGroup = $groups->firstWhere('production_code', $productionCode);
 
-            // 3. Generate sequential PFKTR number
-            $targetDate = $issueDate ?? Carbon::today()->format('Y-m-d');
-            $travelerNumber = LostWaxTravelerNumberGenerator::generateNext($targetDate);
+                if (! $targetGroup) {
+                    throw new InvalidArgumentException("Kelompok Kode Produksi [{$productionCode}] tidak ditemukan pada Heat [{$header->heat_number}].");
+                }
 
-            // 4. Create Kitir record permanently
-            return LostWaxKitir::create([
-                'lost_wax_casting_result_id' => $header->id,
-                'traveler_number' => $travelerNumber,
-                'production_code' => $targetGroup['production_code'],
-                'customer' => $targetGroup['customer'],
-                'item_name' => $targetGroup['item_name'],
-                'tree_count' => $targetGroup['tree_count'],
-                'quantity_pcs' => $targetGroup['quantity_pcs'],
-                'print_count' => 0,
-                'issued_at' => Carbon::now(),
-                'issued_by' => $user->id,
-            ]);
-        });
+                // 3. Create Kitir record permanently
+                return LostWaxKitir::create([
+                    'lost_wax_casting_result_id' => $header->id,
+                    'traveler_number' => $travelerNumber,
+                    'production_code' => $targetGroup['production_code'],
+                    'customer' => $targetGroup['customer'],
+                    'item_name' => $targetGroup['item_name'],
+                    'tree_count' => $targetGroup['tree_count'],
+                    'quantity_pcs' => $targetGroup['quantity_pcs'],
+                    'print_count' => 0,
+                    'issued_at' => Carbon::now(),
+                    'issued_by' => $user->id,
+                ]);
+            });
+        }, $targetDate);
     }
 
     /**
@@ -259,4 +259,3 @@ class LostWaxKitirResolverService
         ];
     }
 }
-

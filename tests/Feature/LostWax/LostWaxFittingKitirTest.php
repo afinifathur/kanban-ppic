@@ -21,8 +21,11 @@ class LostWaxFittingKitirTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $ppicUser;
+
     protected User $unauthorizedUser;
+
     protected static int $seq = 8000;
 
     protected function setUp(): void
@@ -73,13 +76,13 @@ class LostWaxFittingKitirTest extends TestCase
     /**
      * Helper to create a completed casting result with specified tree overrides.
      *
-     * @param array<int, array{code: string, qty: int, gross?: int, defect?: int, customer?: string, item?: string, barcode?: string}> $treeSpecs
+     * @param  array<int, array{code: string, qty: int, gross?: int, defect?: int, customer?: string, item?: string, barcode?: string}>  $treeSpecs
      */
     protected function createCastingResult(array $treeSpecs, string $status = 'COMPLETED', ?string $heatNumber = null): LostWaxCastingResult
     {
         $totalPcs = array_sum(array_column($treeSpecs, 'qty'));
         $totalTrees = count($treeSpecs);
-        $heat = $heatNumber ?? 'HEAT-TEST-' . (self::$seq++);
+        $heat = $heatNumber ?? 'HEAT-TEST-'.(self::$seq++);
 
         $res = LostWaxCastingResult::create([
             'heat_number' => $heat,
@@ -534,5 +537,139 @@ class LostWaxFittingKitirTest extends TestCase
         );
 
         $response->assertStatus(403);
+    }
+
+    /**
+     * 19. Generator me-retry otomatis saat terjadi benturan sequence nomor traveler (uk_lw_kitirs_traveler).
+     */
+    public function test_19_generator_retries_on_duplicate_traveler_collision_and_succeeds(): void
+    {
+        $date = '2026-11-17';
+        $attemptsMade = 0;
+
+        // Pre-create a kitir with candidate PFKTR-20261117-0001
+        $res = $this->createCastingResult([['code' => 'LWDEMO001', 'qty' => 10]]);
+        LostWaxKitir::create([
+            'lost_wax_casting_result_id' => $res->id,
+            'traveler_number' => 'PFKTR-20261117-0001',
+            'production_code' => 'LWDEMO001',
+            'tree_count' => 1,
+            'quantity_pcs' => 10,
+        ]);
+
+        $result = LostWaxTravelerNumberGenerator::executeWithRetry(function (string $candidate) use (&$attemptsMade, $res) {
+            $attemptsMade++;
+
+            if ($attemptsMade === 1) {
+                // Simulate collision on attempt 1 by attempting to insert duplicate PFKTR-20261117-0001
+                return LostWaxKitir::create([
+                    'lost_wax_casting_result_id' => $res->id,
+                    'traveler_number' => 'PFKTR-20261117-0001', // Collides with uk_lw_kitirs_traveler
+                    'production_code' => 'LWDEMO002',
+                    'tree_count' => 1,
+                    'quantity_pcs' => 10,
+                ]);
+            }
+
+            // On attempt 2, insert with provided candidate
+            return LostWaxKitir::create([
+                'lost_wax_casting_result_id' => $res->id,
+                'traveler_number' => $candidate,
+                'production_code' => 'LWDEMO002',
+                'tree_count' => 1,
+                'quantity_pcs' => 10,
+            ]);
+        }, $date, 3);
+
+        $this->assertEquals(2, $attemptsMade, 'Harus mencoba tepat 2 kali');
+        $this->assertEquals('PFKTR-20261117-0002', $result->traveler_number);
+        $this->assertDatabaseHas('lost_wax_kitirs', ['traveler_number' => 'PFKTR-20261117-0002']);
+    }
+
+    /**
+     * 20. Generator melempar exception informatif setelah 3 kali benturan sequence berturut-turut.
+     */
+    public function test_20_generator_exhausts_retries_after_three_attempts_and_throws_informative_exception(): void
+    {
+        $date = '2026-11-17';
+        $attemptsMade = 0;
+
+        $res = $this->createCastingResult([['code' => 'LWDEMO001', 'qty' => 10]]);
+        LostWaxKitir::create([
+            'lost_wax_casting_result_id' => $res->id,
+            'traveler_number' => 'PFKTR-20261117-0001',
+            'production_code' => 'LWDEMO001',
+            'tree_count' => 1,
+            'quantity_pcs' => 10,
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Gagal menerbitkan nomor Kitir Produksi (PFKTR) setelah 3 kali percobaan');
+
+        try {
+            LostWaxTravelerNumberGenerator::executeWithRetry(function (string $candidate) use (&$attemptsMade, $res) {
+                $attemptsMade++;
+
+                // Force duplicate key collision every time
+                return LostWaxKitir::create([
+                    'lost_wax_casting_result_id' => $res->id,
+                    'traveler_number' => 'PFKTR-20261117-0001',
+                    'production_code' => 'LWDEMO002',
+                    'tree_count' => 1,
+                    'quantity_pcs' => 10,
+                ]);
+            }, $date, 3);
+        } finally {
+            $this->assertEquals(3, $attemptsMade);
+        }
+    }
+
+    /**
+     * 21. Generator tidak me-retry error non-collision (misal validation error atau koneksi).
+     */
+    public function test_21_generator_does_not_retry_non_collision_errors(): void
+    {
+        $date = '2026-11-17';
+        $attemptsMade = 0;
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Custom business error');
+
+        try {
+            LostWaxTravelerNumberGenerator::executeWithRetry(function (string $candidate) use (&$attemptsMade) {
+                $attemptsMade++;
+                throw new \InvalidArgumentException('Custom business error');
+            }, $date, 3);
+        } finally {
+            $this->assertEquals(1, $attemptsMade, 'Non-collision error tidak boleh di-retry');
+        }
+    }
+
+    /**
+     * 22. Proteksi Foreign Key RESTRICT: verifikasi keberadaan migration dan aturan ON DELETE.
+     */
+    public function test_22_foreign_key_restrict_migration_configured(): void
+    {
+        $driver = \Illuminate\Support\Facades\Schema::getConnection()->getDriverName();
+
+        if ($driver === 'mysql') {
+            $fkInfo = \Illuminate\Support\Facades\DB::select("
+                SELECT DELETE_RULE
+                FROM information_schema.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'lost_wax_kitirs'
+                  AND CONSTRAINT_NAME = 'fk_lw_kitirs_result'
+            ");
+
+            $this->assertNotEmpty($fkInfo);
+            $this->assertEquals('RESTRICT', $fkInfo[0]->DELETE_RULE);
+        } else {
+            // SQLite environment: Verify migration file exists and contains restrictOnDelete
+            $migrationFile = database_path('migrations/2026_11_17_180000_update_foreign_key_to_restrict_on_lost_wax_kitirs_table.php');
+            $this->assertFileExists($migrationFile);
+            $content = file_get_contents($migrationFile);
+            $this->assertStringContainsString('restrictOnDelete()', $content);
+            $this->assertStringContainsString('fk_lw_kitirs_result', $content);
+        }
     }
 }
