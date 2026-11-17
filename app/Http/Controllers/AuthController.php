@@ -20,12 +20,15 @@ class AuthController extends Controller
         ]);
 
         $credentials['email'] = strtolower(trim((string) $credentials['email']));
-        $scannerEmails = array_map(
+        $persistentEmails = array_map(
             fn ($e) => strtolower(trim((string) $e)),
-            (array) config('lost_wax.scanner_emails', [])
+            array_merge(
+                (array) config('auth.persistent_remember_emails', []),
+                (array) config('lost_wax.scanner_emails', [])
+            )
         );
 
-        $remember = in_array($credentials['email'], $scannerEmails, true) || $request->boolean('remember');
+        $remember = in_array($credentials['email'], $persistentEmails, true) || $request->boolean('remember');
 
         if (Auth::attempt($credentials, $remember)) {
             $request->session()->regenerate();

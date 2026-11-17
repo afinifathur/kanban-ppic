@@ -1880,6 +1880,58 @@
         }
     }
 
+    const AUTH_RELOAD_STORAGE_KEY = 'sand_casting_dashboard_auth_reload';
+
+    function clearAuthRecoveryState() {
+        try {
+            sessionStorage.removeItem(AUTH_RELOAD_STORAGE_KEY);
+        } catch (e) {
+            // Ignore storage errors
+        }
+    }
+
+    function handleAuthRecovery(status) {
+        console.warn(`[Dashboard Auth] Menerima HTTP ${status} (Sesi/Kredensial kedaluwarsa). Memeriksa recovery reload.`);
+
+        const now = Date.now();
+        let state = { count: 0, firstAttempt: now, lastAttempt: now };
+
+        try {
+            const stored = sessionStorage.getItem(AUTH_RELOAD_STORAGE_KEY);
+            if (stored) {
+                state = JSON.parse(stored);
+            }
+        } catch (e) {
+            // Ignore parse error
+        }
+
+        // Window: 2 menit (120 detik). Jika dalam 2 menit sudah reload >= 2 kali, cegah infinite loop
+        const isWithinWindow = (now - state.firstAttempt) < 120000;
+        const currentCount = isWithinWindow ? (state.count + 1) : 1;
+        const firstAttempt = isWithinWindow ? state.firstAttempt : now;
+
+        try {
+            sessionStorage.setItem(AUTH_RELOAD_STORAGE_KEY, JSON.stringify({
+                count: currentCount,
+                firstAttempt: firstAttempt,
+                lastAttempt: now
+            }));
+        } catch (e) {
+            // Ignore storage errors
+        }
+
+        if (currentCount > 2) {
+            console.error('[Dashboard Auth] Batas recovery reload tercapai (mencegah infinite loop). Menampilkan status OFFLINE.');
+            consecutiveFailures = Math.max(consecutiveFailures, 4);
+            evaluateHeartbeat();
+            return;
+        }
+
+        // Lakukan reload halaman agar browser mengirim cookie Remember-Me untuk login ulang secara transparan
+        console.info(`[Dashboard Auth] Memicu reload halaman (Percobaan ${currentCount}/2)...`);
+        window.location.reload();
+    }
+
     // Polling function
     async function pollDashboardData(isManual = false) {
         if (isPolling) return;
@@ -1900,10 +1952,18 @@
             });
 
             if (!response.ok) {
+                if (response.status === 401 || response.status === 419) {
+                    handleAuthRecovery(response.status);
+                    return;
+                }
+
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
             const data = await response.json();
+
+            // Clear any previous auth recovery reload attempt tracking on success
+            clearAuthRecoveryState();
 
             // Store latest received data for dropdown stage switching
             window.latestDashboardData = data;

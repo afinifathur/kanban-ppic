@@ -112,4 +112,19 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Persistent Remember-Me Accounts
+    |--------------------------------------------------------------------------
+    |
+    | Accounts that automatically receive persistent Remember-Me authentication
+    | on login (e.g. factory floor scanners, 24/7 TV display dashboards).
+    |
+    */
+
+    'persistent_remember_emails' => [
+        'spvlapisan@peroniks.com',
+        'auditor@peroniks.com',
+    ],
+
 ];
