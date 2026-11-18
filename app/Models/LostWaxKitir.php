@@ -64,5 +64,36 @@ class LostWaxKitir extends Model
     {
         return $this->print_count > 0;
     }
-}
 
+    /**
+     * Active Fitting Production traveler item linked via active_kitir_id (read-only bridge relation).
+     */
+    public function activeFittingItem()
+    {
+        return $this->hasOne(\App\Models\FittingItem::class, 'active_kitir_id');
+    }
+
+    /**
+     * All Fitting Production traveler items (including cancelled transfer history).
+     */
+    public function fittingItems()
+    {
+        return $this->hasMany(\App\Models\FittingItem::class, 'lost_wax_kitir_id');
+    }
+
+    /**
+     * Active NOT_CONTINUED decision linked via active_kitir_id (read-only bridge relation).
+     */
+    public function activeFittingDecision()
+    {
+        return $this->hasOne(\App\Models\FittingKitirDecision::class, 'active_kitir_id');
+    }
+
+    /**
+     * All Fitting kitir decisions (including REOPENED audit history).
+     */
+    public function fittingDecisions()
+    {
+        return $this->hasMany(\App\Models\FittingKitirDecision::class, 'lost_wax_kitir_id');
+    }
+}

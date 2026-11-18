@@ -245,7 +245,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/casting-results/{castingResult}/print-thermal', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'queueThermalPrint'])->name('casting-results.queue-thermal');
             Route::post('/casting-results/{castingResult}/cancel', [\App\Http\Controllers\LostWax\LostWaxCastingResultController::class, 'cancel'])->name('casting-results.cancel');
 
-            // Kitir Produksi Fitting (A4 Landscape)
+            // Kitir Produksi Fitting (A4 Landscape) & Penerbitan Tanpa Cetak
+            Route::post('/casting-results/{castingResult}/kitir-issue-all', [\App\Http\Controllers\LostWax\LostWaxKitirController::class, 'issueAll'])->name('casting-results.kitir.issue-all');
+            Route::post('/casting-results/{castingResult}/kitir-issue/{code}', [\App\Http\Controllers\LostWax\LostWaxKitirController::class, 'issue'])->where('code', '.*')->name('casting-results.kitir.issue');
             Route::get('/casting-results/{castingResult}/kitir-all', [\App\Http\Controllers\LostWax\LostWaxKitirController::class, 'printAll'])->name('casting-results.kitir.all');
             Route::get('/casting-results/{castingResult}/kitir/{code}', [\App\Http\Controllers\LostWax\LostWaxKitirController::class, 'print'])->where('code', '.*')->name('casting-results.kitir.print');
         });
@@ -361,6 +363,50 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware(['permission:access_planning|access_execution|access_auditor_visibility'])->group(function () {
             Route::get('/dashboard', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'index'])->name('dashboard');
             Route::get('/dashboard/data', [\App\Http\Controllers\SandCasting\SandCastingDashboardController::class, 'data'])->name('dashboard.data');
+        });
+    });
+
+    // Fitting Production Routes (Bounded Context — Authorization strictly via FittingStageAuthorizationService)
+    Route::prefix('fitting')->name('fitting.')->group(function () {
+        Route::prefix('transfers')->name('transfers.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'store'])->name('store');
+            Route::post('/items/{fittingItem}/cancel', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'cancelItem'])->name('items.cancel');
+            Route::post('/kitirs/{kitir}/not-continued', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'markNotContinued'])->name('kitirs.not-continued');
+            Route::post('/decisions/{decision}/reopen', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'reopenDecision'])->name('decisions.reopen');
+        });
+
+        // Fitting Operational Kanban Floor (Phase 3)
+        Route::prefix('kanban')->name('kanban.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'index'])->name('index');
+            Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'reorder'])->name('reorder');
+            Route::get('/stage/{stage}', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'show'])->name('stage');
+            Route::get('/{stage}', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'show'])->name('show');
+        });
+
+        // Fitting Production Floor Scanner (Phase 3)
+        Route::prefix('scan')->name('scan.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Fitting\FittingScanController::class, 'index'])->name('index');
+            Route::get('/stage/{stage}', [\App\Http\Controllers\Fitting\FittingScanController::class, 'scanStage'])->name('stage');
+            Route::get('/pfktr/{travelerNumber}', [\App\Http\Controllers\Fitting\FittingScanController::class, 'lookupPfktr'])->where('travelerNumber', '.*')->name('pfktr');
+            Route::get('/heat/{heatNumber}', [\App\Http\Controllers\Fitting\FittingScanController::class, 'lookupHeat'])->where('heatNumber', '.*')->name('heat');
+            Route::post('/{stage}/execute', [\App\Http\Controllers\Fitting\FittingScanController::class, 'execute'])->name('execute');
+        });
+
+        // Fitting Defect Recording Routes (Phase 4 — Admin PPIC Fitting + System Admin)
+        Route::prefix('defects')->name('defects.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Fitting\FittingDefectController::class, 'index'])->name('index');
+            Route::post('/{execution}/record', [\App\Http\Controllers\Fitting\FittingDefectController::class, 'record'])->name('record');
+            Route::post('/{execution}/adjust', [\App\Http\Controllers\Fitting\FittingDefectController::class, 'adjust'])->name('adjust');
+        });
+
+        // Fitting QC Defect Verification Routes (Phase 4 & 4.1 — Admin QC Fitting + System Admin)
+        Route::prefix('qc-defects')->name('qc-defects.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'index'])->name('index');
+            Route::post('/{execution}/save-draft', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'saveDraft'])->name('save-draft');
+            Route::post('/{execution}/verify', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'verify'])->name('verify');
+            Route::post('/{execution}/return', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'returnForCorrection'])->name('return');
+            Route::post('/{execution}/reopen', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'reopen'])->name('reopen');
         });
     });
 

@@ -22,6 +22,60 @@ class LostWaxKitirController extends Controller
     ) {}
 
     /**
+     * Issue a single Kitir Produksi Fitting (PFKTR) without printing (print_count remains 0).
+     * Idempotent: repeated calls return the existing Kitir without creating duplicates or mutating print_count.
+     */
+    public function issue(Request $request, LostWaxCastingResult $castingResult, string $code)
+    {
+        $productionCode = urldecode($code);
+
+        try {
+            $kitir = $this->kitirService->issueOrGetKitir($castingResult, $productionCode, auth()->user());
+
+            $message = $kitir->wasRecentlyCreated
+                ? "Kitir Produksi [{$kitir->traveler_number}] untuk Kode Produksi [{$kitir->production_code}] berhasil diterbitkan tanpa cetak dan siap ditransfer ke Fitting Production."
+                : "Kitir Produksi [{$kitir->traveler_number}] untuk Kode Produksi [{$kitir->production_code}] sudah diterbitkan sebelumnya.";
+
+            return redirect()
+                ->route('lost-wax.casting-results.show', $castingResult)
+                ->with('success', $message);
+        } catch (InvalidArgumentException $e) {
+            return redirect()
+                ->route('lost-wax.casting-results.show', $castingResult)
+                ->withErrors(['general' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Issue all unissued Kitir Produksi Fitting (PFKTR) for a Casting Result without printing.
+     * Safe and idempotent when some or all Kitirs have already been issued.
+     */
+    public function issueAll(Request $request, LostWaxCastingResult $castingResult)
+    {
+        try {
+            $allKitirs = $this->kitirService->issueAllKitirs($castingResult, auth()->user());
+            $newlyIssued = $allKitirs->filter(fn ($k) => $k->wasRecentlyCreated)->count();
+            $alreadyIssued = $allKitirs->count() - $newlyIssued;
+
+            if ($newlyIssued > 0 && $alreadyIssued > 0) {
+                $message = "Berhasil menerbitkan {$newlyIssued} Kitir Produksi baru ({$alreadyIssued} Kitir sudah terbit sebelumnya). Seluruh {$allKitirs->count()} Kitir kini siap ditransfer ke Fitting Production.";
+            } elseif ($newlyIssued > 0) {
+                $message = "Berhasil menerbitkan {$newlyIssued} Kitir Produksi tanpa cetak. Seluruh Kitir kini siap ditransfer ke Fitting Production.";
+            } else {
+                $message = "Seluruh {$allKitirs->count()} Kitir Produksi pada Heat [{$castingResult->heat_number}] sudah diterbitkan sebelumnya.";
+            }
+
+            return redirect()
+                ->route('lost-wax.casting-results.show', $castingResult)
+                ->with('success', $message);
+        } catch (InvalidArgumentException $e) {
+            return redirect()
+                ->route('lost-wax.casting-results.show', $castingResult)
+                ->withErrors(['general' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * Display printable Kitir Produksi Fitting (A4 Landscape) for a specific Production Code group.
      */
     public function print(Request $request, LostWaxCastingResult $castingResult, string $code)
@@ -112,4 +166,3 @@ class LostWaxKitirController extends Controller
         ];
     }
 }
-

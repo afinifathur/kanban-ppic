@@ -94,6 +94,7 @@ class LostWaxKitirResolverService
                 'quantity_pcs' => $qtyPcs,
                 'barcodes' => $barcodes,
                 'is_issued' => $existingKitir !== null,
+                'is_printed' => $existingKitir !== null && $existingKitir->print_count > 0,
                 'kitir' => $existingKitir,
                 'traveler_number' => $existingKitir?->traveler_number,
                 'print_count' => $existingKitir ? $existingKitir->print_count : 0,

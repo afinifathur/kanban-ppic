@@ -74,6 +74,13 @@
     </div>
     @endif
 
+    @if($errors->has('general'))
+    <div class="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-center gap-3 shadow-sm">
+        <i class="fas fa-exclamation-circle text-rose-500 text-base shrink-0"></i>
+        <div class="text-xs font-medium leading-relaxed">{{ $errors->first('general') }}</div>
+    </div>
+    @endif
+
     <!-- Cancelled Warning Banner -->
     @if($castingResult->is_cancelled)
     <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-900 shadow-sm">
@@ -174,12 +181,27 @@
                     1 Dokumen Kitir (A4 Landscape) per Kode Produksi unik untuk pengiring proses lanjutan di departemen Fitting.
                 </p>
             </div>
+            @php
+                $unissuedKitirCount = !empty($kitirGroups) ? $kitirGroups->where('is_issued', false)->count() : 0;
+                $canIssueKitir = Auth::user() && !Auth::user()->hasRole('admin_qc_fitting');
+            @endphp
             @if($castingResult->is_completed && !empty($kitirGroups) && $kitirGroups->isNotEmpty())
-            <a href="{{ route('lost-wax.casting-results.kitir.all', $castingResult) }}"
-               target="_blank"
-               class="inline-flex items-center justify-center px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-colors shadow-sm shrink-0">
-                <i class="fas fa-print mr-1.5"></i> Cetak Semua Kitir ({{ $kitirGroups->count() }} Dokumen A4)
-            </a>
+            <div class="flex items-center flex-wrap gap-2 shrink-0">
+                @if($canIssueKitir && $unissuedKitirCount > 0)
+                <form method="POST" action="{{ route('lost-wax.casting-results.kitir.issue-all', $castingResult) }}" class="inline">
+                    @csrf
+                    <button type="submit"
+                            class="inline-flex items-center justify-center px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm">
+                        <i class="fas fa-check-double mr-1.5"></i> Terbitkan Semua Kitir ({{ $unissuedKitirCount }})
+                    </button>
+                </form>
+                @endif
+                <a href="{{ route('lost-wax.casting-results.kitir.all', $castingResult) }}"
+                   target="_blank"
+                   class="inline-flex items-center justify-center px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-colors shadow-sm">
+                    <i class="fas fa-print mr-1.5"></i> Cetak Semua Kitir ({{ $kitirGroups->count() }} Dokumen A4)
+                </a>
+            </div>
             @endif
         </div>
 
@@ -242,25 +264,44 @@
                         </td>
                         <td class="px-4 py-3 text-center">
                             @if($grp['is_issued'])
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    <i class="fas fa-check-circle mr-1"></i> Diterbitkan
+                                <div class="flex flex-col items-center gap-1">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        <i class="fas fa-check-circle mr-1"></i> Sudah Diterbitkan
+                                    </span>
                                     @if($grp['print_count'] > 0)
-                                        <span class="ml-1 text-[9px] text-emerald-600">({{ $grp['print_count'] }}x)</span>
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                            <i class="fas fa-print mr-1"></i> Sudah Dicetak ({{ $grp['print_count'] }}x)
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                            <i class="fas fa-clock mr-1"></i> Belum Dicetak
+                                        </span>
                                     @endif
-                                </span>
+                                </div>
                             @else
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                    Belum Terbit
+                                    Belum Diterbitkan
                                 </span>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-right whitespace-nowrap">
-                            <a href="{{ route('lost-wax.casting-results.kitir.print', ['castingResult' => $castingResult, 'code' => urlencode($grp['production_code'])]) }}"
-                               target="_blank"
-                               class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm {{ $grp['is_issued'] ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-500 hover:bg-amber-600 text-slate-950' }}">
-                                <i class="fas fa-print mr-1.5"></i>
-                                {{ $grp['is_issued'] ? 'Cetak Ulang' : 'Terbitkan & Cetak' }}
-                            </a>
+                            <div class="inline-flex items-center justify-end gap-1.5">
+                                @if(!$grp['is_issued'] && $canIssueKitir)
+                                <form method="POST" action="{{ route('lost-wax.casting-results.kitir.issue', ['castingResult' => $castingResult, 'code' => urlencode($grp['production_code'])]) }}" class="inline">
+                                    @csrf
+                                    <button type="submit"
+                                            class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm">
+                                        <i class="fas fa-check mr-1.5"></i> Terbitkan Kitir
+                                    </button>
+                                </form>
+                                @endif
+                                <a href="{{ route('lost-wax.casting-results.kitir.print', ['castingResult' => $castingResult, 'code' => urlencode($grp['production_code'])]) }}"
+                                   target="_blank"
+                                   class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm {{ $grp['is_issued'] ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' : 'bg-amber-500 hover:bg-amber-600 text-slate-950' }}">
+                                    <i class="fas fa-print mr-1.5"></i>
+                                    {{ $grp['is_issued'] ? ($grp['print_count'] > 0 ? 'Cetak Ulang' : 'Cetak Kitir') : 'Terbitkan & Cetak' }}
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     @endforeach

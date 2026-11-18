@@ -28,12 +28,18 @@ class AuditorUserSeeder extends Seeder
             'guard_name' => 'web',
         ]);
 
-        // 2. Ensure dedicated role auditor exists and only has access_auditor_visibility
+        // 2. Ensure dedicated role auditor exists and only has read-only visibility permissions
+        // Preserve read-only Fitting visibility if already granted by FittingSpvUserSeeder (order-independent)
         $role = Role::firstOrCreate([
             'name' => 'auditor',
             'guard_name' => 'web',
         ]);
-        $role->syncPermissions([$permission]);
+        $preservedFittingPerms = $role->permissions()
+            ->whereIn('name', [
+                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VISIBILITY,
+            ])
+            ->get();
+        $role->syncPermissions($preservedFittingPerms->push($permission)->unique('id'));
 
         // 3. Create or update user without resetting password if user already exists
         $user = User::where('email', self::TARGET_ACCOUNT['email'])->first();
@@ -65,4 +71,3 @@ class AuditorUserSeeder extends Seeder
         }
     }
 }
-

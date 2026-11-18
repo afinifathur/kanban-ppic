@@ -89,6 +89,14 @@
             if (icon) icon.classList.toggle('rotate-90');
         }
 
+        function toggleFittingMenu() {
+            if (typeof handleCollapsedClick === 'function' && handleCollapsedClick('fittingMenu', 'fittingMenuIcon')) return;
+            const menu = document.getElementById('fittingMenu');
+            const icon = document.getElementById('fittingMenuIcon');
+            if (menu) menu.classList.toggle('hidden');
+            if (icon) icon.classList.toggle('rotate-90');
+        }
+
         function toggleSettingsMenu() {
             if (typeof handleCollapsedClick === 'function' && handleCollapsedClick('settingsMenu', 'settingsMenuIcon')) return;
             const menu = document.getElementById('settingsMenu');
@@ -251,6 +259,57 @@
                             <span class="text-sm sidebar-text ml-2">Scanner</span>
                         </a>
                     </li>
+                @elseif(Auth::user() && Auth::user()->hasRole('spv_fitting') && Auth::user()->assigned_stage)
+                    <!-- OPERASIONAL (SPV FITTING PRODUCTION) -->
+                    @php
+                        $hasAllFittingKanban = \App\Services\Fitting\FittingStageAuthorizationService::hasFullKanbanVisibility(Auth::user());
+                        $fittingStageCode = \App\Services\Fitting\FittingStageAuthorizationService::normalizeStage(Auth::user()->assigned_stage);
+                        $fittingStageSlug = str_replace('_', '-', $fittingStageCode ?? Auth::user()->assigned_stage);
+                        $fittingStageLabel = \App\Services\Fitting\FittingStageAuthorizationService::STAGE_LABELS[$fittingStageCode] ?? strtoupper($fittingStageSlug);
+                        $fittingKanbanUrl = $hasAllFittingKanban
+                            ? (\Illuminate\Support\Facades\Route::has('fitting.kanban.index') ? route('fitting.kanban.index') : null)
+                            : (\Illuminate\Support\Facades\Route::has('fitting.kanban.show') ? route('fitting.kanban.show', $fittingStageSlug) : null);
+                        $fittingScanUrl = \Illuminate\Support\Facades\Route::has('fitting.scan.stage')
+                            ? route('fitting.scan.stage', $fittingStageSlug)
+                            : null;
+                    @endphp
+                    <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-emerald-400 uppercase">
+                        <span class="sidebar-text">Operasional Fitting</span>
+                    </li>
+                    <li>
+                        @if($fittingKanbanUrl)
+                            <a href="{{ $fittingKanbanUrl }}"
+                                class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.kanban.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                title="Kanban Floor Fitting">
+                                <i class="fas fa-columns w-6 shrink-0 text-center"></i>
+                                <span class="text-sm sidebar-text ml-2">Kanban Floor</span>
+                            </a>
+                        @else
+                            <div class="sidebar-link flex items-center px-6 py-2.5 text-slate-400 cursor-default"
+                                title="Kanban Floor Fitting ({{ $hasAllFittingKanban ? 'Semua Stage' : $fittingStageLabel }}) — Fase 3">
+                                <i class="fas fa-columns w-6 shrink-0 text-center opacity-70"></i>
+                                <span class="text-sm sidebar-text ml-2">Kanban Floor</span>
+                                <span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 sidebar-text">{{ $hasAllFittingKanban ? 'ALL' : $fittingStageLabel }}</span>
+                            </div>
+                        @endif
+                    </li>
+                    <li>
+                        @if($fittingScanUrl)
+                            <a href="{{ $fittingScanUrl }}"
+                                class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.scan.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                title="Scanner Fitting">
+                                <i class="fas fa-qrcode w-6 shrink-0 text-center"></i>
+                                <span class="text-sm sidebar-text ml-2">Scanner</span>
+                            </a>
+                        @else
+                            <div class="sidebar-link flex items-center px-6 py-2.5 text-slate-400 cursor-default"
+                                title="Scanner Fitting ({{ $fittingStageLabel }}) — Fase 3">
+                                <i class="fas fa-qrcode w-6 shrink-0 text-center opacity-70"></i>
+                                <span class="text-sm sidebar-text ml-2">Scanner</span>
+                                <span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 sidebar-text">{{ $fittingStageLabel }}</span>
+                            </div>
+                        @endif
+                    </li>
                 @elseif(Auth::user() && Auth::user()->hasRole('sales'))
                     <!-- SALES VISIBILITY -->
                     <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
@@ -284,6 +343,36 @@
                             <span class="text-sm sidebar-text ml-2">Production Status</span>
                         </a>
                     </li>
+
+                    @php
+                        $salesHasFittingRoutes = \Illuminate\Support\Facades\Route::has('fitting.kanban.index')
+                            || \Illuminate\Support\Facades\Route::has('fitting.production-status.index');
+                    @endphp
+                    @if($salesHasFittingRoutes && \App\Services\Fitting\FittingStageAuthorizationService::canViewProductionStatus(Auth::user()))
+                        <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-emerald-400 uppercase">
+                            <span class="sidebar-text">Fitting Production</span>
+                        </li>
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.kanban.index'))
+                            <li>
+                                <a href="{{ route('fitting.kanban.index') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.kanban.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Kanban Floor Fitting">
+                                    <i class="fas fa-th-list w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Kanban Floor</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.production-status.index'))
+                            <li>
+                                <a href="{{ route('fitting.production-status.index') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.production-status.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Production Status Fitting">
+                                    <i class="fas fa-table w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Production Status</span>
+                                </a>
+                            </li>
+                        @endif
+                    @endif
                 @elseif(Auth::user() && Auth::user()->hasRole('auditor'))
                     <!-- AUDITOR VISIBILITY (READ-ONLY) -->
                     <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
@@ -357,6 +446,69 @@
                             <span class="text-sm sidebar-text ml-2">Report Produksi</span>
                         </a>
                     </li>
+
+                    @php
+                        $auditorHasFittingRoutes = \Illuminate\Support\Facades\Route::has('fitting.dashboard')
+                            || \Illuminate\Support\Facades\Route::has('fitting.kanban.index')
+                            || \Illuminate\Support\Facades\Route::has('fitting.production-status.index')
+                            || \Illuminate\Support\Facades\Route::has('fitting.report.production.index')
+                            || \Illuminate\Support\Facades\Route::has('fitting.report.qc-defects.index');
+                    @endphp
+                    @if($auditorHasFittingRoutes && \App\Services\Fitting\FittingStageAuthorizationService::canViewProductionStatus(Auth::user()))
+                        <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-emerald-400 uppercase">
+                            <span class="sidebar-text">Fitting Production</span>
+                        </li>
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.dashboard'))
+                            <li>
+                                <a href="{{ route('fitting.dashboard') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.dashboard*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Dashboard Fitting">
+                                    <i class="fas fa-tachometer-alt w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Dashboard</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.kanban.index'))
+                            <li>
+                                <a href="{{ route('fitting.kanban.index') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.kanban.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Kanban Floor Fitting">
+                                    <i class="fas fa-th-list w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Kanban Floor</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.production-status.index'))
+                            <li>
+                                <a href="{{ route('fitting.production-status.index') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.production-status.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Production Status Fitting">
+                                    <i class="fas fa-table w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Production Status</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.report.production.index'))
+                            <li>
+                                <a href="{{ route('fitting.report.production.index') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.report.production.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Laporan Produksi Fitting">
+                                    <i class="fas fa-file-alt w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Laporan Produksi</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\Illuminate\Support\Facades\Route::has('fitting.report.qc-defects.index'))
+                            <li>
+                                <a href="{{ route('fitting.report.qc-defects.index') }}"
+                                    class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('fitting.report.qc-defects.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                                    title="Laporan Defect QC Fitting">
+                                    <i class="fas fa-file-signature w-6 shrink-0 text-center"></i>
+                                    <span class="text-sm sidebar-text ml-2">Laporan Defect (QC)</span>
+                                </a>
+                            </li>
+                        @endif
+                    @endif
                 @else
                 <!-- 1. DASHBOARD -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
@@ -645,6 +797,122 @@
                         </li>
                     </ul>
                 </li>
+
+                @php
+                    $fittingAuth = app(\App\Services\Fitting\FittingStageAuthorizationService::class);
+                    $fittingMenuUser = Auth::user();
+                    $hasVisibleFittingLinks = $fittingMenuUser && \App\Services\Fitting\FittingStageAuthorizationService::canAccessFittingModule($fittingMenuUser) && (
+                        (\App\Services\Fitting\FittingStageAuthorizationService::canViewDashboard($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.dashboard'))
+                        || ($fittingAuth->canTransferKitir($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.transfers.index'))
+                        || (\App\Services\Fitting\FittingStageAuthorizationService::hasFullKanbanVisibility($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.kanban.index'))
+                        || (\App\Services\Fitting\FittingStageAuthorizationService::canViewProductionStatus($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.production-status.index'))
+                        || ($fittingAuth->canRecordDefect($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.defects.index'))
+                        || ($fittingAuth->canVerifyQc($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.qc-defects.index'))
+                        || (\App\Services\Fitting\FittingStageAuthorizationService::canViewReports($fittingMenuUser) && (
+                            \Illuminate\Support\Facades\Route::has('fitting.report.production.index')
+                            || \Illuminate\Support\Facades\Route::has('fitting.report.qc-defects.index')
+                        ))
+                    );
+                @endphp
+                @if($hasVisibleFittingLinks)
+                <!-- 4B. FITTING PRODUCTION -->
+                <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
+                    <span class="sidebar-text">Fitting Production</span>
+                </li>
+                <li>
+                    <button onclick="toggleFittingMenu()"
+                        class="w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-colors focus:outline-none group {{ request()->is('fitting*') ? 'bg-slate-800/80 text-emerald-400 border-l-4 border-emerald-500 font-bold' : '' }}"
+                        title="Fitting Production">
+                        <i class="fas fa-cubes w-6 shrink-0 text-center mr-2 {{ request()->is('fitting*') ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-300' }}"></i>
+                        <span class="text-xs font-semibold uppercase group-hover:text-slate-300 sidebar-text {{ request()->is('fitting*') ? 'text-emerald-400' : 'text-slate-500' }}">Fitting Production</span>
+                        <i id="fittingMenuIcon"
+                            class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-200 ml-auto {{ request()->is('fitting*') ? 'rotate-90 text-emerald-400' : '' }}"></i>
+                    </button>
+                    <ul id="fittingMenu"
+                        class="{{ request()->is('fitting*') ? '' : 'hidden' }} space-y-1 bg-slate-800/30 pb-2">
+                        @if(\App\Services\Fitting\FittingStageAuthorizationService::canViewDashboard($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.dashboard'))
+                            <li>
+                                <a href="{{ route('fitting.dashboard') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.dashboard*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                    title="Fitting Dashboard">
+                                    <i class="fas fa-tachometer-alt w-4 shrink-0 text-center text-xs text-emerald-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Fitting Dashboard</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if($fittingAuth->canTransferKitir($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.transfers.index'))
+                            <li>
+                                <a href="{{ route('fitting.transfers.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.transfers.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                    title="Transfer Kitir">
+                                    <i class="fas fa-exchange-alt w-4 shrink-0 text-center text-xs text-emerald-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Transfer Kitir</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\App\Services\Fitting\FittingStageAuthorizationService::hasFullKanbanVisibility($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.kanban.index'))
+                            <li>
+                                <a href="{{ route('fitting.kanban.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.kanban.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                    title="Kanban Floor Fitting">
+                                    <i class="fas fa-th-list w-4 shrink-0 text-center text-xs text-emerald-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Kanban Floor</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\App\Services\Fitting\FittingStageAuthorizationService::canViewProductionStatus($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.production-status.index'))
+                            <li>
+                                <a href="{{ route('fitting.production-status.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.production-status.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                    title="Production Status Fitting">
+                                    <i class="fas fa-table w-4 shrink-0 text-center text-xs text-emerald-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Production Status</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if($fittingAuth->canRecordDefect($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.defects.index'))
+                            <li>
+                                <a href="{{ route('fitting.defects.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.defects.*') ? 'text-white font-medium border-l-2 border-rose-500' : 'text-slate-300' }}"
+                                    title="Pencatatan Kerusakan Fitting">
+                                    <i class="fas fa-exclamation-circle w-4 shrink-0 text-center text-xs text-rose-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Pencatatan Kerusakan</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if($fittingAuth->canVerifyQc($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.qc-defects.index'))
+                            <li>
+                                <a href="{{ route('fitting.qc-defects.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.qc-defects.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                    title="Verifikasi Defect QC Fitting">
+                                    <i class="fas fa-check-double w-4 shrink-0 text-center text-xs text-emerald-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Verifikasi Defect (QC)</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\App\Services\Fitting\FittingStageAuthorizationService::canViewReports($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.report.production.index'))
+                            <li>
+                                <a href="{{ route('fitting.report.production.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.report.production.*') ? 'text-white font-medium border-l-2 border-indigo-500' : 'text-slate-300' }}"
+                                    title="Laporan Produksi Fitting">
+                                    <i class="fas fa-file-alt w-4 shrink-0 text-center text-xs text-indigo-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Laporan Produksi</span>
+                                </a>
+                            </li>
+                        @endif
+                        @if(\App\Services\Fitting\FittingStageAuthorizationService::canViewReports($fittingMenuUser) && \Illuminate\Support\Facades\Route::has('fitting.report.qc-defects.index'))
+                            <li>
+                                <a href="{{ route('fitting.report.qc-defects.index') }}"
+                                    class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('fitting.report.qc-defects.*') ? 'text-white font-medium border-l-2 border-blue-500' : 'text-slate-300' }}"
+                                    title="Laporan Defect QC Fitting">
+                                    <i class="fas fa-file-signature w-4 shrink-0 text-center text-xs text-blue-400 mr-2"></i>
+                                    <span class="text-sm sidebar-text">Laporan Defect (QC)</span>
+                                </a>
+                            </li>
+                        @endif
+                    </ul>
+                </li>
+                @endif
 
                 <!-- 5. SETTING -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">

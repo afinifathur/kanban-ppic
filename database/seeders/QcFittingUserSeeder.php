@@ -21,8 +21,18 @@ class QcFittingUserSeeder extends Seeder
         $accessExecution = Permission::firstOrCreate(['name' => 'access_execution']);
 
         // 2. Ensure admin_qc_fitting role exists and has read permissions
-        $qcRole = Role::firstOrCreate(['name' => 'admin_qc_fitting']);
-        $qcRole->syncPermissions([$accessPlanning, $accessExecution]);
+        // Preserve any Fitting QC permissions already granted by FittingSpvUserSeeder (order-independent)
+        $qcRole = Role::firstOrCreate(['name' => 'admin_qc_fitting', 'guard_name' => 'web']);
+        $preservedFittingPerms = $qcRole->permissions()
+            ->whereIn('name', [
+                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VERIFY_QC,
+                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_ALL_KANBAN,
+                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VISIBILITY,
+            ])
+            ->get();
+        $qcRole->syncPermissions(
+            $preservedFittingPerms->merge([$accessPlanning, $accessExecution])->unique('id')
+        );
 
         // 3. Ensure user adminqcfitting@peroniks.com exists idempotently
         $user = User::where('email', 'adminqcfitting@peroniks.com')->first();

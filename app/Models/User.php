@@ -76,6 +76,19 @@ class User extends Authenticatable
             return $stageMap[$this->assigned_stage] ?? 'SPV '.strtoupper(str_replace('_', ' ', $this->assigned_stage));
         }
 
+        if ($this->hasRole('spv_fitting') && ! empty($this->assigned_stage)) {
+            $fittingStageMap = [
+                'netto_pf' => 'SPV NETTO PF',
+                'kimia' => 'SPV KIMIA',
+                'marking' => 'SPV MARKING',
+                'bubut_cnc_pf' => 'SPV BUBUT CNC PF',
+                'qc_pf' => 'SPV QC PF',
+                'gudang_jadi_pf' => 'SPV GUDANG JADI PF',
+            ];
+
+            return $fittingStageMap[$this->assigned_stage] ?? 'SPV '.strtoupper(str_replace('_', ' ', $this->assigned_stage));
+        }
+
         return explode(' ', $this->name ?? 'User')[0];
     }
 
@@ -90,6 +103,10 @@ class User extends Authenticatable
 
         if ($this->hasRole('spv')) {
             return 'FLANGE';
+        }
+
+        if ($this->hasRole('spv_fitting')) {
+            return 'FITTING';
         }
 
         $roleName = $this->roles->pluck('name')->first() ?? 'User';

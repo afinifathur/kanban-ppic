@@ -6,46 +6,103 @@
             <h1 class="text-2xl font-bold text-slate-800">Setting Jenis Kerusakan</h1>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            @foreach($departments as $dept)
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col h-full">
-                    <h3 class="text-lg font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
-                        <span
-                            class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded uppercase">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
-                    </h3>
+        <div>
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
+                <i class="fas fa-industry text-blue-600"></i>
+                Sand Casting &amp; Umum
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach($departments as $dept)
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col h-full">
+                        <h3 class="text-lg font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                            <span
+                                class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded uppercase">{{ ucfirst(str_replace('_', ' ', $dept)) }}</span>
+                        </h3>
 
-                    <ul class="space-y-3 flex-1 mb-4">
-                        @forelse($defectTypes[$dept] ?? [] as $type)
-                            <li class="flex items-center justify-between group p-2 rounded hover:bg-slate-50 transition-colors">
-                                <span class="text-slate-700 font-medium">{{ $type->name }}</span>
-                                <button type="button" onclick="editDefect({{ $type->id }}, '{{ addslashes($type->name) }}')"
-                                    class="text-slate-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title="Edit">
-                                    <i class="fas fa-edit"></i>
+                        <ul class="space-y-3 flex-1 mb-4">
+                            @forelse($defectTypes[$dept] ?? [] as $type)
+                                <li class="flex items-center justify-between group p-2 rounded hover:bg-slate-50 transition-colors">
+                                    <span class="text-slate-700 font-medium">{{ $type->name }}</span>
+                                    <button type="button" onclick="editDefect({{ $type->id }}, '{{ addslashes($type->name) }}')"
+                                        class="text-slate-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </li>
+                            @empty
+                                <li class="text-slate-400 text-sm italic py-2">Belum ada jenis kerusakan.</li>
+                            @endforelse
+                        </ul>
+
+                        <form action="{{ route('settings.defect-types.store') }}" method="POST"
+                            class="mt-auto pt-4 border-t border-slate-100">
+                            @csrf
+                            <input type="hidden" name="department" value="{{ $dept }}">
+                            <div class="flex gap-2">
+                                <input type="text" name="name" placeholder="Tambah baru..."
+                                    class="flex-1 rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                    required>
+                                <button type="submit"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white rounded-md px-3 py-2 text-sm shadow-sm transition-colors">
+                                    <i class="fas fa-plus"></i>
                                 </button>
-                            </li>
-                        @empty
-                            <li class="text-slate-400 text-sm italic py-2">Belum ada jenis kerusakan.</li>
-                        @endforelse
-                    </ul>
-
-                    <form action="{{ route('settings.defect-types.store') }}" method="POST"
-                        class="mt-auto pt-4 border-t border-slate-100">
-                        @csrf
-                        <input type="hidden" name="department" value="{{ $dept }}">
-                        <div class="flex gap-2">
-                            <input type="text" name="name" placeholder="Tambah baru..."
-                                class="flex-1 rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                required>
-                            <button type="submit"
-                                class="bg-blue-600 hover:bg-blue-700 text-white rounded-md px-3 py-2 text-sm shadow-sm transition-colors">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            @endforeach
+                            </div>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
         </div>
+
+        @if(!empty($fittingDepartments))
+            <div class="pt-4 border-t border-slate-200">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-emerald-700 mb-3 flex items-center gap-2">
+                    <i class="fas fa-cubes text-emerald-600"></i>
+                    Fitting Production (6 Stage)
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    @foreach($fittingDepartments as $dept)
+                        <div class="bg-white rounded-xl shadow-sm border border-emerald-200 p-6 flex flex-col h-full">
+                            <h3 class="text-lg font-bold text-slate-700 mb-4 pb-2 border-b border-emerald-100 flex items-center justify-between gap-2">
+                                <span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded uppercase">
+                                    {{ $fittingDepartmentLabels[$dept] ?? strtoupper(str_replace('_', ' ', $dept)) }}
+                                </span>
+                                <span class="text-[11px] font-mono text-slate-400">{{ $dept }}</span>
+                            </h3>
+
+                            <ul class="space-y-3 flex-1 mb-4">
+                                @forelse($defectTypes[$dept] ?? [] as $type)
+                                    <li class="flex items-center justify-between group p-2 rounded hover:bg-slate-50 transition-colors">
+                                        <span class="text-slate-700 font-medium">{{ $type->name }}</span>
+                                        <button type="button" onclick="editDefect({{ $type->id }}, '{{ addslashes($type->name) }}')"
+                                            class="text-slate-400 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Edit">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </li>
+                                @empty
+                                    <li class="text-slate-400 text-sm italic py-2">Belum ada jenis kerusakan.</li>
+                                @endforelse
+                            </ul>
+
+                            <form action="{{ route('settings.defect-types.store') }}" method="POST"
+                                class="mt-auto pt-4 border-t border-slate-100">
+                                @csrf
+                                <input type="hidden" name="department" value="{{ $dept }}">
+                                <div class="flex gap-2">
+                                    <input type="text" name="name" placeholder="Tambah baru..."
+                                        class="flex-1 rounded-md border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
+                                        required>
+                                    <button type="submit"
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-3 py-2 text-sm shadow-sm transition-colors">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
     </div>
 
     <!-- Hidden form for editing -->

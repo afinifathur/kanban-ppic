@@ -245,6 +245,27 @@ class LostWaxCastingResultService
                 throw new InvalidArgumentException('Transaksi ini sudah berstatus DIBATALKAN sebelumnya.');
             }
 
+            // 1B. Phase 2 Guard: Protect active/completed Fitting Production travelers linked to this Casting Result
+            \App\Models\LostWaxKitir::where('lost_wax_casting_result_id', $header->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+
+            $activeFittingItems = \App\Models\FittingItem::where('lost_wax_casting_result_id', $header->id)
+                ->where(function ($q) {
+                    $q->where('status', \App\Models\FittingItem::STATUS_ACTIVE)
+                        ->orWhereNotNull('active_kitir_id');
+                })
+                ->lockForUpdate()
+                ->get(['id', 'traveler_number', 'current_stage']);
+
+            if ($activeFittingItems->isNotEmpty()) {
+                $travelerList = $activeFittingItems->pluck('traveler_number')->implode(', ');
+                throw new InvalidArgumentException(
+                    "Transaksi Hasil Cor Heat [{$header->heat_number}] tidak dapat dibatalkan karena masih memiliki Kitir aktif di Fitting Production ({$travelerList}). Batalkan transfer di Fitting terlebih dahulu (jika belum di-scan) sebelum membatalkan Hasil Cor."
+                );
+            }
+
             // 2. Fetch linked tree IDs and lock physical trees
             $detailRows = LostWaxCastingResultTree::where('lost_wax_casting_result_id', $header->id)->get();
             $treeIds = $detailRows->pluck('lost_wax_tree_id')->all();

@@ -16,3 +16,8 @@ Artisan::command('inspire', function () {
     ->timezone('Asia/Jakarta')
     ->name('sand-casting-daily-wip-snapshot')
     ->withoutOverlapping();
+
+\Illuminate\Support\Facades\Schedule::command('fitting:timeout-unrecorded-defects')
+    ->hourly()
+    ->name('fitting-auto-nihil-defects')
+    ->withoutOverlapping();

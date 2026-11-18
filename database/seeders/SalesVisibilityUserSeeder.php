@@ -25,9 +25,15 @@ class SalesVisibilityUserSeeder extends Seeder
         // 1. Ensure dedicated permission access_production_visibility exists
         $permission = Permission::firstOrCreate(['name' => 'access_production_visibility']);
 
-        // 2. Ensure dedicated role sales exists and only has access_production_visibility
-        $role = Role::firstOrCreate(['name' => 'sales']);
-        $role->syncPermissions([$permission]);
+        // 2. Ensure dedicated role sales exists and only has read-only visibility permissions
+        // Preserve read-only Fitting visibility if already granted by FittingSpvUserSeeder (order-independent)
+        $role = Role::firstOrCreate(['name' => 'sales', 'guard_name' => 'web']);
+        $preservedFittingPerms = $role->permissions()
+            ->whereIn('name', [
+                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VISIBILITY,
+            ])
+            ->get();
+        $role->syncPermissions($preservedFittingPerms->push($permission)->unique('id'));
 
         // 3. Create or update user without resetting password if user already exists
         $user = User::where('email', self::TARGET_ACCOUNT['email'])->first();
