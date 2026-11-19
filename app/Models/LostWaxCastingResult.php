@@ -89,5 +89,58 @@ class LostWaxCastingResult extends Model
 
         return sprintf('LW-COR-%s-%04d', $datePart, $this->id);
     }
-}
 
+    /**
+     * Compute Kitir status summary (issued count and printed count against unique product codes).
+     * Denominator is the count of unique production_code groups in this casting result.
+     *
+     * @return array{total: int, issued: int, printed: int, is_fully_issued: bool, is_fully_printed: bool}
+     */
+    public function getKitirStatusAttribute(): array
+    {
+        $trees = $this->relationLoaded('trees') ? $this->trees : $this->trees()->get();
+        $kitirs = $this->relationLoaded('kitirs') ? $this->kitirs : $this->kitirs()->get();
+
+        $productCodes = $trees
+            ->pluck('production_code')
+            ->map(fn ($c) => trim((string) $c))
+            ->filter(fn ($c) => $c !== '' && $c !== '-')
+            ->unique()
+            ->values();
+
+        $totalProducts = $productCodes->count();
+
+        if ($totalProducts === 0) {
+            return [
+                'total' => 0,
+                'issued' => 0,
+                'printed' => 0,
+                'is_fully_issued' => false,
+                'is_fully_printed' => false,
+            ];
+        }
+
+        $kitirsByCode = $kitirs->keyBy(fn ($k) => trim((string) $k->production_code));
+
+        $issued = 0;
+        $printed = 0;
+
+        foreach ($productCodes as $code) {
+            $kitir = $kitirsByCode->get($code);
+            if ($kitir !== null) {
+                $issued++;
+                if ((int) $kitir->print_count > 0) {
+                    $printed++;
+                }
+            }
+        }
+
+        return [
+            'total' => $totalProducts,
+            'issued' => $issued,
+            'printed' => $printed,
+            'is_fully_issued' => $issued === $totalProducts,
+            'is_fully_printed' => $printed === $totalProducts,
+        ];
+    }
+}

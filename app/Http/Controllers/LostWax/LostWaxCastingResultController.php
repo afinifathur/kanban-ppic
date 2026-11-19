@@ -20,21 +20,42 @@ class LostWaxCastingResultController extends Controller
      */
     public function index(Request $request)
     {
-        $search = trim($request->input('search', ''));
-        $status = $request->input('status', 'ALL');
-        $dateFrom = $request->input('date_from', '');
-        $dateTo = $request->input('date_to', '');
+        $search = trim((string) $request->input('search', ''));
+        $dateFrom = (string) $request->input('date_from', '');
+        $dateTo = (string) $request->input('date_to', '');
 
+        // Resolve active tab: 'completed' (default) or 'cancelled'
+        // Compatible with both ?tab=completed|cancelled and ?status=COMPLETED|CANCELLED
+        $rawTab = strtolower(trim((string) $request->input('tab', $request->input('status', 'completed'))));
+        $activeTab = in_array($rawTab, ['cancelled', 'cancel'], true) ? 'cancelled' : 'completed';
+        $statusFilter = $activeTab === 'cancelled' ? 'CANCELLED' : 'COMPLETED';
+
+        // Query transactions for the active tab (20 items per page, preserved querystring)
         $query = $this->castingResultService->getHistoryQuery(
             $search !== '' ? $search : null,
-            $status !== 'ALL' ? $status : null,
+            $statusFilter,
             $dateFrom !== '' ? $dateFrom : null,
             $dateTo !== '' ? $dateTo : null
         );
 
         $results = $query->paginate(20)->withQueryString();
 
-        // Calculate summary cards
+        // Calculate tab counters (respecting current search & date filters)
+        $tabCompletedCount = $this->castingResultService->getHistoryQuery(
+            $search !== '' ? $search : null,
+            'COMPLETED',
+            $dateFrom !== '' ? $dateFrom : null,
+            $dateTo !== '' ? $dateTo : null
+        )->count();
+
+        $tabCancelledCount = $this->castingResultService->getHistoryQuery(
+            $search !== '' ? $search : null,
+            'CANCELLED',
+            $dateFrom !== '' ? $dateFrom : null,
+            $dateTo !== '' ? $dateTo : null
+        )->count();
+
+        // Calculate overall summary cards (unaffected by active tab filter)
         $totalTransactions = LostWaxCastingResult::count();
         $completedResults = LostWaxCastingResult::where('status', 'COMPLETED');
         $totalCompleted = (clone $completedResults)->count();
@@ -44,8 +65,10 @@ class LostWaxCastingResultController extends Controller
 
         return view('lost-wax.casting-results.index', [
             'results' => $results,
+            'activeTab' => $activeTab,
+            'tabCompletedCount' => $tabCompletedCount,
+            'tabCancelledCount' => $tabCancelledCount,
             'search' => $search,
-            'status' => $status,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'summary' => [
@@ -70,21 +93,40 @@ class LostWaxCastingResultController extends Controller
         $codes = array_values(array_filter($codes, fn ($c) => $c !== null && $c !== ''));
         $customers = array_values(array_filter($customers, fn ($c) => $c !== null && $c !== ''));
 
+        $rawScanDateFrom = $request->input('scan_date_from', $request->input('date_from'));
+        $rawScanDateTo = $request->input('scan_date_to', $request->input('date_to'));
+        $scanDateFrom = is_string($rawScanDateFrom) && trim($rawScanDateFrom) !== '' ? trim($rawScanDateFrom) : null;
+        $scanDateTo = is_string($rawScanDateTo) && trim($rawScanDateTo) !== '' ? trim($rawScanDateTo) : null;
+        $scanDates = (array) $request->input('scan_dates', []);
+
         $scope = null;
         if (auth()->check() && auth()->user()->hasRole('ppic')) {
             $scope = auth()->user()->product_scope;
         }
 
-        $queueData = $this->castingResultService->getAvailableQueue($search, $scope, $codes, $customers);
+        $queueData = $this->castingResultService->getAvailableQueue(
+            $search,
+            $scope,
+            $codes,
+            $customers,
+            $scanDates,
+            $scanDateFrom,
+            $scanDateTo
+        );
 
         return view('lost-wax.casting-results.create', [
             'items' => $queueData['items'],
+            'rawItems' => $queueData['raw_items'],
             'summary' => $queueData['summary'],
             'search' => $search,
             'codes' => $codes,
             'customers' => $customers,
             'allCodes' => $queueData['all_codes'],
             'allCustomers' => $queueData['all_customers'],
+            'allScanDates' => $queueData['all_scan_dates'],
+            'scanDates' => $queueData['selected_scan_dates'],
+            'scanDateFrom' => $queueData['scan_date_from'] ?? $scanDateFrom,
+            'scanDateTo' => $queueData['scan_date_to'] ?? $scanDateTo,
             'defaultDate' => Carbon::today()->format('Y-m-d'),
         ]);
     }

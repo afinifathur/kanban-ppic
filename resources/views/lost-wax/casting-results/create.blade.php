@@ -2,32 +2,40 @@
 
 @section('title', 'Lost Wax — Input Hasil Cor')
 
-@section('content')
-<div class="space-y-5">
-    <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200">
-        <div>
-            <div class="flex items-center gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                    <i class="fas fa-fire mr-1.5 text-xs text-amber-500"></i> Pengecoran
-                </span>
-                <span class="text-slate-300 text-xs">•</span>
-                <span class="text-slate-500 text-xs font-medium">Phase 4</span>
-            </div>
-            <h1 class="text-2xl font-bold text-slate-900 tracking-tight mt-1.5">Input Hasil Cor</h1>
-            <p class="text-xs text-slate-500 mt-0.5">Hubungkan Traveler Card dari antrean Barang Siap Cor ke satu Heat Number penuangan aktual.</p>
+@section('top_bar')
+<div class="flex items-center justify-between w-full min-w-0 gap-2">
+    <div class="flex flex-col min-w-0">
+        <div class="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+            <span class="inline-flex items-center text-amber-600 font-bold">
+                <i class="fas fa-fire mr-1 text-[10px]"></i>Pengecoran
+            </span>
+            <span class="text-slate-300">•</span>
+            <span class="text-slate-500 font-medium">Phase 4</span>
         </div>
-        <div class="flex items-center gap-2.5">
-            <a href="{{ route('lost-wax.casting-results.index') }}"
-               class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition-colors shadow-sm">
-                <i class="fas fa-history mr-2 text-slate-500"></i> Riwayat Hasil Cor
-            </a>
-            <a href="{{ route('lost-wax.reports.ready-for-casting.index') }}"
-               class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white transition-colors shadow-sm">
-                <i class="fas fa-clipboard-check mr-2 text-amber-400"></i> Antrean Siap Cor
-            </a>
+        <div class="flex items-baseline gap-2 min-w-0">
+            <h1 class="text-base font-bold text-slate-900 leading-tight tracking-tight shrink-0">
+                Input Hasil Cor
+            </h1>
+            <p class="hidden md:inline text-[11px] text-slate-500 font-normal truncate">
+                — Hubungkan Traveler Card dari antrean Barang Siap Cor ke satu Heat Number penuangan aktual.
+            </p>
         </div>
     </div>
+    <div class="flex items-center gap-1.5 shrink-0">
+        <a href="{{ route('lost-wax.casting-results.index') }}"
+           class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition shadow-xs">
+            <i class="fas fa-history mr-1.5 text-slate-500"></i> Riwayat Hasil Cor
+        </a>
+        <a href="{{ route('lost-wax.reports.ready-for-casting.index') }}"
+           class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white transition shadow-xs">
+            <i class="fas fa-clipboard-check mr-1.5 text-amber-400"></i> Antrean Siap Cor
+        </a>
+    </div>
+</div>
+@endsection
+
+@section('content')
+<div class="space-y-4">
 
     @if($errors->any())
     <div class="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl shadow-sm">
@@ -99,8 +107,7 @@
                 <div class="md:col-span-1 lg:col-span-1">
                     <label class="block text-xs font-semibold text-slate-700 mb-1.5">Shift</label>
                     <select name="shift" id="shift" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors">
-                        <option value="">-- Pilih --</option>
-                        <option value="1" {{ old('shift') == '1' ? 'selected' : '' }}>Shift 1</option>
+                        <option value="1" {{ old('shift', '1') == '1' ? 'selected' : '' }}>Shift 1</option>
                         <option value="2" {{ old('shift') == '2' ? 'selected' : '' }}>Shift 2</option>
                         <option value="3" {{ old('shift') == '3' ? 'selected' : '' }}>Shift 3</option>
                     </select>
@@ -133,34 +140,70 @@
         <!-- 2. Traveler Card Selection Checklist Panel -->
         <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <!-- Filter & Quick Search Controls -->
-            <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                 <div class="flex items-center gap-3">
                     <span class="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center text-xs">
                         <i class="fas fa-tasks"></i>
                     </span>
                     <div>
                         <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Pilih Traveler Card (FIFO)</h3>
-                        <p class="text-[10px] text-slate-500">Tersedia {{ count($items) }} kartu siap dicor di lantai produksi</p>
+                        <p class="text-[10px] text-slate-500">
+                            Tersedia <strong id="visibleTreeCount" class="font-bold text-slate-700">{{ count($items) }}</strong> kartu siap dicor di lantai produksi
+                            <span id="filteredIndicatorText" class="{{ (!empty($scanDateFrom) || !empty($scanDateTo) || !empty($summary['is_filtered'])) ? '' : 'hidden' }} text-amber-700 font-bold">
+                                (difilter dari {{ $summary['queue_total_trees'] ?? count($items) }} total kartu)
+                            </span>
+                        </p>
                     </div>
                 </div>
 
-                <!-- Live Client Search & Quick Selection -->
+                <!-- Filter Controls: Date Range, Search & Batch Actions -->
                 <div class="flex items-center gap-2 flex-wrap">
-                    <div class="relative w-56">
-                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"></i>
+                    <!-- Date Range: Tanggal Scan -->
+                    <div class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs shadow-sm hover:border-amber-400 transition-colors {{ (!empty($scanDateFrom) || !empty($scanDateTo)) ? 'border-amber-500 bg-amber-50/40 text-amber-900' : '' }}" id="dateFilterWrapper">
+                        <i class="fas fa-calendar-alt {{ (!empty($scanDateFrom) || !empty($scanDateTo)) ? 'text-amber-600' : 'text-slate-500' }} text-xs"></i>
+                        <span class="text-[11px] font-bold text-slate-700">Tgl Scan:</span>
+                        <input type="date"
+                               id="scan_date_from"
+                               value="{{ $scanDateFrom }}"
+                               title="Tanggal awal scan"
+                               class="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500 font-mono">
+                        <span class="text-slate-400 text-xs font-bold">s/d</span>
+                        <input type="date"
+                               id="scan_date_to"
+                               value="{{ $scanDateTo }}"
+                               title="Tanggal akhir scan"
+                               class="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500 font-mono">
+                        <button type="button"
+                                id="btnApplyDateFilter"
+                                class="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-[10px] transition shadow-xs cursor-pointer">
+                            Filter
+                        </button>
+                        <button type="button"
+                                id="btnResetDateFilter"
+                                title="Reset filter tanggal scan"
+                                class="text-xs text-rose-600 hover:text-rose-800 hover:underline font-bold px-1 transition {{ (empty($scanDateFrom) && empty($scanDateTo)) ? 'hidden' : '' }}">
+                            Reset Filter
+                        </button>
+                    </div>
+
+                    <!-- Quick Text Search -->
+                    <div class="relative w-44 sm:w-48">
+                        <i class="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"></i>
                         <input type="text"
                                id="quickSearch"
                                placeholder="Cari barcode / kode..."
-                               class="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors">
+                               class="w-full bg-white border border-slate-300 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors">
                     </div>
+
+                    <!-- Selection Buttons -->
                     <button type="button"
                             id="btnSelectAll"
-                            class="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition-colors shadow-sm">
+                            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition-colors shadow-sm">
                         <i class="fas fa-check-square mr-1 text-amber-500"></i> Pilih Semua (Terlihat)
                     </button>
                     <button type="button"
                             id="btnDeselectAll"
-                            class="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 transition-colors shadow-sm">
+                            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 transition-colors shadow-sm">
                         <i class="fas fa-times mr-1 text-slate-400"></i> Batalkan
                     </button>
                 </div>
@@ -191,7 +234,8 @@
                             data-code="{{ strtolower($tree['production_code']) }}"
                             data-customer="{{ strtolower($tree['customer']) }}"
                             data-item="{{ strtolower($tree['item_name']) }}"
-                            data-qty="{{ $tree['quantity_pcs'] }}">
+                            data-qty="{{ $tree['quantity_pcs'] }}"
+                            data-scan-date="{{ $tree['scan_date'] }}">
                             <td class="px-3 py-2 text-center" onclick="event.stopPropagation();">
                                 <input type="checkbox"
                                        name="tree_ids[]"
@@ -205,7 +249,11 @@
                                 {{ $idx + 1 }}
                             </td>
                             <td class="px-3 py-2 font-mono font-bold text-amber-600">
-                                {{ $tree['barcode'] }}
+                                <div>{{ $tree['barcode'] }}</div>
+                                <div class="text-[10px] text-slate-400 font-sans font-normal flex items-center gap-1 mt-0.5" title="Waktu Scan Siap Cor (Dewaxing)">
+                                    <i class="fas fa-calendar-alt text-slate-300 text-[9px]"></i>
+                                    <span>{{ $tree['scanned_at_formatted'] ?? ($tree['scan_date_label'] ?? '-') }}</span>
+                                </div>
                             </td>
                             <td class="px-3 py-2 font-mono font-bold text-slate-900">
                                 {{ $tree['production_code'] }}
@@ -284,6 +332,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const checkboxes = Array.from(document.querySelectorAll('.tree-checkbox'));
     const rows = Array.from(document.querySelectorAll('.tree-row'));
     const quickSearch = document.getElementById('quickSearch');
+    const scanDateFromInput = document.getElementById('scan_date_from');
+    const scanDateToInput = document.getElementById('scan_date_to');
+    const btnApplyDateFilter = document.getElementById('btnApplyDateFilter');
+    const btnResetDateFilter = document.getElementById('btnResetDateFilter');
+    const dateFilterWrapper = document.getElementById('dateFilterWrapper');
+    const visibleTreeCount = document.getElementById('visibleTreeCount');
+    const filteredIndicatorText = document.getElementById('filteredIndicatorText');
     const btnSelectAll = document.getElementById('btnSelectAll');
     const btnDeselectAll = document.getElementById('btnDeselectAll');
     const selectedCountSpan = document.getElementById('selectedCount');
@@ -316,43 +371,116 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Row click toggles checkbox
-    rows.forEach(row => {
-        row.addEventListener('click', function (e) {
-            if (e.target.tagName.toLowerCase() === 'input') return;
-            const cb = this.querySelector('.tree-checkbox');
-            if (cb) {
-                cb.checked = !cb.checked;
-                updateSummary();
+    // Combined filter function (date range + quick search)
+    function applyFilters() {
+        let fromVal = scanDateFromInput ? scanDateFromInput.value.trim() : '';
+        let toVal = scanDateToInput ? scanDateToInput.value.trim() : '';
+
+        // Auto-swap if start date > end date
+        if (fromVal && toVal && fromVal > toVal) {
+            const tmp = fromVal;
+            fromVal = toVal;
+            toVal = tmp;
+            if (scanDateFromInput) scanDateFromInput.value = fromVal;
+            if (scanDateToInput) scanDateToInput.value = toVal;
+        }
+
+        const term = quickSearch ? quickSearch.value.toLowerCase().trim() : '';
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            let matchesDate = true;
+            const rowScanDate = row.dataset.scanDate || '';
+
+            if (fromVal && (!rowScanDate || rowScanDate < fromVal)) {
+                matchesDate = false;
             }
-        });
-    });
+            if (toVal && (!rowScanDate || rowScanDate > toVal)) {
+                matchesDate = false;
+            }
 
-    checkboxes.forEach(cb => {
-        cb.addEventListener('change', updateSummary);
-    });
-
-    // Quick client-side filter
-    if (quickSearch) {
-        quickSearch.addEventListener('input', function () {
-            const term = this.value.toLowerCase().trim();
-            rows.forEach(row => {
-                if (!term) {
-                    row.style.display = '';
-                    return;
-                }
+            let matchesSearch = true;
+            if (term) {
                 const barcode = row.dataset.barcode || '';
                 const code = row.dataset.code || '';
                 const customer = row.dataset.customer || '';
                 const item = row.dataset.item || '';
+                matchesSearch = barcode.includes(term) || code.includes(term) || customer.includes(term) || item.includes(term);
+            }
 
-                if (barcode.includes(term) || code.includes(term) || customer.includes(term) || item.includes(term)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
+            if (matchesDate && matchesSearch) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
         });
+
+        // Update UI filter state indicators
+        const isDateFiltered = Boolean(fromVal || toVal);
+        if (dateFilterWrapper) {
+            if (isDateFiltered) {
+                dateFilterWrapper.classList.add('border-amber-500', 'bg-amber-50/40', 'text-amber-900');
+            } else {
+                dateFilterWrapper.classList.remove('border-amber-500', 'bg-amber-50/40', 'text-amber-900');
+            }
+        }
+
+        if (btnResetDateFilter) {
+            if (isDateFiltered) {
+                btnResetDateFilter.classList.remove('hidden');
+            } else {
+                btnResetDateFilter.classList.add('hidden');
+            }
+        }
+
+        if (visibleTreeCount) {
+            visibleTreeCount.textContent = visibleCount.toLocaleString('id-ID');
+        }
+
+        if (filteredIndicatorText) {
+            if (isDateFiltered || term) {
+                filteredIndicatorText.classList.remove('hidden');
+            } else {
+                filteredIndicatorText.classList.add('hidden');
+            }
+        }
+
+        // If header checkbox is checked, sync state to visible rows
+        if (headerCheckbox && headerCheckbox.checked) {
+            headerCheckbox.checked = false;
+        }
+    }
+
+    if (btnApplyDateFilter) {
+        btnApplyDateFilter.addEventListener('click', applyFilters);
+    }
+
+    if (scanDateFromInput) {
+        scanDateFromInput.addEventListener('change', applyFilters);
+    }
+
+    if (scanDateToInput) {
+        scanDateToInput.addEventListener('change', applyFilters);
+    }
+
+    if (btnResetDateFilter) {
+        btnResetDateFilter.addEventListener('click', function () {
+            if (scanDateFromInput) scanDateFromInput.value = '';
+            if (scanDateToInput) scanDateToInput.value = '';
+
+            // If page was loaded with GET query params, reload clean create URL
+            if (window.location.search && (window.location.search.includes('scan_date') || window.location.search.includes('date_'))) {
+                window.location.href = "{{ route('lost-wax.casting-results.create') }}";
+                return;
+            }
+
+            applyFilters();
+        });
+    }
+
+    if (quickSearch) {
+        quickSearch.addEventListener('input', applyFilters);
     }
 
     // Select all currently visible rows

@@ -194,8 +194,9 @@
         }
 
         table.print-table td.tc-cell,
-        table.print-table td.heat-cell {
-            padding: 2.5px 7px;
+        table.print-table td.heat-cell,
+        table.print-table td.temp-cell {
+            padding: 2.5px 4px;
             vertical-align: middle;
             line-height: 1.25;
             border-top: 1px solid #e2e8f0;
@@ -203,13 +204,15 @@
         }
 
         table.print-table tr.group-first td.tc-cell,
-        table.print-table tr.group-first td.heat-cell {
+        table.print-table tr.group-first td.heat-cell,
+        table.print-table tr.group-first td.temp-cell {
             border-top: 1.25px solid #475569;
             vertical-align: middle;
         }
 
         table.print-table tr.group-last td.tc-cell,
-        table.print-table tr.group-last td.heat-cell {
+        table.print-table tr.group-last td.heat-cell,
+        table.print-table tr.group-last td.temp-cell {
             border-bottom: 1.25px solid #475569;
         }
 
@@ -219,6 +222,14 @@
             height: 12px;
             border-bottom: 1.5px dotted #94a3b8;
             box-sizing: border-box;
+        }
+
+        .manual-dots {
+            color: #64748b;
+            font-size: 9.5px;
+            font-family: monospace;
+            font-weight: bold;
+            letter-spacing: 0.5px;
         }
 
         table.print-table tr.total-row {
@@ -350,7 +361,9 @@
                 <th style="width: 31%;" class="text-left">Kode Produksi / Nama Item</th>
                 <th style="width: 13%;" class="text-right">Qty (PCS)</th>
                 <th style="width: 26%;" class="text-left">Traveler Card</th>
-                <th style="width: 25%;" class="text-center">HEAT NUMBER</th>
+                <th style="width: 11%;" class="text-center">HEAT NUMBER</th>
+                <th style="width: 7%;" class="text-center">SUHU OVEN</th>
+                <th style="width: 7%;" class="text-center">SUHU DAPUR</th>
             </tr>
         </thead>
         <tbody>
@@ -429,11 +442,17 @@
                         <td class="heat-cell" data-heat-line="1">
                             <span class="heat-dotted-line" aria-label="Ruang isi Heat Number"></span>
                         </td>
+                        <td class="temp-cell text-center" data-temp-oven="1">
+                            <span class="manual-dots"> </span>
+                        </td>
+                        <td class="temp-cell text-center" data-temp-dapur="1">
+                            <span class="manual-dots"> </span>
+                        </td>
                     </tr>
                 @endforeach
             @empty
                 <tr>
-                    <td colspan="5" class="text-center" style="padding: 24px; font-size: 11px; color: #94a3b8;">
+                    <td colspan="7" class="text-center" style="padding: 24px; font-size: 11px; color: #94a3b8;">
                         Tidak ada antrean barang siap cor saat ini.
                     </td>
                 </tr>
@@ -446,8 +465,8 @@
                     <td class="text-right" style="font-size: 13px; font-weight: 900; color: #047857; padding: 6px 8px; white-space: nowrap;">
                         {{ number_format($summary['total_usable_pcs']) }} PCS
                     </td>
-                    <td colspan="2" style="font-size: 8.5px; color: #64748b; text-align: center; font-style: italic;">
-                        *Isi Heat Number aktual pada garis tiap Traveler Card
+                    <td colspan="4" style="font-size: 8.5px; color: #64748b; text-align: center; font-style: italic;">
+                        *Isi Heat Number, Suhu Oven, dan Suhu Dapur aktual pada tiap baris Traveler Card
                     </td>
                 </tr>
             @endif

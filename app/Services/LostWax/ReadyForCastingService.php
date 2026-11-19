@@ -17,6 +17,8 @@ class ReadyForCastingService
      * @param  array  $codes  Optional array of production codes to filter
      * @param  array  $customers  Optional array of customers to filter
      * @param  array  $scanDates  Optional array of scan dates (Y-m-d or d-m-Y in Asia/Jakarta) to filter
+     * @param  string|null  $scanDateFrom  Optional start of scan date range (Y-m-d or d-m-Y in Asia/Jakarta)
+     * @param  string|null  $scanDateTo  Optional end of scan date range (Y-m-d or d-m-Y in Asia/Jakarta)
      * @return array{items: Collection, raw_items: Collection, summary: array, all_codes: array, all_customers: array, all_scan_dates: array}
      */
     public function getQueueData(
@@ -24,7 +26,9 @@ class ReadyForCastingService
         ?string $scope = null,
         array $codes = [],
         array $customers = [],
-        array $scanDates = []
+        array $scanDates = [],
+        ?string $scanDateFrom = null,
+        ?string $scanDateTo = null
     ): array {
         // 1. Fetch eligible tree candidates with eager loading
         $query = LostWaxTree::query()
@@ -251,8 +255,14 @@ class ReadyForCastingService
         // Normalize requested scan date filters to canonical Y-m-d (supports both Y-m-d and d-m-Y inputs)
         $normalizedScanDates = self::normalizeScanDateParams($scanDates);
 
+        $normalizedFrom = self::normalizeSingleDate($scanDateFrom);
+        $normalizedTo = self::normalizeSingleDate($scanDateTo);
+        if ($normalizedFrom !== null && $normalizedTo !== null && $normalizedFrom > $normalizedTo) {
+            [$normalizedFrom, $normalizedTo] = [$normalizedTo, $normalizedFrom];
+        }
+
         // 5. Apply filters with AND combination (multi-select within each filter uses OR)
-        $filteredRows = $sortedRows->filter(function ($item) use ($search, $codes, $customers, $normalizedScanDates) {
+        $filteredRows = $sortedRows->filter(function ($item) use ($search, $codes, $customers, $normalizedScanDates, $normalizedFrom, $normalizedTo) {
             // A. Search keyword filter
             if ($search !== null && $search !== '') {
                 $searchLower = strtolower(trim($search));
@@ -303,6 +313,18 @@ class ReadyForCastingService
                 }
             }
 
+            // E. Scan Siap Cor Date Range filter (Asia/Jakarta)
+            if ($normalizedFrom !== null) {
+                if (empty($item['scan_date']) || $item['scan_date'] < $normalizedFrom) {
+                    return false;
+                }
+            }
+            if ($normalizedTo !== null) {
+                if (empty($item['scan_date']) || $item['scan_date'] > $normalizedTo) {
+                    return false;
+                }
+            }
+
             return true;
         })->values();
 
@@ -310,7 +332,9 @@ class ReadyForCastingService
         $isFiltered = ($search !== null && $search !== '')
             || ! empty($codes)
             || ! empty($customers)
-            || ! empty($normalizedScanDates);
+            || ! empty($normalizedScanDates)
+            || $normalizedFrom !== null
+            || $normalizedTo !== null;
 
         $activeFilterParts = [];
         if ($search !== null && $search !== '') {
@@ -328,6 +352,11 @@ class ReadyForCastingService
                 $normalizedScanDates
             );
             $activeFilterParts[] = 'Tgl Scan: '.implode(', ', $formattedFilterDates);
+        }
+        if ($normalizedFrom !== null || $normalizedTo !== null) {
+            $fromLabel = $normalizedFrom ? Carbon::createFromFormat('Y-m-d', $normalizedFrom, 'Asia/Jakarta')->format('d-m-Y') : '...';
+            $toLabel = $normalizedTo ? Carbon::createFromFormat('Y-m-d', $normalizedTo, 'Asia/Jakarta')->format('d-m-Y') : '...';
+            $activeFilterParts[] = 'Rentang Scan: '.$fromLabel.' s/d '.$toLabel;
         }
         $activeFilterText = ! empty($activeFilterParts) ? implode(' | ', $activeFilterParts) : '';
 
@@ -361,6 +390,8 @@ class ReadyForCastingService
             'all_customers' => $allCustomers,
             'all_scan_dates' => $allScanDates,
             'selected_scan_dates' => $normalizedScanDates,
+            'scan_date_from' => $normalizedFrom,
+            'scan_date_to' => $normalizedTo,
         ];
     }
 
@@ -401,5 +432,42 @@ class ReadyForCastingService
         krsort($normalized);
 
         return array_values($normalized);
+    }
+
+    /**
+     * Normalize a single date string or Carbon instance into canonical Y-m-d string (Asia/Jakarta).
+     */
+    public static function normalizeSingleDate(mixed $date): ?string
+    {
+        if ($date instanceof Carbon) {
+            return $date->copy()->setTimezone('Asia/Jakarta')->format('Y-m-d');
+        }
+
+        if (! is_string($date) && ! is_numeric($date)) {
+            return null;
+        }
+
+        $val = trim((string) $date);
+        if ($val === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) {
+            $parsed = Carbon::createFromFormat('!Y-m-d', $val, 'Asia/Jakarta');
+            if ($parsed && $parsed->format('Y-m-d') === $val) {
+                return $val;
+            }
+        } elseif (preg_match('/^\d{2}-\d{2}-\d{4}$/', $val)) {
+            $parsed = Carbon::createFromFormat('!d-m-Y', $val, 'Asia/Jakarta');
+            if ($parsed && $parsed->format('d-m-Y') === $val) {
+                return $parsed->format('Y-m-d');
+            }
+        }
+
+        try {
+            return Carbon::parse($val, 'Asia/Jakarta')->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

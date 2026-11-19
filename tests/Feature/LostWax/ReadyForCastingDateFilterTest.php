@@ -251,6 +251,10 @@ class ReadyForCastingDateFilterTest extends TestCase
         $printOne->assertDontSee('PRT-16');
         $printOne->assertSee('Tgl Scan: 18-11-2026');
         $printOne->assertSee('25 PCS');
+        $printOne->assertSee('HEAT NUMBER');
+        $printOne->assertSee('SUHU OVEN');
+        $printOne->assertSee('SUHU DAPUR');
+        $printOne->assertSee('.........');
 
         // Print 2 dates -> union of date 18 + date 17 (60 PCS, 2 Pohon), excludes date 16
         $printTwo = $this->actingAs($this->admin)->get(route('lost-wax.reports.ready-for-casting.print', [

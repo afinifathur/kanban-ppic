@@ -27,9 +27,20 @@ class LostWaxCastingResultService
         ?string $search = null,
         ?string $scope = null,
         array $codes = [],
-        array $customers = []
+        array $customers = [],
+        array $scanDates = [],
+        ?string $scanDateFrom = null,
+        ?string $scanDateTo = null
     ): array {
-        return $this->readyForCastingService->getQueueData($search, $scope, $codes, $customers);
+        return $this->readyForCastingService->getQueueData(
+            $search,
+            $scope,
+            $codes,
+            $customers,
+            $scanDates,
+            $scanDateFrom,
+            $scanDateTo
+        );
     }
 
     /**
@@ -309,7 +320,7 @@ class LostWaxCastingResultService
         ?string $dateTo = null
     ): Builder {
         $query = LostWaxCastingResult::query()
-            ->with(['recorder', 'voider', 'trees'])
+            ->with(['recorder', 'voider', 'trees', 'kitirs'])
             ->orderByDesc('cast_date')
             ->orderByDesc('id');
 
