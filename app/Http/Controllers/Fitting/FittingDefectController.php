@@ -45,10 +45,12 @@ class FittingDefectController extends Controller
 
         $rawStage = $request->query('stage');
         $selectedStage = null;
-        if ($rawStage !== null && $rawStage !== '' && $rawStage !== 'all') {
+        $stageError = null;
+
+        if ($rawStage !== null && $rawStage !== '') {
             $selectedStage = FittingStageAuthorizationService::normalizeStage((string) $rawStage);
             if ($selectedStage === null) {
-                abort(404, "Tahap operasional Fitting '{$rawStage}' tidak valid.");
+                $stageError = "Tahap operasional Fitting '{$rawStage}' tidak valid. Silakan pilih tahap produksi yang tersedia di bawah ini.";
             }
         }
 
@@ -78,73 +80,87 @@ class FittingDefectController extends Controller
             ->pluck('cnt', 'stage')
             ->all();
 
+        // Scope 5 KPI totals specifically to selectedStage if present, or overall aggregate if on initial stage selector
+        $scopeQuery = fn () => $baseActiveQuery()
+            ->when($selectedStage !== null, fn ($q) => $q->where('stage', $selectedStage));
+
         $summary = [
-            'unrecorded_total' => (int) array_sum($unrecordedCounts),
-            'recorded_total' => (int) array_sum($recordedCounts),
-            'no_defect_total' => (int) $baseActiveQuery()->where('status', FittingStageExecution::STATUS_NO_DEFECT)->count(),
-            'waiting_qc_total' => (int) $baseActiveQuery()->where('status', FittingStageExecution::STATUS_WAITING_QC)->where('defect_qty', '>', 0)->count(),
-            'reopened_total' => (int) $baseActiveQuery()->where('status', FittingStageExecution::STATUS_REOPENED_FOR_CORRECTION)->count(),
-            'confirmed_total' => (int) $baseActiveQuery()->where('status', FittingStageExecution::STATUS_CONFIRMED)->count(),
-            'auto_nihil_total' => (int) $baseActiveQuery()->where('status', FittingStageExecution::STATUS_NO_DEFECT)->where('is_auto_nihil', true)->count(),
+            'unrecorded_total' => $selectedStage !== null
+                ? (int) ($unrecordedCounts[$selectedStage] ?? 0)
+                : (int) array_sum($unrecordedCounts),
+            'recorded_total' => $selectedStage !== null
+                ? (int) ($recordedCounts[$selectedStage] ?? 0)
+                : (int) array_sum($recordedCounts),
+            'no_defect_total' => (int) $scopeQuery()->where('status', FittingStageExecution::STATUS_NO_DEFECT)->count(),
+            'waiting_qc_total' => (int) $scopeQuery()->where('status', FittingStageExecution::STATUS_WAITING_QC)->where('defect_qty', '>', 0)->count(),
+            'reopened_total' => (int) $scopeQuery()->where('status', FittingStageExecution::STATUS_REOPENED_FOR_CORRECTION)->count(),
+            'confirmed_total' => (int) $scopeQuery()->where('status', FittingStageExecution::STATUS_CONFIRMED)->count(),
+            'auto_nihil_total' => (int) $scopeQuery()->where('status', FittingStageExecution::STATUS_NO_DEFECT)->where('is_auto_nihil', true)->count(),
             'per_stage_unrecorded' => $unrecordedCounts,
             'per_stage_recorded' => $recordedCounts,
         ];
 
-        $query = $baseActiveQuery()
-            ->with([
-                'fittingItem.stageExecutions',
-                'fittingItem.transfer',
-                'operator',
-                'defectEnteredBy',
-                'qcVerifiedBy',
-                'defects.defectType',
-                'defectLogs.user',
+        if ($selectedStage === null) {
+            // Explicit Stage Selection: Do NOT query or mix travelers across all stages
+            $executions = new \Illuminate\Pagination\LengthAwarePaginator([], 0, 25, 1, [
+                'path' => $request->url(),
+                'query' => $request->query(),
             ]);
-
-        if ($mode === 'unrecorded') {
-            $query->where('status', FittingStageExecution::STATUS_WAITING_DEFECT)
-                ->orderBy('physical_done_at', 'asc')
-                ->orderBy('id', 'asc');
         } else {
-            $query->whereIn('status', $recordedStatuses)
-                ->orderByRaw("CASE WHEN status = 'REOPENED_FOR_CORRECTION' THEN 0 ELSE 1 END")
-                ->orderByDesc('defect_entered_at')
-                ->orderByDesc('id');
-        }
+            $query = $baseActiveQuery()
+                ->where('stage', $selectedStage)
+                ->with([
+                    'fittingItem.stageExecutions',
+                    'fittingItem.transfer',
+                    'operator',
+                    'defectEnteredBy',
+                    'qcVerifiedBy',
+                    'defects.defectType',
+                    'defectLogs.user',
+                ]);
 
-        if ($selectedStage !== null) {
-            $query->where('stage', $selectedStage);
-        }
+            if ($mode === 'unrecorded') {
+                $query->where('status', FittingStageExecution::STATUS_WAITING_DEFECT)
+                    ->orderBy('physical_done_at', 'asc')
+                    ->orderBy('id', 'asc');
+            } else {
+                $query->whereIn('status', $recordedStatuses)
+                    ->orderByRaw("CASE WHEN status = 'REOPENED_FOR_CORRECTION' THEN 0 ELSE 1 END")
+                    ->orderByDesc('defect_entered_at')
+                    ->orderByDesc('id');
+            }
 
-        if ($search !== '') {
-            $query->whereHas('fittingItem', function ($q) use ($search) {
-                $q->where('traveler_number', 'like', "%{$search}%")
-                    ->orWhere('heat_number', 'like', "%{$search}%")
-                    ->orWhere('production_code', 'like', "%{$search}%")
-                    ->orWhere('item_code', 'like', "%{$search}%")
-                    ->orWhere('item_name', 'like', "%{$search}%")
-                    ->orWhere('customer', 'like', "%{$search}%");
+            if ($search !== '') {
+                $query->whereHas('fittingItem', function ($q) use ($search) {
+                    $q->where('traveler_number', 'like', "%{$search}%")
+                        ->orWhere('heat_number', 'like', "%{$search}%")
+                        ->orWhere('production_code', 'like', "%{$search}%")
+                        ->orWhere('item_code', 'like', "%{$search}%")
+                        ->orWhere('item_name', 'like', "%{$search}%")
+                        ->orWhere('customer', 'like', "%{$search}%");
+                });
+            }
+
+            $executions = $query->paginate(25)->appends($request->query());
+
+            // Enrich each paginated execution with dynamic effective quantities & Final Quality Lock state
+            $executions->getCollection()->transform(function (FittingStageExecution $exec) {
+                $item = $exec->fittingItem;
+                $exec->setAttribute('effective_input_qty', $item ? $this->quantityResolver->resolveEffectiveInputQty($item, $exec->stage) : (int) $exec->input_qty);
+                $exec->setAttribute('effective_good_qty', $item ? $this->quantityResolver->resolveEffectiveGoodQty($item, $exec->stage) : (int) $exec->good_qty);
+                $exec->setAttribute('max_allowed_defect_qty', $item ? $this->quantityResolver->resolveMaxAllowedDefectQty($item, $exec->stage) : (int) $exec->input_qty);
+                $exec->setAttribute('is_quality_locked', $item ? $this->defectService->isStageQualityLocked($exec, $item) : false);
+
+                return $exec;
             });
         }
-
-        $executions = $query->paginate(25)->appends($request->query());
-
-        // Enrich each paginated execution with dynamic effective quantities & Final Quality Lock state
-        $executions->getCollection()->transform(function (FittingStageExecution $exec) {
-            $item = $exec->fittingItem;
-            $exec->setAttribute('effective_input_qty', $item ? $this->quantityResolver->resolveEffectiveInputQty($item, $exec->stage) : (int) $exec->input_qty);
-            $exec->setAttribute('effective_good_qty', $item ? $this->quantityResolver->resolveEffectiveGoodQty($item, $exec->stage) : (int) $exec->good_qty);
-            $exec->setAttribute('max_allowed_defect_qty', $item ? $this->quantityResolver->resolveMaxAllowedDefectQty($item, $exec->stage) : (int) $exec->input_qty);
-            $exec->setAttribute('is_quality_locked', $item ? $this->defectService->isStageQualityLocked($exec, $item) : false);
-
-            return $exec;
-        });
 
         return view('fitting.defects.index', [
             'summary' => $summary,
             'executions' => $executions,
             'mode' => $mode,
             'selectedStage' => $selectedStage,
+            'stageError' => $stageError,
             'stages' => FittingItem::STAGES,
             'stageLabels' => FittingStageAuthorizationService::STAGE_LABELS,
             'search' => $search,
@@ -236,10 +252,10 @@ class FittingDefectController extends Controller
                 ]);
             }
 
-            $redirectParams = ['mode' => 'unrecorded'];
-            if ($request->filled('stage')) {
-                $redirectParams['stage'] = $request->input('stage');
-            }
+            $redirectParams = [
+                'mode' => 'unrecorded',
+                'stage' => $request->input('stage') ?: $updated->stage,
+            ];
             if ($request->filled('search')) {
                 $redirectParams['search'] = $request->input('search');
             }

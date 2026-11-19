@@ -381,7 +381,11 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('kanban')->name('kanban.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'index'])->name('index');
             Route::post('/stage/{stage}/reorder', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'reorder'])->name('reorder');
+            Route::get('/stage/{stage}/print', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'print'])->name('print');
+            Route::get('/stage/{stage}/export/excel', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'exportExcel'])->name('export.excel');
             Route::get('/stage/{stage}', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'show'])->name('stage');
+            Route::get('/{stage}/print', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'print']);
+            Route::get('/{stage}/export/excel', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'exportExcel']);
             Route::get('/{stage}', [\App\Http\Controllers\Fitting\FittingKanbanController::class, 'show'])->name('show');
         });
 

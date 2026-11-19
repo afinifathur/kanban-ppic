@@ -130,11 +130,25 @@ class FittingKanbanQueryService
                     continue;
                 }
 
-                if ($customerFilter !== '' && ! str_contains(strtolower((string) ($card['customer'] ?? '')), $customerFilter)) {
-                    continue;
+                if ($customerFilter !== '') {
+                    $custHaystack = strtolower((string) ($card['customer'] ?? ''));
+                    foreach ($card['allocations'] ?? [] as $alloc) {
+                        $custHaystack .= ' '.strtolower((string) ($alloc['customer'] ?? ''));
+                    }
+                    if (! str_contains($custHaystack, $customerFilter)) {
+                        continue;
+                    }
                 }
 
                 if ($search !== '') {
+                    $allocHaystack = '';
+                    foreach ($card['allocations'] ?? [] as $alloc) {
+                        $allocHaystack .= ' '.($alloc['production_code'] ?? '')
+                            .' '.($alloc['item_code'] ?? '')
+                            .' '.($alloc['item_name'] ?? '')
+                            .' '.($alloc['customer'] ?? '');
+                    }
+
                     $haystack = strtolower(implode(' ', [
                         $card['traveler_number'] ?? '',
                         $card['heat_number'] ?? '',
@@ -143,7 +157,8 @@ class FittingKanbanQueryService
                         $card['item_name'] ?? '',
                         $card['customer'] ?? '',
                         $card['transfer_number'] ?? '',
-                    ]));
+                    ]).' '.$allocHaystack);
+
                     if (! str_contains($haystack, $search)) {
                         continue;
                     }
@@ -379,6 +394,14 @@ class FittingKanbanQueryService
         $effectiveInputQty = $this->quantityResolver->resolveEffectiveInputQty($item, $stage);
         $upstreamDefectQty = max(0, (int) $item->qty_transferred - $effectiveInputQty);
 
+        $customerStr = (string) ($item->customer ?? '');
+        if ($customerStr === '' || $customerStr === '-') {
+            $allocCustomers = collect($allocations)->pluck('customer')->filter()->unique()->values();
+            if ($allocCustomers->isNotEmpty()) {
+                $customerStr = $allocCustomers->join(', ');
+            }
+        }
+
         return [
             'id' => (int) $item->id,
             'traveler_number' => $item->traveler_number,
@@ -392,7 +415,7 @@ class FittingKanbanQueryService
             'production_code' => $item->production_code,
             'item_code' => $item->item_code,
             'item_name' => $item->item_name ?: '-',
-            'customer' => $item->customer ?: '-',
+            'customer' => $customerStr !== '' ? $customerStr : '-',
             'line_number' => $normalizedLine,
             'line_bucket' => $lineBucket,
             'line_label' => FittingItem::lineLabelFor($normalizedLine),

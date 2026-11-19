@@ -984,10 +984,19 @@ class FittingPhase4DefectQcTest extends TestCase
         $exec = $this->executionService->scanStage($item->traveler_number, FittingItem::STAGE_NETTO_PF, $this->spvNettoPf);
 
         // 1. Authorized GET views & sidebar visibility
-        $respPpic = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index'));
+        // Initial view without stage requires explicit stage selection
+        $respPpicInitial = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index'));
+        $respPpicInitial->assertOk();
+        $respPpicInitial->assertSee('Pilih Tahap Produksi Terlebih Dahulu');
+        $respPpicInitial->assertDontSee($item->traveler_number);
+        $respPpicInitial->assertDontSee('Semua Tahap');
+
+        // GET view with explicit stage displays travelers
+        $respPpic = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index', ['stage' => FittingItem::STAGE_NETTO_PF]));
         $respPpic->assertOk();
         $respPpic->assertSee($item->traveler_number);
         $respPpic->assertSee('Pencatatan Kerusakan Fitting');
+        $respPpic->assertDontSee('Semua Tahap');
         $respPpic->assertDontSee('Verifikasi Defect QC Fitting');
 
         $respQc = $this->actingAs($this->adminQcFitting)->get(route('fitting.qc-defects.index'));
@@ -1132,5 +1141,133 @@ class FittingPhase4DefectQcTest extends TestCase
         $this->actingAs($this->adminQcFitting)
             ->postJson(route('sand-casting.casting-orders.store'), [])
             ->assertForbidden();
+    }
+
+    // =========================================================================
+    // TEST 8: Compact UI View Rendering & HTTP Defect Reduction Flow (5 -> 3 -> 0)
+    // =========================================================================
+
+    public function test_08_defect_reduction_and_compact_ui_rendering(): void
+    {
+        $item = $this->createTransferredItem(['qty' => 50]);
+        $exec = $this->executionService->scanStage($item->traveler_number, FittingItem::STAGE_NETTO_PF, $this->spvNettoPf);
+
+        // 1. Verify Initial View without stage: Shows stage selection, no travelers, no "Semua Tahap"
+        $initialRes = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index'));
+        $initialRes->assertOk();
+        $initialRes->assertSee('Pilih Tahap Produksi Terlebih Dahulu');
+        $initialRes->assertSee('Pilih tahap produksi terlebih dahulu untuk menampilkan daftar PFKTR. Pencatatan defect wajib dilakukan dalam konteks tahap yang eksplisit.');
+        $initialRes->assertDontSee('Semua Tahap');
+        $initialRes->assertDontSee($item->traveler_number);
+
+        // Verify all 6 stages are presented with links
+        foreach (FittingItem::STAGES as $st) {
+            $label = \App\Services\Fitting\FittingStageAuthorizationService::STAGE_LABELS[$st];
+            $initialRes->assertSee($label);
+            $initialRes->assertSee("stage={$st}");
+        }
+
+        // 2. Verify invalid stage does NOT fallback to all data; stays on stage selector with error message
+        $invalidRes = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index', ['stage' => 'invalid_stage_xyz']));
+        $invalidRes->assertOk();
+        $invalidRes->assertSee('Pilih Tahap Produksi Terlebih Dahulu');
+        $invalidRes->assertSee("Tahap operasional Fitting 'invalid_stage_xyz' tidak valid");
+        $invalidRes->assertDontSee($item->traveler_number);
+
+        $allRes = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index', ['stage' => 'all']));
+        $allRes->assertOk();
+        $allRes->assertSee('Pilih Tahap Produksi Terlebih Dahulu');
+        $allRes->assertDontSee($item->traveler_number);
+
+        // 3. Verify Selected Stage view: Compact 5 KPI cards, table, modals, preserved parameters
+        $stageRes = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index', ['stage' => FittingItem::STAGE_NETTO_PF]));
+        $stageRes->assertOk();
+        $stageRes->assertSee('grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2', false);
+        $stageRes->assertSee('Belum Dicatat');
+        $stageRes->assertSee('Nihil (0 PCS)');
+        $stageRes->assertSee('Menunggu QC');
+        $stageRes->assertSee('Reopen QC');
+        $stageRes->assertSee('Terverifikasi QC');
+        $stageRes->assertSee($item->traveler_number);
+        $stageRes->assertDontSee('Semua Tahap');
+        $stageRes->assertSee('id="recordModal"', false);
+        $stageRes->assertSee('id="adjustModal"', false);
+        $stageRes->assertSee('id="logsModal"', false);
+        $stageRes->assertSee('name="stage" value="netto_pf"', false);
+
+        // 4. Verify travelers strictly isolated by stage (e.g. stage=kimia does not show netto_pf traveler)
+        $diffStageRes = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index', ['stage' => FittingItem::STAGE_KIMIA]));
+        $diffStageRes->assertOk();
+        $diffStageRes->assertDontSee($item->traveler_number);
+
+        // 5. Verify search carries stage parameter
+        $searchRes = $this->actingAs($this->adminPpicPf)->get(route('fitting.defects.index', [
+            'stage' => FittingItem::STAGE_NETTO_PF,
+            'search' => $item->traveler_number,
+        ]));
+        $searchRes->assertOk();
+        $searchRes->assertSee($item->traveler_number);
+        $searchRes->assertSee('name="stage" value="netto_pf"', false);
+
+        // 6. HTTP Defect Reduction Flow (5 PCS -> 3 PCS -> 0 PCS)
+        // Step A: Initial defect = 5 PCS
+        $recordRes = $this->actingAs($this->adminPpicPf)
+            ->postJson(route('fitting.defects.record', $exec), [
+                'defect_qty' => 5,
+                'notes' => 'Catatan awal 5 PCS defect',
+            ]);
+        $recordRes->assertOk();
+        $recordRes->assertJsonPath('data.defect_qty', 5);
+        $recordRes->assertJsonPath('data.good_qty', 45);
+        $recordRes->assertJsonPath('data.status', FittingStageExecution::STATUS_WAITING_QC);
+
+        // Step B: Defect reduction without note is rejected (HTTP 422)
+        $noNoteRes = $this->actingAs($this->adminPpicPf)
+            ->postJson(route('fitting.defects.adjust', $exec), [
+                'adjustment_qty' => -2,
+                'notes' => '',
+            ]);
+        $noNoteRes->assertStatus(422);
+
+        // Step C: Defect reduction with note (5 -> 3, delta -2)
+        $reduceRes = $this->actingAs($this->adminPpicPf)
+            ->postJson(route('fitting.defects.adjust', $exec), [
+                'adjustment_qty' => -2,
+                'notes' => 'Koreksi fisik lapangan berkurang 2 PCS',
+            ]);
+        $reduceRes->assertOk();
+        $reduceRes->assertJsonPath('data.defect_qty', 3);
+        $reduceRes->assertJsonPath('data.good_qty', 47);
+        $reduceRes->assertJsonPath('data.status', FittingStageExecution::STATUS_WAITING_QC);
+
+        // Verify audit log for delta -2
+        $latestLog = FittingStageExecutionDefectLog::where('fitting_stage_execution_id', $exec->id)
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($latestLog);
+        $this->assertSame(-2, (int) $latestLog->added_qty);
+        $this->assertSame(5, (int) $latestLog->previous_total);
+        $this->assertSame(3, (int) $latestLog->new_total);
+        $this->assertSame($this->adminPpicPf->id, (int) $latestLog->user_id);
+        $this->assertSame('Koreksi fisik lapangan berkurang 2 PCS', $latestLog->notes);
+
+        // Step D: Defect reduction to 0 (3 -> 0, delta -3) -> transitions to NO_DEFECT
+        $reduceZeroRes = $this->actingAs($this->adminPpicPf)
+            ->postJson(route('fitting.defects.adjust', $exec), [
+                'adjustment_qty' => -3,
+                'notes' => 'Setelah dicek ulang seluruhnya dapat digunakan',
+            ]);
+        $reduceZeroRes->assertOk();
+        $reduceZeroRes->assertJsonPath('data.defect_qty', 0);
+        $reduceZeroRes->assertJsonPath('data.good_qty', 50);
+        $reduceZeroRes->assertJsonPath('data.status', FittingStageExecution::STATUS_NO_DEFECT);
+
+        // Step E: Negative reduction below 0 rejected (0 + -1 = -1 < 0)
+        $belowZeroRes = $this->actingAs($this->adminPpicPf)
+            ->postJson(route('fitting.defects.adjust', $exec), [
+                'adjustment_qty' => -1,
+                'notes' => 'Coba negatif di bawah 0',
+            ]);
+        $belowZeroRes->assertStatus(422);
     }
 }
