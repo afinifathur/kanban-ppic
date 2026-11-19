@@ -146,11 +146,12 @@
         <div class="meta">
             Periode: <strong>{{ $activeFilters['date_from'] }}</strong> s/d <strong>{{ $activeFilters['date_to'] }}</strong>
             &bull; Tahapan: <strong>{{ strtoupper($activeFilters['stage']) }}</strong>
+            &bull; Konteks: <strong>{{ $contexts[$activeFilters['defect_context'] ?? 'all'] ?? 'Semua Konteks' }}</strong>
             &bull; Mode: <strong>{{ strtoupper($activeFilters['mode']) }}</strong>
             @if(!empty($activeFilters['production_code']))
                 &bull; Kode Produksi: <strong>{{ $activeFilters['production_code'] }}</strong>
             @endif
-            &bull; Dicetak pada: {{ now()->format('d-m-Y H:i:s') }}
+            &bull; Dicetak pada: {{ now('Asia/Jakarta')->format('d-m-Y H:i:s') }} WIB
         </div>
     </div>
 
@@ -183,7 +184,14 @@
                     <td>{{ number_format($summary['layer_5']) }}</td>
                     <td>{{ number_format($summary['layer_6']) }}</td>
                     <td>{{ number_format($summary['layer_7']) }}</td>
-                    <td>{{ number_format($summary['oven']) }}</td>
+                    <td>
+                        {{ number_format($summary['oven']) }}
+                        @if(($summary['oven_post_siap_cor'] ?? 0) > 0)
+                            <div style="font-size: 8px; font-weight: normal; color: #6b21a8;">
+                                Pra {{ number_format($summary['oven_pre_siap_cor'] ?? 0) }} / Pasca {{ number_format($summary['oven_post_siap_cor'] ?? 0) }}
+                            </div>
+                        @endif
+                    </td>
                     <td class="grand-total">{{ number_format($summary['grand_total']) }}</td>
                 </tr>
             </tbody>
@@ -199,11 +207,11 @@
                     <th style="width: 90px;">Kode Produksi</th>
                     <th style="width: 100px;">Barcode Tree</th>
                     <th>Nama Item</th>
-                    <th class="text-center" style="width: 80px;">Tahapan</th>
-                    <th class="text-right" style="width: 70px;">Rusak</th>
+                    <th class="text-center" style="width: 95px;">Tahapan / Konteks</th>
+                    <th class="text-right" style="width: 65px;">Rusak</th>
                     <th>Alasan Defect</th>
-                    <th style="width: 90px;">Operator</th>
-                    <th class="text-center" style="width: 100px;">Waktu Kejadian</th>
+                    <th style="width: 85px;">Operator</th>
+                    <th class="text-center" style="width: 110px;">Waktu Kejadian / Catat</th>
                 </tr>
             </thead>
             <tbody>
@@ -215,6 +223,14 @@
                         <td>{{ $item['item_name'] }}</td>
                         <td class="text-center">
                             <span class="badge">{{ strtoupper($item['stage_label']) }}</span>
+                            @if(($item['defect_context'] ?? 'pre_siap_cor') === 'post_siap_cor')
+                                <div style="font-size: 8px; font-weight: bold; color: #6b21a8; margin-top: 2px;">Pasca-Siap Cor</div>
+                            @elseif($item['stage'] === 'oven')
+                                <div style="font-size: 8px; color: #64748b; margin-top: 2px;">Pra-Siap Cor</div>
+                            @endif
+                            @if(!empty($item['is_late_entry']))
+                                <div style="font-size: 8px; font-weight: bold; color: #b45309; margin-top: 1px;">Koreksi Terlambat</div>
+                            @endif
                         </td>
                         <td class="text-right font-mono font-bold">{{ number_format($item['defect_qty']) }}</td>
                         <td>
@@ -225,7 +241,14 @@
                         </td>
                         <td>{{ $item['operator'] }}</td>
                         <td class="text-center font-mono">
-                            {{ $item['occurred_at'] ? \Carbon\Carbon::parse($item['occurred_at'])->format('d-m-Y H:i') : '-' }}
+                            @if(!empty($item['occurred_at']))
+                                <div>{{ \Carbon\Carbon::parse($item['occurred_at'])->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') }}</div>
+                            @else
+                                <div style="font-family: Arial, sans-serif; font-style: italic; color: #64748b;">Tidak diketahui</div>
+                            @endif
+                            @if(!empty($item['created_at']))
+                                <div style="font-size: 8px; color: #64748b;">Catat: {{ \Carbon\Carbon::parse($item['created_at'])->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') }}</div>
+                            @endif
                         </td>
                     </tr>
                 @empty
@@ -244,7 +267,7 @@
                     <th class="text-center" style="width: 35px;">No</th>
                     <th style="width: 130px;">Kode Produksi</th>
                     <th>Nama Item</th>
-                    <th class="text-center" style="width: 120px;">Tahapan (Stage)</th>
+                    <th class="text-center" style="width: 140px;">Tahapan (Stage)</th>
                     <th class="text-right" style="width: 100px;">Jumlah Rusak (pcs)</th>
                     <th class="text-center" style="width: 100px;">Jumlah Kejadian</th>
                 </tr>
@@ -257,6 +280,11 @@
                         <td>{{ $item['item_name'] }}</td>
                         <td class="text-center">
                             <span class="badge">{{ strtoupper($item['stage_label']) }}</span>
+                            @if($item['stage'] === 'oven' && ($item['post_siap_cor_qty'] ?? 0) > 0)
+                                <div style="font-size: 8px; color: #6b21a8; margin-top: 2px;">
+                                    Pra: {{ number_format($item['pre_siap_cor_qty'] ?? 0) }} | Pasca: {{ number_format($item['post_siap_cor_qty'] ?? 0) }}
+                                </div>
+                            @endif
                         </td>
                         <td class="text-right font-mono font-bold">{{ number_format($item['defect_qty']) }}</td>
                         <td class="text-center font-mono">{{ $item['record_count'] }} kali</td>

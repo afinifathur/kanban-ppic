@@ -66,6 +66,46 @@ class LostWaxKitir extends Model
     }
 
     /**
+     * Dynamically resolve customer from associated casting result trees when loaded,
+     * deduplicating with exact string equality and without prefix corruption.
+     */
+    public function getCustomerAttribute(?string $value): ?string
+    {
+        if ($this->relationLoaded('castingResult') && $this->castingResult && $this->castingResult->relationLoaded('trees')) {
+            $targetCode = trim((string) $this->production_code);
+            $trees = $this->castingResult->trees->filter(fn ($t) => trim((string) $t->production_code) === $targetCode);
+            if ($trees->isNotEmpty()) {
+                $resolved = \App\Helpers\FormatHelper::formatDeduplicatedList($trees->pluck('customer'));
+                if ($resolved !== '-') {
+                    return $resolved;
+                }
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Dynamically resolve item name from associated casting result trees when loaded,
+     * deduplicating with exact string equality and without prefix corruption.
+     */
+    public function getItemNameAttribute(?string $value): ?string
+    {
+        if ($this->relationLoaded('castingResult') && $this->castingResult && $this->castingResult->relationLoaded('trees')) {
+            $targetCode = trim((string) $this->production_code);
+            $trees = $this->castingResult->trees->filter(fn ($t) => trim((string) $t->production_code) === $targetCode);
+            if ($trees->isNotEmpty()) {
+                $resolved = \App\Helpers\FormatHelper::formatDeduplicatedList($trees->pluck('item_name'));
+                if ($resolved !== '-') {
+                    return $resolved;
+                }
+            }
+        }
+
+        return $value;
+    }
+
+    /**
      * Active Fitting Production traveler item linked via active_kitir_id (read-only bridge relation).
      */
     public function activeFittingItem()

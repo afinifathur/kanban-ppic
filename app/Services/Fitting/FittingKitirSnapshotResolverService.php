@@ -320,16 +320,20 @@ class FittingKitirSnapshotResolverService
         }
 
         // Resolve consolidated item_code & po_number for display/snapshot
-        $itemCodes = collect($allocations)->pluck('item_code')->filter()->map('trim')->unique()->values();
-        $poNumbers = collect($allocations)->pluck('po_number')->filter()->map('trim')->unique()->values();
+        $itemCodes = \App\Helpers\FormatHelper::deduplicateList(collect($allocations)->pluck('item_code'));
+        $poNumbers = \App\Helpers\FormatHelper::deduplicateList(collect($allocations)->pluck('po_number'));
+
+        // Resolve consolidated item_name & customer from allocations if available, falling back to kitir
+        $resolvedCustomer = \App\Helpers\FormatHelper::formatDeduplicatedList(collect($allocations)->pluck('customer'));
+        $resolvedItemName = \App\Helpers\FormatHelper::formatDeduplicatedList(collect($allocations)->pluck('item_name'));
 
         return [
             'production_plan_id' => ! $isMultiAllocation ? $allocations[0]['production_plan_id'] : null,
             'production_code' => $targetCode,
-            'item_code' => $itemCodes->isNotEmpty() ? substr($itemCodes->implode(', '), 0, 100) : null,
-            'item_name' => ($kitir->item_name && $kitir->item_name !== '-') ? $kitir->item_name : ($allocations[0]['item_name'] ?? null),
-            'customer' => ($kitir->customer && $kitir->customer !== '-') ? $kitir->customer : ($allocations[0]['customer'] ?? null),
-            'po_number' => $poNumbers->isNotEmpty() ? $poNumbers->implode(', ') : null,
+            'item_code' => ! empty($itemCodes) ? substr(implode(', ', $itemCodes), 0, 100) : null,
+            'item_name' => $resolvedItemName !== '-' ? $resolvedItemName : (($kitir->item_name && $kitir->item_name !== '-') ? $kitir->item_name : null),
+            'customer' => $resolvedCustomer !== '-' ? $resolvedCustomer : (($kitir->customer && $kitir->customer !== '-') ? $kitir->customer : null),
+            'po_number' => ! empty($poNumbers) ? implode(', ', $poNumbers) : null,
             'line_number' => $lineNumber,
             'suggested_line_number' => $lineNumber,
             'suggested_line_status' => $suggestedLineStatus,

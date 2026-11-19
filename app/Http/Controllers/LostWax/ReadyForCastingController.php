@@ -20,16 +20,18 @@ class ReadyForCastingController extends Controller
         $search = trim($request->input('search', ''));
         $codes = (array) $request->input('codes', []);
         $customers = (array) $request->input('customers', []);
+        $scanDates = (array) $request->input('scan_dates', []);
 
         $codes = array_values(array_filter($codes, fn ($c) => $c !== null && $c !== ''));
         $customers = array_values(array_filter($customers, fn ($c) => $c !== null && $c !== ''));
+        $scanDates = ReadyForCastingService::normalizeScanDateParams($scanDates);
 
         $scope = null;
         if (auth()->check() && auth()->user()->hasRole('ppic')) {
             $scope = auth()->user()->product_scope;
         }
 
-        $data = $this->readyForCastingService->getQueueData($search, $scope, $codes, $customers);
+        $data = $this->readyForCastingService->getQueueData($search, $scope, $codes, $customers, $scanDates);
 
         return view('lost-wax.reports.ready-for-casting.index', [
             'items' => $data['items'],
@@ -37,8 +39,10 @@ class ReadyForCastingController extends Controller
             'search' => $search,
             'codes' => $codes,
             'customers' => $customers,
+            'scanDates' => $data['selected_scan_dates'],
             'allCodes' => $data['all_codes'],
             'allCustomers' => $data['all_customers'],
+            'allScanDates' => $data['all_scan_dates'],
         ]);
     }
 
@@ -50,16 +54,18 @@ class ReadyForCastingController extends Controller
         $search = trim($request->input('search', ''));
         $codes = (array) $request->input('codes', []);
         $customers = (array) $request->input('customers', []);
+        $scanDates = (array) $request->input('scan_dates', []);
 
         $codes = array_values(array_filter($codes, fn ($c) => $c !== null && $c !== ''));
         $customers = array_values(array_filter($customers, fn ($c) => $c !== null && $c !== ''));
+        $scanDates = ReadyForCastingService::normalizeScanDateParams($scanDates);
 
         $scope = null;
         if (auth()->check() && auth()->user()->hasRole('ppic')) {
             $scope = auth()->user()->product_scope;
         }
 
-        $data = $this->readyForCastingService->getQueueData($search, $scope, $codes, $customers);
+        $data = $this->readyForCastingService->getQueueData($search, $scope, $codes, $customers, $scanDates);
 
         return view('lost-wax.reports.ready-for-casting.print', [
             'items' => $data['items'],
@@ -67,8 +73,10 @@ class ReadyForCastingController extends Controller
             'search' => $search,
             'codes' => $codes,
             'customers' => $customers,
+            'scanDates' => $data['selected_scan_dates'],
             'allCodes' => $data['all_codes'],
             'allCustomers' => $data['all_customers'],
+            'allScanDates' => $data['all_scan_dates'],
         ]);
     }
 }

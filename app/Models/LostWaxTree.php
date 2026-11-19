@@ -88,6 +88,11 @@ class LostWaxTree extends Model
         return $this->hasMany(LostWaxTreeDefect::class, 'lost_wax_tree_id');
     }
 
+    public function activeDefects()
+    {
+        return $this->hasMany(LostWaxTreeDefect::class, 'lost_wax_tree_id')->whereNull('voided_at');
+    }
+
     /**
      * All casting result detail records (including cancelled history).
      */
@@ -145,11 +150,67 @@ class LostWaxTree extends Model
 
     public function getTotalDefectQuantityAttribute(): int
     {
-        if ($this->relationLoaded('defects')) {
-            return (int) $this->defects->sum('defect_qty');
+        if ($this->relationLoaded('activeDefects')) {
+            return (int) $this->activeDefects->sum('defect_qty');
         }
 
-        return (int) $this->defects()->sum('defect_qty');
+        if ($this->relationLoaded('defects')) {
+            return (int) $this->defects->whereNull('voided_at')->sum('defect_qty');
+        }
+
+        return (int) $this->activeDefects()->sum('defect_qty');
+    }
+
+    public function getPreSiapCorDefectQuantityAttribute(): int
+    {
+        if ($this->relationLoaded('activeDefects')) {
+            return (int) $this->activeDefects
+                ->filter(fn ($d) => ($d->defect_context ?? LostWaxTreeDefect::CONTEXT_PRE_SIAP_COR) !== LostWaxTreeDefect::CONTEXT_POST_SIAP_COR)
+                ->sum('defect_qty');
+        }
+
+        if ($this->relationLoaded('defects')) {
+            return (int) $this->defects
+                ->whereNull('voided_at')
+                ->filter(fn ($d) => ($d->defect_context ?? LostWaxTreeDefect::CONTEXT_PRE_SIAP_COR) !== LostWaxTreeDefect::CONTEXT_POST_SIAP_COR)
+                ->sum('defect_qty');
+        }
+
+        return (int) $this->activeDefects()
+            ->where(function ($q) {
+                $q->whereNull('defect_context')
+                    ->orWhere('defect_context', '!=', LostWaxTreeDefect::CONTEXT_POST_SIAP_COR);
+            })
+            ->sum('defect_qty');
+    }
+
+    public function getPostSiapCorDefectQuantityAttribute(): int
+    {
+        if ($this->relationLoaded('activeDefects')) {
+            return (int) $this->activeDefects
+                ->where('defect_context', LostWaxTreeDefect::CONTEXT_POST_SIAP_COR)
+                ->sum('defect_qty');
+        }
+
+        if ($this->relationLoaded('defects')) {
+            return (int) $this->defects
+                ->whereNull('voided_at')
+                ->where('defect_context', LostWaxTreeDefect::CONTEXT_POST_SIAP_COR)
+                ->sum('defect_qty');
+        }
+
+        return (int) $this->activeDefects()
+            ->where('defect_context', LostWaxTreeDefect::CONTEXT_POST_SIAP_COR)
+            ->sum('defect_qty');
+    }
+
+    /**
+     * Corrected Historical Siap Cor Quantity:
+     * Gross Tree qty minus all active pre-Siap Cor defects (NOT reduced by post-Siap Cor defects or casting).
+     */
+    public function getSiapCorHistoricalQuantityAttribute(): int
+    {
+        return max(0, (int) $this->quantity - $this->pre_siap_cor_defect_quantity);
     }
 
     public function getUsableQuantityAttribute(): int

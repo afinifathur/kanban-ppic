@@ -158,10 +158,10 @@ class FittingItem extends Model
     public const VALID_LINE_NUMBERS = [1, 2, 3, 4];
 
     public const LINE_LABELS = [
-        1 => 'Line 1 — Elbow / Tee',
+        1 => 'Line 1 — Fitting biasa',
         2 => 'Line 2 — Union',
-        3 => 'Line 3 — BW',
-        4 => 'Line 4 — Ball Valve',
+        3 => 'Line 3 — Ball Valve',
+        4 => 'Line 4 — BW',
     ];
 
     public static function lineLabelFor(?int $lineNumber): string

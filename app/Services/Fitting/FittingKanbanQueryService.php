@@ -14,7 +14,7 @@ class FittingKanbanQueryService
 {
     public const BUCKET_UNASSIGNED = 'unassigned';
 
-    public const ALL_BUCKETS = ['1', '2', '3', '4', self::BUCKET_UNASSIGNED];
+    public const ALL_BUCKETS = ['1', '2', '3', '4'];
 
     private readonly FittingQuantityResolverService $quantityResolver;
 
@@ -121,7 +121,7 @@ class FittingKanbanQueryService
         $flatCards = [];
 
         foreach ($allFormattedByBucket as $bucketKey => $bucketCards) {
-            if ($lineBucketFilter !== null && $bucketKey !== $lineBucketFilter) {
+            if ($lineBucketFilter !== null && (string) $bucketKey !== (string) $lineBucketFilter) {
                 continue;
             }
 
@@ -158,6 +158,7 @@ class FittingKanbanQueryService
         foreach (self::ALL_BUCKETS as $bk) {
             $bucketCounts[$bk] = count($filteredBuckets[$bk]);
         }
+        $bucketCounts[self::BUCKET_UNASSIGNED] = count($filteredBuckets[self::BUCKET_UNASSIGNED]);
 
         return [
             'stage' => $canonicalStage,
@@ -170,6 +171,7 @@ class FittingKanbanQueryService
                 'total_effective_pcs' => (int) array_sum(array_column($flatCards, 'effective_input_qty')),
                 'total_weight_kg' => round((float) array_sum(array_column($flatCards, 'total_weight_kg')), 2),
                 'unassigned_cards' => count($filteredBuckets[self::BUCKET_UNASSIGNED]),
+                'unassigned_items' => $filteredBuckets[self::BUCKET_UNASSIGNED],
                 'bucket_counts' => $bucketCounts,
             ],
         ];

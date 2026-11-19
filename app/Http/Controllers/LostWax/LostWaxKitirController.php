@@ -136,6 +136,11 @@ class LostWaxKitirController extends Controller
      */
     protected function prepareKitirRenderData(\App\Models\LostWaxKitir $kitir, LostWaxCastingResult $castingResult): array
     {
+        if (! $castingResult->relationLoaded('trees')) {
+            $castingResult->load('trees');
+        }
+        $kitir->setRelation('castingResult', $castingResult);
+
         // 1. Barcode Code 128 PNG
         $generator = new BarcodeGeneratorPNG;
         $barcodeBase64 = base64_encode(

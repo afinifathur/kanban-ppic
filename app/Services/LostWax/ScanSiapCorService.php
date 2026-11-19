@@ -102,13 +102,15 @@ class ScanSiapCorService
                 return $validationError;
             }
 
-            // Execute atomic transition to siap_cor
-            $scannedAt = Carbon::now(config('app.timezone'));
+            // Execute atomic transition to siap_cor (immutable scanned_qty snapshot captured once)
+            $scannedAt = Carbon::now('Asia/Jakarta');
+            $scannedQtySnapshot = (int) $tree->usable_quantity;
 
             $event = LostWaxScanEvent::create([
                 'tree_id' => $tree->id,
                 'barcode' => $barcode,
                 'stage' => 'siap_cor',
+                'scanned_qty' => $scannedQtySnapshot,
                 'scanned_at' => $scannedAt,
                 'operator_id' => $operatorId,
                 'result' => 'success',

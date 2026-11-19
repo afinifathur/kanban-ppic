@@ -231,9 +231,9 @@ class DewaxingMonitoringService
             $products[] = $primaryProduct;
         }
 
-        $displayCode = ! empty($codes) ? implode(', ', $codes) : $primaryCode;
-        $displayCustomer = ! empty($customers) ? implode(', ', $customers) : $primaryCustomer;
-        $displayProduct = ! empty($products) ? implode(', ', $products) : $primaryProduct;
+        $displayCode = ! empty($codes) ? \App\Helpers\FormatHelper::formatDeduplicatedList($codes, ', ', $primaryCode) : $primaryCode;
+        $displayCustomer = ! empty($customers) ? \App\Helpers\FormatHelper::formatDeduplicatedList($customers, ', ', $primaryCustomer) : $primaryCustomer;
+        $displayProduct = ! empty($products) ? \App\Helpers\FormatHelper::formatDeduplicatedList($products, ', ', $primaryProduct) : $primaryProduct;
 
         // SPK / WO Number resolution
         $spkNumber = $tree->rangkaiExecution?->workOrder?->rangkai_order_number

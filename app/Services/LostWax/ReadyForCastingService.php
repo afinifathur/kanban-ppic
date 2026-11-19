@@ -16,13 +16,15 @@ class ReadyForCastingService
      * @param  string|null  $scope  Optional RBAC product scope
      * @param  array  $codes  Optional array of production codes to filter
      * @param  array  $customers  Optional array of customers to filter
-     * @return array{items: Collection, raw_items: Collection, summary: array, all_codes: array, all_customers: array}
+     * @param  array  $scanDates  Optional array of scan dates (Y-m-d or d-m-Y in Asia/Jakarta) to filter
+     * @return array{items: Collection, raw_items: Collection, summary: array, all_codes: array, all_customers: array, all_scan_dates: array}
      */
     public function getQueueData(
         ?string $search = null,
         ?string $scope = null,
         array $codes = [],
-        array $customers = []
+        array $customers = [],
+        array $scanDates = []
     ): array {
         // 1. Fetch eligible tree candidates with eager loading
         $query = LostWaxTree::query()
@@ -100,6 +102,9 @@ class ReadyForCastingService
             }
 
             $scannedAt = $siapCorEvent->scanned_at;
+            $scannedAtWib = $scannedAt ? $scannedAt->copy()->setTimezone('Asia/Jakarta') : null;
+            $scanDateKey = $scannedAtWib ? $scannedAtWib->format('Y-m-d') : null;
+            $scanDateLabel = $scannedAtWib ? $scannedAtWib->format('d-m-Y') : '-';
             $grossQty = (int) $tree->quantity;
             $defectQty = (int) $tree->total_defect_quantity;
 
@@ -161,10 +166,10 @@ class ReadyForCastingService
                 $treeMaterials[] = $primaryMaterial;
             }
 
-            $displayCode = ! empty($treeCodes) ? implode(', ', $treeCodes) : $primaryCode;
-            $displayCustomer = ! empty($treeCustomers) ? implode(', ', $treeCustomers) : $primaryCustomer;
-            $displayProduct = ! empty($treeProducts) ? implode(', ', $treeProducts) : $primaryProduct;
-            $displayMaterial = ! empty($treeMaterials) ? implode(', ', $treeMaterials) : $primaryMaterial;
+            $displayCode = ! empty($treeCodes) ? \App\Helpers\FormatHelper::formatDeduplicatedList($treeCodes, ', ', $primaryCode) : $primaryCode;
+            $displayCustomer = ! empty($treeCustomers) ? \App\Helpers\FormatHelper::formatDeduplicatedList($treeCustomers, ', ', $primaryCustomer) : $primaryCustomer;
+            $displayProduct = ! empty($treeProducts) ? \App\Helpers\FormatHelper::formatDeduplicatedList($treeProducts, ', ', $primaryProduct) : $primaryProduct;
+            $displayMaterial = ! empty($treeMaterials) ? \App\Helpers\FormatHelper::formatDeduplicatedList($treeMaterials, ', ', $primaryMaterial) : $primaryMaterial;
 
             // SPK / WO Number resolution
             $spkNumber = $tree->rangkaiExecution?->workOrder?->rangkai_order_number
@@ -188,9 +193,11 @@ class ReadyForCastingService
                 'gross_pcs' => $grossQty,
                 'defect_pcs' => $defectQty,
                 'scanned_at' => $scannedAt,
-                'scanned_at_formatted' => $scannedAt ? $scannedAt->translatedFormat('d/m/Y H:i:s') : '-',
-                'scanned_time' => $scannedAt ? $scannedAt->format('H:i') : '-',
-                'scanned_diff' => $scannedAt ? $scannedAt->diffForHumans() : '-',
+                'scan_date' => $scanDateKey,
+                'scan_date_label' => $scanDateLabel,
+                'scanned_at_formatted' => $scannedAtWib ? $scannedAtWib->translatedFormat('d/m/Y H:i:s') : '-',
+                'scanned_time' => $scannedAtWib ? $scannedAtWib->format('H:i') : '-',
+                'scanned_diff' => $scannedAtWib ? $scannedAtWib->diffForHumans() : '-',
                 'is_multi_allocated' => count($treeCodes) > 1 || count($allocationBreakdown) > 1,
                 'allocations' => $allocationBreakdown,
             ]);
@@ -222,8 +229,30 @@ class ReadyForCastingService
             ->values()
             ->all();
 
-        // 5. Apply filters with AND combination
-        $filteredRows = $sortedRows->filter(function ($item) use ($search, $codes, $customers) {
+        // Dynamic scan date options built ONLY from active Ready for Casting rows (Asia/Jakarta, newest first)
+        $scanDateCounts = [];
+        foreach ($sortedRows as $row) {
+            $dKey = $row['scan_date'] ?? null;
+            if (! $dKey) {
+                continue;
+            }
+            if (! isset($scanDateCounts[$dKey])) {
+                $scanDateCounts[$dKey] = [
+                    'value' => $dKey,
+                    'label' => $row['scan_date_label'],
+                    'tree_count' => 0,
+                ];
+            }
+            $scanDateCounts[$dKey]['tree_count']++;
+        }
+        krsort($scanDateCounts);
+        $allScanDates = array_values($scanDateCounts);
+
+        // Normalize requested scan date filters to canonical Y-m-d (supports both Y-m-d and d-m-Y inputs)
+        $normalizedScanDates = self::normalizeScanDateParams($scanDates);
+
+        // 5. Apply filters with AND combination (multi-select within each filter uses OR)
+        $filteredRows = $sortedRows->filter(function ($item) use ($search, $codes, $customers, $normalizedScanDates) {
             // A. Search keyword filter
             if ($search !== null && $search !== '') {
                 $searchLower = strtolower(trim($search));
@@ -267,11 +296,21 @@ class ReadyForCastingService
                 }
             }
 
+            // D. Scan Siap Cor Date multi-select filter (OR across selected dates, Asia/Jakarta)
+            if (! empty($normalizedScanDates)) {
+                if (empty($item['scan_date']) || ! in_array($item['scan_date'], $normalizedScanDates, true)) {
+                    return false;
+                }
+            }
+
             return true;
         })->values();
 
         // 6. Compute Summary KPIs
-        $isFiltered = ($search !== null && $search !== '') || ! empty($codes) || ! empty($customers);
+        $isFiltered = ($search !== null && $search !== '')
+            || ! empty($codes)
+            || ! empty($customers)
+            || ! empty($normalizedScanDates);
 
         $activeFilterParts = [];
         if ($search !== null && $search !== '') {
@@ -283,9 +322,16 @@ class ReadyForCastingService
         if (! empty($customers)) {
             $activeFilterParts[] = 'Customer: '.implode(', ', $customers);
         }
+        if (! empty($normalizedScanDates)) {
+            $formattedFilterDates = array_map(
+                fn (string $d) => Carbon::createFromFormat('Y-m-d', $d, 'Asia/Jakarta')->format('d-m-Y'),
+                $normalizedScanDates
+            );
+            $activeFilterParts[] = 'Tgl Scan: '.implode(', ', $formattedFilterDates);
+        }
         $activeFilterText = ! empty($activeFilterParts) ? implode(' | ', $activeFilterParts) : '';
 
-        $now = Carbon::now(config('app.timezone'));
+        $now = Carbon::now('Asia/Jakarta');
 
         $distinctCodesCount = $filteredRows->flatMap(fn ($r) => $r['codes'])
             ->filter(fn ($c) => $c !== '-' && ! empty($c))
@@ -313,6 +359,47 @@ class ReadyForCastingService
             'summary' => $summary,
             'all_codes' => $allCodes,
             'all_customers' => $allCustomers,
+            'all_scan_dates' => $allScanDates,
+            'selected_scan_dates' => $normalizedScanDates,
         ];
+    }
+
+    /**
+     * Normalize incoming scan_dates filter array into unique canonical Y-m-d strings (descending).
+     * Accepts both Y-m-d (2026-11-18) and d-m-Y (18-11-2026); ignores invalid values safely.
+     *
+     * @param  array<int, mixed>  $rawDates
+     * @return array<int, string>
+     */
+    public static function normalizeScanDateParams(array $rawDates): array
+    {
+        $normalized = [];
+
+        foreach ($rawDates as $raw) {
+            if (! is_string($raw) && ! is_numeric($raw)) {
+                continue;
+            }
+            $val = trim((string) $raw);
+            if ($val === '') {
+                continue;
+            }
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) {
+                $parsed = Carbon::createFromFormat('!Y-m-d', $val, 'Asia/Jakarta');
+                if ($parsed && $parsed->format('Y-m-d') === $val) {
+                    $normalized[$val] = $val;
+                }
+            } elseif (preg_match('/^\d{2}-\d{2}-\d{4}$/', $val)) {
+                $parsed = Carbon::createFromFormat('!d-m-Y', $val, 'Asia/Jakarta');
+                if ($parsed && $parsed->format('d-m-Y') === $val) {
+                    $key = $parsed->format('Y-m-d');
+                    $normalized[$key] = $key;
+                }
+            }
+        }
+
+        krsort($normalized);
+
+        return array_values($normalized);
     }
 }

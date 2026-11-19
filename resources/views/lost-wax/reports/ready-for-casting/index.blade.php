@@ -85,12 +85,23 @@
             <form method="GET" action="{{ route('lost-wax.reports.ready-for-casting.index') }}" class="w-full sm:w-auto sm:min-w-[280px] relative">
                 @foreach($codes as $c)<input type="hidden" name="codes[]" value="{{ $c }}">@endforeach
                 @foreach($customers as $cust)<input type="hidden" name="customers[]" value="{{ $cust }}">@endforeach
+                @foreach($scanDates as $sd)<input type="hidden" name="scan_dates[]" value="{{ $sd }}">@endforeach
 
                 <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                 <input type="text" name="search" value="{{ $search }}"
                     placeholder="Cari Barcode, Kode, Customer, SPK, Item..."
                     class="w-full pl-8 pr-3 py-1.5 rounded border border-slate-300 text-xs focus:border-amber-500 focus:ring-amber-500 bg-white">
             </form>
+
+            <!-- Dropdown Trigger: Tanggal Scan -->
+            <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded flex items-center gap-1.5 transition-colors cursor-pointer {{ !empty($scanDates) ? 'border-amber-500 text-amber-700 bg-amber-50/40' : '' }}" data-filter-type="scan_dates">
+                <i class="fas fa-calendar-alt text-slate-500"></i>
+                <span>Tanggal Scan</span>
+                @if(!empty($scanDates))
+                    <span class="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded-full font-black">{{ count($scanDates) }}</span>
+                @endif
+                <i class="fas fa-chevron-down text-[9px] text-slate-400 ml-0.5"></i>
+            </button>
 
             <!-- Dropdown Trigger: Kode Produksi -->
             <button type="button" class="filter-dropdown-trigger text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-1.5 px-3 rounded flex items-center gap-1.5 transition-colors cursor-pointer {{ !empty($codes) ? 'border-amber-500 text-amber-700 bg-amber-50/40' : '' }}" data-filter-type="codes">
@@ -112,7 +123,7 @@
                 <i class="fas fa-chevron-down text-[9px] text-slate-400 ml-0.5"></i>
             </button>
 
-            @if($search !== '' || !empty($codes) || !empty($customers))
+            @if($search !== '' || !empty($codes) || !empty($customers) || !empty($scanDates))
                 <a href="{{ route('lost-wax.reports.ready-for-casting.index') }}" class="text-xs text-rose-600 hover:underline font-bold ml-1">
                     Reset Filter
                 </a>
@@ -138,6 +149,16 @@
                     <button type="button" class="hover:text-red-500 font-bold ml-1 text-slate-500" onclick="clearGlobalSearch()">&times;</button>
                 </span>
             @endif
+
+            @foreach($scanDates as $sd)
+                @php
+                    $sdLabel = \Carbon\Carbon::createFromFormat('Y-m-d', $sd, 'Asia/Jakarta')->format('d-m-Y');
+                @endphp
+                <span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-mono font-bold">
+                    Tgl Scan: {{ $sdLabel }}
+                    <button type="button" class="hover:text-red-500 font-bold ml-1 text-emerald-700" onclick="removeFilterValue('scan_dates', '{{ $sd }}')">&times;</button>
+                </span>
+            @endforeach
 
             @foreach($codes as $c)
                 <span class="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-mono font-bold">
@@ -326,6 +347,41 @@
     </div>
 </div>
 
+<!-- Floating Dropdown 3: Tanggal Scan -->
+<div id="scan_dates-filter-dropdown" class="filter-dropdown-menu fixed hidden z-50 bg-white border border-slate-300 rounded-lg shadow-xl p-3 w-64 text-slate-800 text-[11px] no-print">
+    <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
+        <span class="font-bold text-slate-700">Filter Tanggal Scan</span>
+        <button type="button" class="text-slate-400 hover:text-slate-600 font-bold text-sm leading-none" onclick="closeAllDropdowns()">&times;</button>
+    </div>
+    <div class="mb-2">
+        <input type="text" placeholder="Cari tanggal..." class="w-full px-2 py-1 border border-slate-300 rounded text-[11px] filter-search-box focus:border-amber-500 focus:ring-amber-500" oninput="filterDropdownOptions('scan_dates', this.value)">
+    </div>
+    <div class="mb-2 flex items-center justify-between">
+        <label class="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-600">
+            <input type="checkbox" class="select-all-checkbox rounded border-slate-300 text-amber-600 focus:ring-amber-500" onchange="toggleSelectAll('scan_dates', this.checked)">
+            <span>(Select All)</span>
+        </label>
+        <button type="button" class="text-blue-600 hover:underline" onclick="clearAllOptions('scan_dates')">Clear</button>
+    </div>
+    <div class="max-h-48 overflow-y-auto space-y-0.5 border-t border-b border-slate-100 py-1.5 option-list-container">
+        @forelse($allScanDates as $sdOpt)
+            <label class="flex items-center justify-between gap-2 cursor-pointer py-0.5 px-1 rounded hover:bg-slate-50 option-item" data-search-alt="{{ $sdOpt['value'] }}">
+                <span class="flex items-center gap-2 min-w-0">
+                    <input type="checkbox" value="{{ $sdOpt['value'] }}" class="option-checkbox rounded border-slate-300 text-amber-600 focus:ring-amber-500" onchange="syncSelectAllState('scan_dates')" {{ in_array($sdOpt['value'], $scanDates, true) ? 'checked' : '' }}>
+                    <span class="option-text font-mono font-bold text-slate-700">{{ $sdOpt['label'] }}</span>
+                </span>
+                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 whitespace-nowrap">{{ number_format($sdOpt['tree_count']) }} Pohon</span>
+            </label>
+        @empty
+            <div class="text-slate-400 text-center py-2">Tidak ada tanggal tersedia</div>
+        @endforelse
+    </div>
+    <div class="flex justify-end gap-1.5 pt-2">
+        <button type="button" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded font-semibold text-[10px] text-slate-700" onclick="closeAllDropdowns()">Batal</button>
+        <button type="button" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[10px]" onclick="applyFilter('scan_dates')">Terapkan</button>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function(){
         document.querySelectorAll('.filter-dropdown-trigger').forEach(function(btn){
@@ -370,6 +426,26 @@
 
         dropdown.style.left = left + 'px';
         dropdown.style.top = top + 'px';
+        syncSelectAllState(type);
+    }
+
+    function syncSelectAllState(type) {
+        const dropdown = document.getElementById(type + '-filter-dropdown');
+        if (!dropdown) return;
+        const selectAll = dropdown.querySelector('.select-all-checkbox');
+        if (!selectAll) return;
+        const visibleCbs = Array.from(dropdown.querySelectorAll('.option-item'))
+            .filter((item) => item.style.display !== 'none')
+            .map((item) => item.querySelector('.option-checkbox'))
+            .filter(Boolean);
+        if (visibleCbs.length === 0) {
+            selectAll.checked = false;
+            selectAll.indeterminate = false;
+            return;
+        }
+        const checkedCount = visibleCbs.filter((cb) => cb.checked).length;
+        selectAll.checked = checkedCount === visibleCbs.length;
+        selectAll.indeterminate = checkedCount > 0 && checkedCount < visibleCbs.length;
     }
 
     function closeAllDropdowns() {
@@ -385,12 +461,14 @@
         const q = query.toLowerCase().trim();
         items.forEach(function(item){
             const text = item.querySelector('.option-text').textContent.toLowerCase();
-            if (text.includes(q)) {
+            const alt = (item.getAttribute('data-search-alt') || '').toLowerCase();
+            if (text.includes(q) || alt.includes(q)) {
                 item.style.display = 'flex';
             } else {
                 item.style.display = 'none';
             }
         });
+        syncSelectAllState(type);
     }
 
     function toggleSelectAll(type, checked) {
@@ -402,6 +480,7 @@
                 if (cb) cb.checked = checked;
             }
         });
+        syncSelectAllState(type);
     }
 
     function clearAllOptions(type) {
@@ -410,8 +489,7 @@
         dropdown.querySelectorAll('.option-checkbox').forEach(function(cb){
             cb.checked = false;
         });
-        const selectAll = dropdown.querySelector('.select-all-checkbox');
-        if (selectAll) selectAll.checked = false;
+        syncSelectAllState(type);
     }
 
     function applyFilter(type) {
@@ -432,7 +510,8 @@
             urlParams.append(type + '[]', val);
         });
 
-        window.location.href = window.location.pathname + '?' + urlParams.toString();
+        const qs = urlParams.toString();
+        window.location.href = qs ? (window.location.pathname + '?' + qs) : window.location.pathname;
     }
 
     function removeFilterValue(type, value) {
@@ -447,13 +526,15 @@
             }
         });
 
-        window.location.href = window.location.pathname + '?' + urlParams.toString();
+        const qs = urlParams.toString();
+        window.location.href = qs ? (window.location.pathname + '?' + qs) : window.location.pathname;
     }
 
     function clearGlobalSearch() {
         const urlParams = new URLSearchParams(window.location.search);
         urlParams.delete('search');
-        window.location.href = window.location.pathname + '?' + urlParams.toString();
+        const qs = urlParams.toString();
+        window.location.href = qs ? (window.location.pathname + '?' + qs) : window.location.pathname;
     }
 </script>
 @endsection

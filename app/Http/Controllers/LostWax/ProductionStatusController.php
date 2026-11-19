@@ -283,7 +283,7 @@ class ProductionStatusController extends Controller
             'Total (pcs)', 'Total Rusak (pcs)', 'Cetak (pcs)', 'Rangkai (pcs)',
             'Lapisan 1 (pcs)', 'Lapisan 2 (pcs)', 'Lapisan 3 (pcs)', 'Lapisan 4 (pcs)',
             'Lapisan 5 (pcs)', 'Lapisan 6 (pcs)', 'Lapisan 7 (pcs)', 'Oven (pcs)',
-            'Siap Cor (pcs)', 'Cor (pcs)', 'Kecukupan',
+            'Siap Cor (pcs)', 'Siap Cor Historis (pcs)', 'Cor (pcs)', 'Kecukupan',
         ];
 
         $headerRow = 6;
@@ -312,7 +312,7 @@ class ProductionStatusController extends Controller
                 ],
             ],
         ];
-        $sheet->getStyle('A'.$headerRow.':T'.$headerRow)->applyFromArray($headerStyle);
+        $sheet->getStyle('A'.$headerRow.':U'.$headerRow)->applyFromArray($headerStyle);
         $sheet->getRowDimension($headerRow)->setRowHeight(28);
 
         // Data Rows
@@ -338,18 +338,19 @@ class ProductionStatusController extends Controller
             $sheet->setCellValue('P'.$currentRow, $row['layer_7']);
             $sheet->setCellValue('Q'.$currentRow, $row['oven_qty']);
             $sheet->setCellValue('R'.$currentRow, ($row['siap_cor_qty'] ?? 0) > 0 ? $row['siap_cor_qty'] : '-');
-            $sheet->setCellValue('S'.$currentRow, ($row['cor_qty'] ?? 0) > 0 ? $row['cor_qty'] : '-');
-            $sheet->setCellValue('T'.$currentRow, $row['quality_status'] ?? 'WATCH');
+            $sheet->setCellValue('S'.$currentRow, ($row['siap_cor_historical_qty'] ?? 0) > 0 ? $row['siap_cor_historical_qty'] : '-');
+            $sheet->setCellValue('T'.$currentRow, ($row['cor_qty'] ?? 0) > 0 ? $row['cor_qty'] : '-');
+            $sheet->setCellValue('U'.$currentRow, $row['quality_status'] ?? 'WATCH');
 
             // Zebra styling
             if ($currentRow % 2 === 0) {
-                $sheet->getStyle('A'.$currentRow.':T'.$currentRow)->getFill()
+                $sheet->getStyle('A'.$currentRow.':U'.$currentRow)->getFill()
                     ->setFillType(Fill::FILL_SOLID)
                     ->getStartColor()->setRGB('F8FAFC'); // slate-50
             }
 
             // Cell borders
-            $sheet->getStyle('A'.$currentRow.':T'.$currentRow)->getBorders()
+            $sheet->getStyle('A'.$currentRow.':U'.$currentRow)->getBorders()
                 ->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E2E8F0');
 
             $currentRow++;
@@ -358,24 +359,24 @@ class ProductionStatusController extends Controller
         $lastRow = $currentRow - 1;
 
         if ($lastRow >= $startRow) {
-            // Number formatting for numeric columns (D to S)
-            $sheet->getStyle('D'.$startRow.':S'.$lastRow)->getNumberFormat()->setFormatCode('#,##0;(#,##0);"-"');
+            // Number formatting for numeric columns (D to T)
+            $sheet->getStyle('D'.$startRow.':T'.$lastRow)->getNumberFormat()->setFormatCode('#,##0;(#,##0);"-"');
 
             // Alignments
             $sheet->getStyle('A'.$startRow.':A'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
             $sheet->getStyle('C'.$startRow.':C'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-            $sheet->getStyle('D'.$startRow.':S'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle('T'.$startRow.':T'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('D'.$startRow.':T'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle('U'.$startRow.':U'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
             // Auto filter
-            $sheet->setAutoFilter('A'.$headerRow.':T'.$lastRow);
+            $sheet->setAutoFilter('A'.$headerRow.':U'.$lastRow);
         }
 
         // Freeze pane (keep header row visible)
         $sheet->freezePane('A'.($headerRow + 1));
 
         // Auto widths & wrap text for Product Name
-        foreach (range('A', 'T') as $col) {
+        foreach (range('A', 'U') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
         $sheet->getColumnDimension('B')->setAutoSize(false)->setWidth(32);
@@ -399,12 +400,19 @@ class ProductionStatusController extends Controller
 
     private function getAggregatedRows(string $search = '', string $filter = 'all', array $codes = [], array $customers = [], array $po_numbers = [], array $aisis = []): array
     {
-        // 1. Fetch Legacy Work Orders (Eager load itemReference, plans, wipEntries, trees.defects, trees.activeCastingResultTree.castingResult & withCount('trees') to prevent N+1)
+        // 1. Fetch Legacy Work Orders (Eager load itemReference, plans, wipEntries, trees.defects, trees.scanEvents, trees.activeCastingResultTree.castingResult & withCount('trees') to prevent N+1)
         $woQuery = LostWaxWorkOrder::with([
             'itemReference',
             'plans',
             'wipEntries',
             'trees.defects',
+            'trees.scanEvents' => function ($q) {
+                $q->where('stage', 'siap_cor')
+                    ->where('result', 'success')
+                    ->whereDoesntHave('void')
+                    ->orderByDesc('scanned_at')
+                    ->orderByDesc('id');
+            },
             'trees.activeCastingResultTree.castingResult',
             'trees.activeHistoricalCutoffTree',
         ])->withCount('trees');
@@ -489,6 +497,11 @@ class ProductionStatusController extends Controller
             ];
 
             $treeDefectTotal = 0;
+            $rOvenPreSiapCor = 0;
+            $rOvenPostSiapCor = 0;
+            $siapCorHistoricalQty = 0;
+            $siapCorScannedQty = 0;
+            $hasScannedSnapshot = false;
             $cutoffQty = 0;
             $unknownStageQty = 0;
             $unknownStatusQty = 0;
@@ -506,30 +519,46 @@ class ProductionStatusController extends Controller
                     continue;
                 }
 
+                $activeDefects = $tree->defects->whereNull('voided_at');
+
                 $isCutoff = ($statusLower === 'historical_cutoff' || $tree->activeHistoricalCutoffTree !== null);
                 if ($isCutoff) {
                     $activeTreeCount++;
                     $usableQty = (int) $tree->usable_quantity;
                     $cutoffQty += $usableQty;
 
-                    // Sum defects across cutoff trees for Tot Rsk
-                    foreach ($tree->defects as $d) {
+                    // Sum active (non-void) defects across cutoff trees for Tot Rsk
+                    foreach ($activeDefects as $d) {
                         $defectQty = (int) $d->defect_qty;
                         $treeDefectTotal += $defectQty;
                         if (isset($stageDefectMap[$d->stage])) {
                             $stageDefectMap[$d->stage] += $defectQty;
+                        }
+                        if ($d->stage === 'oven') {
+                            if (($d->defect_context ?? \App\Models\LostWaxTreeDefect::CONTEXT_PRE_SIAP_COR) === \App\Models\LostWaxTreeDefect::CONTEXT_POST_SIAP_COR) {
+                                $rOvenPostSiapCor += $defectQty;
+                            } else {
+                                $rOvenPreSiapCor += $defectQty;
+                            }
                         }
                     }
 
                     continue;
                 }
 
-                // Sum defects across non-cancelled trees (generated and unknown status) for Tot Rsk
-                foreach ($tree->defects as $d) {
+                // Sum active (non-void) defects across non-cancelled trees (generated and unknown status) for Tot Rsk
+                foreach ($activeDefects as $d) {
                     $defectQty = (int) $d->defect_qty;
                     $treeDefectTotal += $defectQty;
                     if (isset($stageDefectMap[$d->stage])) {
                         $stageDefectMap[$d->stage] += $defectQty;
+                    }
+                    if ($d->stage === 'oven') {
+                        if (($d->defect_context ?? \App\Models\LostWaxTreeDefect::CONTEXT_PRE_SIAP_COR) === \App\Models\LostWaxTreeDefect::CONTEXT_POST_SIAP_COR) {
+                            $rOvenPostSiapCor += $defectQty;
+                        } else {
+                            $rOvenPreSiapCor += $defectQty;
+                        }
                     }
                 }
 
@@ -548,13 +577,26 @@ class ProductionStatusController extends Controller
                 $activeTreeCount++;
                 $usableQty = (int) $tree->usable_quantity;
 
+                // Track historical Siap Cor qty & original scan snapshot for trees with an active siap_cor scan
+                $activeSiapCorEvent = $tree->scanEvents
+                    ->where('stage', 'siap_cor')
+                    ->where('result', 'success')
+                    ->first();
+                if ($activeSiapCorEvent) {
+                    $siapCorHistoricalQty += (int) $tree->siap_cor_historical_quantity;
+                    if ($activeSiapCorEvent->scanned_qty !== null) {
+                        $siapCorScannedQty += (int) $activeSiapCorEvent->scanned_qty;
+                        $hasScannedSnapshot = true;
+                    }
+                }
+
                 $hasActiveCor = $tree->activeCastingResultTree !== null
                     && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
 
                 $rawStage = $tree->current_stage;
 
                 if ($hasActiveCor) {
-                    $stageMap['cor'] += $usableQty;
+                    $stageMap['cor'] += (int) ($tree->activeCastingResultTree->quantity_pcs ?? $usableQty);
                 } elseif ($rawStage === 'siap_cor') {
                     $stageMap['siap_cor'] += $usableQty;
                 } elseif ($rawStage === 'oven') {
@@ -667,7 +709,12 @@ class ProductionStatusController extends Controller
                 'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
                 'r_oven' => $ovenDefect,
+                'r_oven_pre_siap_cor' => $rOvenPreSiapCor,
+                'r_oven_post_siap_cor' => $rOvenPostSiapCor,
                 'siap_cor_qty' => $siapCorQty,
+                'siap_cor_active_qty' => $siapCorQty,
+                'siap_cor_historical_qty' => $siapCorHistoricalQty,
+                'siap_cor_scanned_qty' => $hasScannedSnapshot ? $siapCorScannedQty : null,
                 'cor_qty' => $corQty,
                 'cutoff_qty' => $cutoffQty,
                 'wip_before_cor' => $wipBeforeCor,
@@ -682,13 +729,23 @@ class ProductionStatusController extends Controller
         }
 
         // 2. Fetch Production Plans with print order lines (New Flow)
+        $siapCorScanFilter = function ($q) {
+            $q->where('stage', 'siap_cor')
+                ->where('result', 'success')
+                ->whereDoesntHave('void')
+                ->orderByDesc('scanned_at')
+                ->orderByDesc('id');
+        };
+
         $planQuery = ProductionPlan::with([
             'printOrderLines.printOrder',
             'printOrderLines.executions',
             'printOrderLines.trees.defects',
+            'printOrderLines.trees.scanEvents' => $siapCorScanFilter,
             'printOrderLines.trees.activeCastingResultTree.castingResult',
             'printOrderLines.trees.activeHistoricalCutoffTree',
             'printOrderLines.treeAllocations.tree.defects',
+            'printOrderLines.treeAllocations.tree.scanEvents' => $siapCorScanFilter,
             'printOrderLines.treeAllocations.tree.activeCastingResultTree.castingResult',
             'printOrderLines.treeAllocations.tree.activeHistoricalCutoffTree',
         ])->whereHas('printOrderLines.printOrder', function ($q) {
@@ -776,6 +833,11 @@ class ProductionStatusController extends Controller
                 'oven' => 0,
             ];
 
+            $rOvenPreSiapCor = 0;
+            $rOvenPostSiapCor = 0;
+            $siapCorHistoricalQty = 0;
+            $siapCorScannedQty = 0;
+            $hasScannedSnapshot = false;
             $cutoffQty = 0;
             $unknownStageQty = 0;
             $unknownStatusQty = 0;
@@ -790,24 +852,42 @@ class ProductionStatusController extends Controller
                     continue;
                 }
 
+                $activeDefects = $tree->defects->whereNull('voided_at');
+
                 $isCutoff = ($statusLower === 'historical_cutoff' || $tree->activeHistoricalCutoffTree !== null);
 
                 if ($isCutoff) {
                     $cutoffQty += (int) $tree->usable_quantity;
 
-                    foreach ($tree->defects as $d) {
+                    foreach ($activeDefects as $d) {
+                        $defectQty = (int) $d->defect_qty;
                         if (isset($stageDefectMap[$d->stage])) {
-                            $stageDefectMap[$d->stage] += (int) $d->defect_qty;
+                            $stageDefectMap[$d->stage] += $defectQty;
+                        }
+                        if ($d->stage === 'oven') {
+                            if (($d->defect_context ?? \App\Models\LostWaxTreeDefect::CONTEXT_PRE_SIAP_COR) === \App\Models\LostWaxTreeDefect::CONTEXT_POST_SIAP_COR) {
+                                $rOvenPostSiapCor += $defectQty;
+                            } else {
+                                $rOvenPreSiapCor += $defectQty;
+                            }
                         }
                     }
 
                     continue;
                 }
 
-                // Sum defects across non-cancelled trees for stageDefectMap
-                foreach ($tree->defects as $d) {
+                // Sum active (non-void) defects across non-cancelled trees for stageDefectMap
+                foreach ($activeDefects as $d) {
+                    $defectQty = (int) $d->defect_qty;
                     if (isset($stageDefectMap[$d->stage])) {
-                        $stageDefectMap[$d->stage] += (int) $d->defect_qty;
+                        $stageDefectMap[$d->stage] += $defectQty;
+                    }
+                    if ($d->stage === 'oven') {
+                        if (($d->defect_context ?? \App\Models\LostWaxTreeDefect::CONTEXT_PRE_SIAP_COR) === \App\Models\LostWaxTreeDefect::CONTEXT_POST_SIAP_COR) {
+                            $rOvenPostSiapCor += $defectQty;
+                        } else {
+                            $rOvenPreSiapCor += $defectQty;
+                        }
                     }
                 }
 
@@ -823,13 +903,27 @@ class ProductionStatusController extends Controller
                 }
 
                 $usableQty = (int) $tree->usable_quantity;
+
+                // Track historical Siap Cor qty & original scan snapshot for trees with an active siap_cor scan
+                $activeSiapCorEvent = $tree->scanEvents
+                    ->where('stage', 'siap_cor')
+                    ->where('result', 'success')
+                    ->first();
+                if ($activeSiapCorEvent) {
+                    $siapCorHistoricalQty += (int) $tree->siap_cor_historical_quantity;
+                    if ($activeSiapCorEvent->scanned_qty !== null) {
+                        $siapCorScannedQty += (int) $activeSiapCorEvent->scanned_qty;
+                        $hasScannedSnapshot = true;
+                    }
+                }
+
                 $hasActiveCor = $tree->activeCastingResultTree !== null
                     && $tree->activeCastingResultTree->castingResult?->status === 'COMPLETED';
 
                 $rawStage = $tree->current_stage;
 
                 if ($hasActiveCor) {
-                    $stageMap['cor'] += $usableQty;
+                    $stageMap['cor'] += (int) ($tree->activeCastingResultTree->quantity_pcs ?? $usableQty);
                 } elseif ($rawStage === 'siap_cor') {
                     $stageMap['siap_cor'] += $usableQty;
                 } elseif ($rawStage === 'oven') {
@@ -932,7 +1026,12 @@ class ProductionStatusController extends Controller
                 'r_layer_7' => $layerDefects['layer_7'],
                 'oven_qty' => $ovenQty,
                 'r_oven' => $ovenDefect,
+                'r_oven_pre_siap_cor' => $rOvenPreSiapCor,
+                'r_oven_post_siap_cor' => $rOvenPostSiapCor,
                 'siap_cor_qty' => $siapCorQty,
+                'siap_cor_active_qty' => $siapCorQty,
+                'siap_cor_historical_qty' => $siapCorHistoricalQty,
+                'siap_cor_scanned_qty' => $hasScannedSnapshot ? $siapCorScannedQty : null,
                 'cor_qty' => $corQty,
                 'cutoff_qty' => $cutoffQty,
                 'wip_before_cor' => $wipBeforeCor,

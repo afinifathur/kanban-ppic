@@ -573,9 +573,10 @@ class FittingPhase3ScannerKanbanTest extends TestCase
         // Sidebar order & Kanban view rendering verification (including Line 1-4 classification labels)
         $html = $this->actingAs($this->ppicFitting)->get(route('fitting.kanban.stage', 'netto-pf'))->getContent();
         $this->assertStringContainsString('UNASSIGNED', $html);
-        $this->assertStringContainsString('LINE 1 — ELBOW / TEE', $html);
+        $this->assertStringContainsString('LINE 1 — FITTING BIASA', $html);
         $this->assertStringContainsString('LINE 2 — UNION', $html);
-        $this->assertStringContainsString('LINE 4 — BALL VALVE', $html);
+        $this->assertStringContainsString('LINE 3 — BALL VALVE', $html);
+        $this->assertStringContainsString('LINE 4 — BW', $html);
         $this->assertStringContainsString($itemUnassigned1->traveler_number, $html);
         $this->assertStringContainsString('Transfer Kitir', $html);
         $this->assertStringContainsString('Kanban Floor', $html);

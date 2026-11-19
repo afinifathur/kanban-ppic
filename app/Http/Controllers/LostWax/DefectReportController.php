@@ -4,6 +4,7 @@ namespace App\Http\Controllers\LostWax;
 
 use App\Http\Controllers\Controller;
 use App\Services\LostWaxDefectReportService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -18,10 +19,12 @@ class DefectReportController extends Controller
 
     public function index(Request $request)
     {
+        $todayWib = Carbon::now('Asia/Jakarta')->format('Y-m-d');
         $filters = [
-            'date_from' => $request->query('date_from', date('Y-m-d')),
-            'date_to' => $request->query('date_to', date('Y-m-d')),
+            'date_from' => $request->query('date_from', $todayWib),
+            'date_to' => $request->query('date_to', $todayWib),
             'stage' => $request->query('stage', 'all'),
+            'defect_context' => $request->query('defect_context', 'all'),
             'search' => $request->query('search', ''),
             'production_code' => $request->query('production_code', ''),
             'mode' => $request->query('mode', 'ringkas'),
@@ -33,21 +36,25 @@ class DefectReportController extends Controller
         $summary = $data['summary'];
         $activeFilters = $data['filters'];
         $stages = LostWaxDefectReportService::STAGES;
+        $contexts = LostWaxDefectReportService::CONTEXTS;
 
         return view('lost-wax.quality.defects.index', compact(
             'items',
             'summary',
             'activeFilters',
-            'stages'
+            'stages',
+            'contexts'
         ));
     }
 
     public function exportPdf(Request $request)
     {
+        $todayWib = Carbon::now('Asia/Jakarta')->format('Y-m-d');
         $filters = [
-            'date_from' => $request->query('date_from', date('Y-m-d')),
-            'date_to' => $request->query('date_to', date('Y-m-d')),
+            'date_from' => $request->query('date_from', $todayWib),
+            'date_to' => $request->query('date_to', $todayWib),
             'stage' => $request->query('stage', 'all'),
+            'defect_context' => $request->query('defect_context', 'all'),
             'search' => $request->query('search', ''),
             'production_code' => $request->query('production_code', ''),
             'mode' => $request->query('mode', 'ringkas'),
@@ -59,21 +66,25 @@ class DefectReportController extends Controller
         $summary = $data['summary'];
         $activeFilters = $data['filters'];
         $stages = LostWaxDefectReportService::STAGES;
+        $contexts = LostWaxDefectReportService::CONTEXTS;
 
         return view('lost-wax.quality.defects.print', compact(
             'items',
             'summary',
             'activeFilters',
-            'stages'
+            'stages',
+            'contexts'
         ));
     }
 
     public function exportExcel(Request $request): StreamedResponse
     {
+        $todayWib = Carbon::now('Asia/Jakarta')->format('Y-m-d');
         $filters = [
-            'date_from' => $request->query('date_from', date('Y-m-d')),
-            'date_to' => $request->query('date_to', date('Y-m-d')),
+            'date_from' => $request->query('date_from', $todayWib),
+            'date_to' => $request->query('date_to', $todayWib),
             'stage' => $request->query('stage', 'all'),
+            'defect_context' => $request->query('defect_context', 'all'),
             'search' => $request->query('search', ''),
             'production_code' => $request->query('production_code', ''),
             'mode' => $request->query('mode', 'ringkas'),
@@ -90,13 +101,14 @@ class DefectReportController extends Controller
         $sheet->setTitle('Rekap Kerusakan Lost Wax');
 
         // Header Title
-        $sheet->mergeCells('A1:I1');
+        $sheet->mergeCells('A1:K1');
         $sheet->setCellValue('A1', 'REKAP KERUSAKAN LOST WAX (DAILY DEFECT REPORT)');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet->mergeCells('A2:I2');
-        $dateLabel = "Periode: {$activeFilters['date_from']} s/d {$activeFilters['date_to']} | Tahapan: ".strtoupper($activeFilters['stage']).' | Mode: '.strtoupper($mode);
+        $sheet->mergeCells('A2:K2');
+        $contextText = LostWaxDefectReportService::CONTEXTS[$activeFilters['defect_context']] ?? 'Semua Konteks';
+        $dateLabel = "Periode: {$activeFilters['date_from']} s/d {$activeFilters['date_to']} | Tahapan: ".strtoupper($activeFilters['stage'])." | Konteks: {$contextText} | Mode: ".strtoupper($mode);
         $sheet->setCellValue('A2', $dateLabel);
         $sheet->getStyle('A2')->getFont()->setSize(10)->setItalic(true);
         $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -115,7 +127,7 @@ class DefectReportController extends Controller
             ['Lapisan 5', $summary['layer_5']],
             ['Lapisan 6', $summary['layer_6']],
             ['Lapisan 7', $summary['layer_7']],
-            ['Oven', $summary['oven']],
+            ['Oven (Pra: '.$summary['oven_pre_siap_cor'].' / Pasca: '.$summary['oven_post_siap_cor'].')', $summary['oven']],
             ['GRAND TOTAL', $summary['grand_total']],
         ];
 
@@ -136,7 +148,7 @@ class DefectReportController extends Controller
         // Main Data Table Headers
         $rowIdx = 8;
         if ($mode === 'detail') {
-            $headers = ['No', 'Kode Produksi', 'Barcode Tree', 'Nama Item', 'Tahapan (Stage)', 'Jumlah Rusak (pcs)', 'Alasan Kerusakan', 'Operator', 'Waktu Kejadian'];
+            $headers = ['No', 'Kode Produksi', 'Barcode Tree', 'Nama Item', 'Tahapan (Stage)', 'Konteks Waktu', 'Jumlah Rusak (pcs)', 'Alasan Kerusakan', 'Operator', 'Waktu Kejadian (WIB)', 'Waktu Pencatatan (WIB)'];
         } else {
             $headers = ['No', 'Kode Produksi', 'Nama Item', 'Tahapan (Stage)', 'Jumlah Rusak (pcs)', 'Jumlah Kejadian'];
         }
@@ -157,27 +169,47 @@ class DefectReportController extends Controller
 
         foreach ($items as $idx => $item) {
             if ($mode === 'detail') {
+                $contextLabel = $item['context_label'] ?? 'Pra-Siap Cor';
+                if (! empty($item['is_late_entry'])) {
+                    $contextLabel .= ' (Koreksi Terlambat)';
+                }
+                $occurredText = ! empty($item['occurred_at'])
+                    ? Carbon::parse($item['occurred_at'])->setTimezone('Asia/Jakarta')->format('d-m-Y H:i')
+                    : 'Tidak diketahui';
+                $createdText = ! empty($item['created_at'])
+                    ? Carbon::parse($item['created_at'])->setTimezone('Asia/Jakarta')->format('d-m-Y H:i')
+                    : '-';
+
                 $sheet->setCellValue('A'.$currRow, $idx + 1);
                 $sheet->setCellValue('B'.$currRow, $item['production_code']);
                 $sheet->setCellValue('C'.$currRow, $item['barcode']);
                 $sheet->setCellValue('D'.$currRow, $item['item_name']);
                 $sheet->setCellValue('E'.$currRow, $item['stage_label']);
-                $sheet->setCellValue('F'.$currRow, $item['defect_qty']);
-                $sheet->setCellValue('G'.$currRow, $item['defect_reason']);
-                $sheet->setCellValue('H'.$currRow, $item['operator']);
-                $sheet->setCellValue('I'.$currRow, $item['occurred_at'] ? Carbon::parse($item['occurred_at'])->format('d-m-Y H:i') : '-');
+                $sheet->setCellValue('F'.$currRow, $contextLabel);
+                $sheet->setCellValue('G'.$currRow, $item['defect_qty']);
+                $sheet->setCellValue('H'.$currRow, $item['defect_reason']);
+                $sheet->setCellValue('I'.$currRow, $item['operator']);
+                $sheet->setCellValue('J'.$currRow, $occurredText);
+                $sheet->setCellValue('K'.$currRow, $createdText);
 
                 $sheet->getStyle('A'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle('B'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle('C'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle('E'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle('F'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle('I'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('F'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('G'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                $sheet->getStyle('J'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('K'.$currRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             } else {
+                $stageText = $item['stage_label'];
+                if ($item['stage'] === 'oven' && ($item['post_siap_cor_qty'] ?? 0) > 0) {
+                    $stageText .= ' (Pra: '.($item['pre_siap_cor_qty'] ?? 0).' / Pasca: '.($item['post_siap_cor_qty'] ?? 0).')';
+                }
+
                 $sheet->setCellValue('A'.$currRow, $idx + 1);
                 $sheet->setCellValue('B'.$currRow, $item['production_code']);
                 $sheet->setCellValue('C'.$currRow, $item['item_name']);
-                $sheet->setCellValue('D'.$currRow, $item['stage_label']);
+                $sheet->setCellValue('D'.$currRow, $stageText);
                 $sheet->setCellValue('E'.$currRow, $item['defect_qty']);
                 $sheet->setCellValue('F'.$currRow, $item['record_count']);
 

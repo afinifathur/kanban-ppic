@@ -1260,13 +1260,35 @@ class FittingPhase2TransferTest extends TestCase
         $resOvr = $this->createCastingResultWithPlans([['qty' => 25, 'print_line' => $plOverride]]);
         $kOvr = $this->kitirResolver->issueOrGetKitir($resOvr, 'OVR-LINE', $this->ppicFitting);
 
-        // Available UI shows Line Rencana & Line Fitting columns and hides Line filter on available tab
+        // Available UI hides Line Rencana, Status Kitir, and Terbit metadata, shows merged Kitir/Heat + 2-decimal unit weight + Line Fitting, and hides Line filter on available tab
         $availPage = $this->actingAs($this->ppicFitting)->get(route('fitting.transfers.index', ['tab' => 'available']));
         $availPage->assertOk();
-        $availPage->assertSee('Line Rencana');
+        $availPage->assertDontSee('Line Rencana');
+        $availPage->assertDontSee('Status Kitir');
+        $availPage->assertDontSee('Terbit:');
+        $availPage->assertSee('Kitir / Heat');
         $availPage->assertSee('Line Fitting');
-        $availPage->assertSee('Line 1 — Elbow / Tee');
+        $availPage->assertSee('Line 1 — Fitting biasa');
+        $availPage->assertSee('0,35 kg');
+        $availPage->assertDontSee('0,3500 kg');
         $availPage->assertDontSee('name="line"', false);
+
+        // Search & Date filters work on available tab while preserving compact KPI navigation links
+        $filteredPage = $this->actingAs($this->ppicFitting)->get(route('fitting.transfers.index', [
+            'tab' => 'available',
+            'search' => 'OVR-LINE',
+            'date_from' => now()->subDay()->format('Y-m-d'),
+            'date_to' => now()->addDay()->format('Y-m-d'),
+        ]));
+        $filteredPage->assertOk();
+        $filteredPage->assertSee($kOvr->traveler_number);
+        $filteredPage->assertSee('Heat:');
+        $filteredPage->assertSee('Pohon');
+
+        // Decisions tab loads cleanly with compact KPI header
+        $decisionsPage = $this->actingAs($this->ppicFitting)->get(route('fitting.transfers.index', ['tab' => 'decisions']));
+        $decisionsPage->assertOk();
+        $decisionsPage->assertSee('Decision History');
 
         $trfOvr = $this->transferService->transferKitirs([$kOvr->id], $this->ppicFitting, null, null, null, [$kOvr->id => 1]);
         $itemOvr = $trfOvr->items->first();

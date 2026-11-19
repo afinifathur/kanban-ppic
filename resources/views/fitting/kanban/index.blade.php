@@ -47,11 +47,10 @@
         : \App\Services\Fitting\FittingKanbanQueryService::ALL_BUCKETS;
 
     $bucketMeta = [
-        '1' => ['title' => 'LINE 1 — ELBOW / TEE', 'headerClass' => 'bg-blue-600 text-white', 'borderClass' => 'border-blue-200'],
+        '1' => ['title' => 'LINE 1 — FITTING BIASA', 'headerClass' => 'bg-blue-600 text-white', 'borderClass' => 'border-blue-200'],
         '2' => ['title' => 'LINE 2 — UNION', 'headerClass' => 'bg-emerald-600 text-white', 'borderClass' => 'border-emerald-200'],
-        '3' => ['title' => 'LINE 3 — BW', 'headerClass' => 'bg-amber-600 text-white', 'borderClass' => 'border-amber-200'],
-        '4' => ['title' => 'LINE 4 — BALL VALVE', 'headerClass' => 'bg-purple-600 text-white', 'borderClass' => 'border-purple-200'],
-        'unassigned' => ['title' => 'UNASSIGNED', 'headerClass' => 'bg-slate-700 text-white', 'borderClass' => 'border-slate-300'],
+        '3' => ['title' => 'LINE 3 — BALL VALVE', 'headerClass' => 'bg-purple-600 text-white', 'borderClass' => 'border-purple-200'],
+        '4' => ['title' => 'LINE 4 — BW', 'headerClass' => 'bg-amber-600 text-white', 'borderClass' => 'border-amber-200'],
     ];
 @endphp
 
@@ -119,12 +118,11 @@
             </div>
             <div class="lg:col-span-2">
                 <select name="line_bucket" class="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
-                    <option value="">Semua Bucket (Line 1–4 + Unassigned)</option>
-                    <option value="1" {{ ($filters['line_bucket'] ?? '') === '1' ? 'selected' : '' }}>Line 1</option>
-                    <option value="2" {{ ($filters['line_bucket'] ?? '') === '2' ? 'selected' : '' }}>Line 2</option>
-                    <option value="3" {{ ($filters['line_bucket'] ?? '') === '3' ? 'selected' : '' }}>Line 3</option>
-                    <option value="4" {{ ($filters['line_bucket'] ?? '') === '4' ? 'selected' : '' }}>Line 4</option>
-                    <option value="unassigned" {{ ($filters['line_bucket'] ?? '') === 'unassigned' ? 'selected' : '' }}>Unassigned</option>
+                    <option value="">Semua Bucket (Line 1–4)</option>
+                    <option value="1" {{ ($filters['line_bucket'] ?? '') === '1' ? 'selected' : '' }}>Line 1 — Fitting biasa</option>
+                    <option value="2" {{ ($filters['line_bucket'] ?? '') === '2' ? 'selected' : '' }}>Line 2 — Union</option>
+                    <option value="3" {{ ($filters['line_bucket'] ?? '') === '3' ? 'selected' : '' }}>Line 3 — Ball Valve</option>
+                    <option value="4" {{ ($filters['line_bucket'] ?? '') === '4' ? 'selected' : '' }}>Line 4 — BW</option>
                 </select>
             </div>
             <div class="lg:col-span-2 flex items-center gap-1.5">
@@ -140,8 +138,24 @@
         </form>
     </div>
 
-    {{-- 5-BUCKET KANBAN COLUMNS (LINE 1, LINE 2, LINE 3, LINE 4, UNASSIGNED) --}}
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-start">
+    {{-- Data Anomaly Alert: Active Travelers without Line --}}
+    @if(($summary['unassigned_cards'] ?? 0) > 0)
+        <div class="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-xl text-xs flex items-start gap-2.5 shadow-xs">
+            <i class="fas fa-exclamation-triangle text-amber-600 mt-0.5 text-sm shrink-0"></i>
+            <div>
+                <div class="font-bold">Anomali Data: Ditemukan {{ $summary['unassigned_cards'] }} traveler aktif tanpa Line Fitting valid (UNASSIGNED).</div>
+                <div class="text-[11px] text-amber-800 mt-0.5">
+                    Seluruh traveler wajib memiliki Line Fitting (1–4) agar masuk ke dalam antrean pengerjaan Kanban.
+                    @if(!empty($summary['unassigned_items']))
+                        <span class="font-mono font-semibold">Traveler: {{ implode(', ', array_column($summary['unassigned_items'], 'traveler_number')) }}</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- 4-BUCKET KANBAN COLUMNS (LINE 1, LINE 2, LINE 3, LINE 4) --}}
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 items-start">
         @foreach($bucketsToRender as $bucketKey)
             @php
                 $meta = $bucketMeta[$bucketKey];

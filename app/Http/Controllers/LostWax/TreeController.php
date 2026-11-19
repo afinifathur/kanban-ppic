@@ -208,6 +208,10 @@ class TreeController extends Controller
             'coatingRack',
             'allocations.printOrderLine.printOrder',
             'defects.recordedBy',
+            'defects.voidedBy',
+            'defects.scanEvent',
+            'activeCastingResultTree.castingResult',
+            'activeHistoricalCutoffTree',
         ]);
 
         $events = \App\Models\LostWaxScanEvent::with(['operator', 'void.voidedByUser'])
@@ -216,12 +220,22 @@ class TreeController extends Controller
             ->get();
 
         $defects = $tree->defects()
-            ->with('recordedBy')
+            ->with(['recordedBy', 'voidedBy', 'scanEvent'])
             ->orderByRaw('COALESCE(occurred_at, created_at) DESC')
             ->orderByDesc('id')
             ->get();
 
-        return view('lost-wax.trees.show', compact('tree', 'events', 'defects'));
+        $qualityService = app(\App\Services\LostWaxQualityService::class);
+        $activeSiapCorEvent = $qualityService->findActiveSiapCorEvent($tree->id);
+        $isDefectMutable = $qualityService->isTreeMutableForDefect($tree);
+
+        return view('lost-wax.trees.show', compact(
+            'tree',
+            'events',
+            'defects',
+            'activeSiapCorEvent',
+            'isDefectMutable'
+        ));
     }
 
     public function storeDefect(Request $request, LostWaxTree $tree)
@@ -234,11 +248,14 @@ class TreeController extends Controller
             'defect_reason' => 'required|string|max:100',
             'notes' => 'nullable|string|max:500',
             'occurred_at' => 'nullable|date',
+            'defect_context' => 'nullable|string|in:pre_siap_cor,post_siap_cor',
+            'scan_event_id' => 'nullable|integer',
+            'confirm_unknown_occurred_at' => 'nullable|boolean',
         ]);
 
         try {
             $occurredAt = ! empty($validated['occurred_at'])
-                ? \Carbon\Carbon::parse($validated['occurred_at'])
+                ? \Carbon\Carbon::parse($validated['occurred_at'], 'Asia/Jakarta')
                 : null;
 
             $qualityService = app(\App\Services\LostWaxQualityService::class);
@@ -249,12 +266,41 @@ class TreeController extends Controller
                 defectReason: $validated['defect_reason'],
                 notes: $validated['notes'] ?? null,
                 occurredAt: $occurredAt,
-                userId: auth()->id()
+                userId: auth()->id(),
+                defectContext: $validated['defect_context'] ?? null,
+                scanEventId: ! empty($validated['scan_event_id']) ? (int) $validated['scan_event_id'] : null,
+                confirmUnknownOccurredAt: (bool) ($validated['confirm_unknown_occurred_at'] ?? false)
             );
 
             return back()->with('success', "Defect sebanyak {$validated['defect_qty']} pcs berhasil dicatat.");
         } catch (\InvalidArgumentException $e) {
             return back()->withInput()->with('error', $e->getMessage());
+        }
+    }
+
+    public function voidDefect(Request $request, LostWaxTree $tree, \App\Models\LostWaxTreeDefect $defect)
+    {
+        $this->authorizeTree($tree);
+
+        $validated = $request->validate([
+            'void_reason' => 'required|string|min:3|max:255',
+        ], [
+            'void_reason.required' => 'Alasan pembatalan (void) defect wajib diisi.',
+            'void_reason.min' => 'Alasan pembatalan (void) minimal 3 karakter.',
+        ]);
+
+        try {
+            $qualityService = app(\App\Services\LostWaxQualityService::class);
+            $qualityService->voidDefect(
+                tree: $tree,
+                defect: $defect,
+                reason: $validated['void_reason'],
+                userId: auth()->id()
+            );
+
+            return back()->with('success', "Defect sebanyak {$defect->defect_qty} pcs berhasil dibatalkan (soft-void) dengan audit trail.");
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
         }
     }
 

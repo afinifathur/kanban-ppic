@@ -2,93 +2,93 @@
 
 @section('title', 'Transfer Kitir — Fitting Production')
 
-@section('content')
-<div class="space-y-5">
-    <!-- Page Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
-        <div>
-            <div class="flex items-center gap-2 text-xs font-semibold text-emerald-700 uppercase tracking-wider">
-                <i class="fas fa-cubes"></i>
-                <span>Fitting Production</span>
+@section('top_bar')
+    <div class="flex items-center justify-between w-full gap-2 min-w-0">
+        <div class="min-w-0">
+            <div class="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-emerald-700 uppercase tracking-wider leading-none">
+                <i class="fas fa-cubes text-[9px] text-emerald-600"></i>
+                <span>FITTING PRODUCTION</span>
                 <span class="text-slate-300">•</span>
-                <span class="text-slate-500">Jembatan Lost Wax → Netto PF</span>
+                <span class="text-slate-500">JEMBATAN LOST WAX → NETTO PF</span>
             </div>
-            <h1 class="text-2xl font-black text-slate-900 tracking-tight mt-1">
+            <h1 class="text-sm sm:text-base md:text-lg font-black text-slate-900 tracking-tight leading-tight mt-0.5 truncate">
                 Transfer Kitir Produksi (PFKTR)
             </h1>
-            <p class="text-xs text-slate-500 mt-0.5">
-                Pilih Kitir yang sudah diterbitkan di Lost Wax untuk ditransfer bertahap (Partial Transfer) ke antrean <strong>NETTO PF</strong>, atau tandai <strong>NOT_CONTINUED</strong> jika tidak dilanjutkan.
-            </p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
             <a href="{{ route('lost-wax.casting-results.index') }}"
-               class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 transition-colors shadow-sm">
-                <i class="fas fa-fire mr-1.5 text-amber-500"></i> Lihat Hasil Cor Lost Wax
+               class="inline-flex items-center px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 transition-colors shadow-xs whitespace-nowrap">
+                <i class="fas fa-fire mr-1.5 text-amber-500"></i>
+                <span class="hidden sm:inline">Lihat Hasil Cor Lost Wax</span>
+                <span class="sm:hidden">Hasil Cor</span>
             </a>
         </div>
     </div>
+@endsection
 
-    <!-- Summary KPI Strip -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+@section('content')
+<div class="space-y-2.5">
+    <!-- Compact Horizontal KPI Indicators (Clickable Tab Navigation) -->
+    <div class="flex flex-wrap items-center gap-2">
         <a href="{{ route('fitting.transfers.index', array_merge(request()->except(['tab', 'transferred_page', 'decisions_page']), ['tab' => 'available'])) }}"
-           class="bg-white border {{ $tab === 'available' ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-slate-200 hover:border-slate-300' }} rounded-xl p-4 shadow-sm transition-all">
-            <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Siap Ditransfer</span>
-                <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm">
-                    <i class="fas fa-inbox"></i>
-                </span>
-            </div>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-slate-900 font-mono">{{ number_format($counts['available']) }}</span>
-                <span class="text-xs font-semibold text-slate-500">Kitir</span>
-                <span class="text-xs font-mono font-bold text-emerald-700 ml-auto">{{ number_format($counts['available_pcs']) }} PCS</span>
+           class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all shadow-xs {{ $tab === 'available' ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-200' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50' }}">
+            <span class="w-6 h-6 rounded-md bg-emerald-100/80 text-emerald-600 flex items-center justify-center text-[11px] shrink-0">
+                <i class="fas fa-inbox"></i>
+            </span>
+            <div class="leading-tight">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Siap Ditransfer</div>
+                <div class="text-xs font-semibold text-slate-800 whitespace-nowrap mt-0.5">
+                    <span class="font-mono font-black text-slate-900">{{ number_format($counts['available']) }}</span> Kitir
+                    <span class="text-slate-300 mx-1">|</span>
+                    <span class="font-mono font-bold text-emerald-700">{{ number_format($counts['available_pcs']) }} PCS</span>
+                </div>
             </div>
         </a>
 
         <a href="{{ route('fitting.transfers.index', array_merge(request()->except(['tab', 'transferred_page', 'decisions_page']), ['tab' => 'transferred'])) }}"
-           class="bg-white border {{ $tab === 'transferred' ? 'border-blue-400 ring-1 ring-blue-200' : 'border-slate-200 hover:border-slate-300' }} rounded-xl p-4 shadow-sm transition-all">
-            <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Sudah Ditransfer (Netto PF)</span>
-                <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm">
-                    <i class="fas fa-exchange-alt"></i>
-                </span>
-            </div>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-slate-900 font-mono">{{ number_format($counts['transferred_active']) }}</span>
-                <span class="text-xs font-semibold text-slate-500">Traveler Aktif</span>
-                @if($counts['transferred_cancelled'] > 0)
-                    <span class="text-[11px] text-slate-400 ml-auto">{{ number_format($counts['transferred_cancelled']) }} dibatalkan</span>
-                @endif
+           class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all shadow-xs {{ $tab === 'transferred' ? 'bg-blue-50/80 border-blue-400 ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50' }}">
+            <span class="w-6 h-6 rounded-md bg-blue-100/80 text-blue-600 flex items-center justify-center text-[11px] shrink-0">
+                <i class="fas fa-exchange-alt"></i>
+            </span>
+            <div class="leading-tight">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Sudah Ditransfer</div>
+                <div class="text-xs font-semibold text-slate-800 whitespace-nowrap mt-0.5">
+                    <span class="font-mono font-black text-slate-900">{{ number_format($counts['transferred_active']) }}</span> Traveler Aktif
+                    @if($counts['transferred_cancelled'] > 0)
+                        <span class="text-slate-300 mx-1">|</span>
+                        <span class="text-[10px] text-slate-400 font-normal">{{ number_format($counts['transferred_cancelled']) }} batal</span>
+                    @endif
+                </div>
             </div>
         </a>
 
         <a href="{{ route('fitting.transfers.index', array_merge(request()->except(['tab', 'transferred_page', 'decisions_page']), ['tab' => 'decisions'])) }}"
-           class="bg-white border {{ $tab === 'decisions' ? 'border-amber-400 ring-1 ring-amber-200' : 'border-slate-200 hover:border-slate-300' }} rounded-xl p-4 shadow-sm transition-all">
-            <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Decision History (NOT_CONTINUED)</span>
-                <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-sm">
-                    <i class="fas fa-history"></i>
-                </span>
-            </div>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-2xl font-black text-slate-900 font-mono">{{ number_format($counts['decisions_active']) }}</span>
-                <span class="text-xs font-semibold text-slate-500">Aktif</span>
-                <span class="text-[11px] text-slate-400 ml-auto">{{ number_format($counts['decisions_total']) }} total riwayat</span>
+           class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all shadow-xs {{ $tab === 'decisions' ? 'bg-amber-50/80 border-amber-400 ring-1 ring-amber-200' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50' }}">
+            <span class="w-6 h-6 rounded-md bg-amber-100/80 text-amber-600 flex items-center justify-center text-[11px] shrink-0">
+                <i class="fas fa-history"></i>
+            </span>
+            <div class="leading-tight">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Decision History</div>
+                <div class="text-xs font-semibold text-slate-800 whitespace-nowrap mt-0.5">
+                    <span class="font-mono font-black text-slate-900">{{ number_format($counts['decisions_active']) }}</span> Aktif
+                    <span class="text-slate-300 mx-1">|</span>
+                    <span class="text-[11px] text-slate-500 font-normal">{{ number_format($counts['decisions_total']) }} total riwayat</span>
+                </div>
             </div>
         </a>
     </div>
 
     <!-- Error Alerts -->
     @if($errors->has('transfer_error'))
-    <div class="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-center gap-3 shadow-sm">
-        <i class="fas fa-exclamation-circle text-rose-500 text-base shrink-0"></i>
+    <div class="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-2.5 rounded-xl flex items-center gap-2.5 shadow-sm">
+        <i class="fas fa-exclamation-circle text-rose-500 text-sm shrink-0"></i>
         <div class="text-xs font-medium leading-relaxed">{{ $errors->first('transfer_error') }}</div>
     </div>
     @endif
 
     @if($errors->any() && !$errors->has('transfer_error'))
-    <div class="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-start gap-3 shadow-sm">
-        <i class="fas fa-exclamation-triangle text-rose-500 text-base shrink-0 mt-0.5"></i>
+    <div class="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-2.5 rounded-xl flex items-start gap-2.5 shadow-sm">
+        <i class="fas fa-exclamation-triangle text-rose-500 text-sm shrink-0 mt-0.5"></i>
         <ul class="text-xs font-medium list-disc pl-4 space-y-0.5">
             @foreach($errors->all() as $err)
                 <li>{{ $err }}</li>
@@ -100,20 +100,20 @@
     <!-- Tabs & Filter Toolbar -->
     <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <!-- Tabs -->
-        <div class="flex flex-wrap items-center justify-between gap-2 px-4 pt-3 border-b border-slate-200 bg-slate-50/70">
+        <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 pt-2 border-b border-slate-200 bg-slate-50/70">
             <div class="flex items-center gap-1 -mb-px">
                 <a href="{{ route('fitting.transfers.index', array_merge(request()->except(['tab', 'transferred_page', 'decisions_page']), ['tab' => 'available'])) }}"
-                   class="px-4 py-2.5 text-xs font-bold border-b-2 transition-colors {{ $tab === 'available' ? 'border-emerald-600 text-emerald-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800' }}">
+                   class="px-3.5 py-2 text-xs font-bold border-b-2 transition-colors {{ $tab === 'available' ? 'border-emerald-600 text-emerald-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800' }}">
                     <i class="fas fa-inbox mr-1.5"></i> Siap Ditransfer
                     <span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] {{ $tab === 'available' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600' }}">{{ $counts['available'] }}</span>
                 </a>
                 <a href="{{ route('fitting.transfers.index', array_merge(request()->except(['tab', 'transferred_page', 'decisions_page']), ['tab' => 'transferred'])) }}"
-                   class="px-4 py-2.5 text-xs font-bold border-b-2 transition-colors {{ $tab === 'transferred' ? 'border-blue-600 text-blue-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800' }}">
+                   class="px-3.5 py-2 text-xs font-bold border-b-2 transition-colors {{ $tab === 'transferred' ? 'border-blue-600 text-blue-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800' }}">
                     <i class="fas fa-check-double mr-1.5"></i> Sudah Ditransfer (Netto PF)
                     <span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] {{ $tab === 'transferred' ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-600' }}">{{ $counts['transferred_active'] }}</span>
                 </a>
                 <a href="{{ route('fitting.transfers.index', array_merge(request()->except(['tab', 'transferred_page', 'decisions_page']), ['tab' => 'decisions'])) }}"
-                   class="px-4 py-2.5 text-xs font-bold border-b-2 transition-colors {{ $tab === 'decisions' ? 'border-amber-600 text-amber-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800' }}">
+                   class="px-3.5 py-2 text-xs font-bold border-b-2 transition-colors {{ $tab === 'decisions' ? 'border-amber-600 text-amber-700 bg-white rounded-t-lg' : 'border-transparent text-slate-500 hover:text-slate-800' }}">
                     <i class="fas fa-history mr-1.5"></i> Decision History
                     <span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] {{ $tab === 'decisions' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600' }}">{{ $counts['decisions_active'] }}</span>
                 </a>
@@ -121,29 +121,29 @@
         </div>
 
         <!-- Filter Form -->
-        <form method="GET" action="{{ route('fitting.transfers.index') }}" class="p-4 border-b border-slate-100 bg-white">
+        <form method="GET" action="{{ route('fitting.transfers.index') }}" class="px-3.5 py-2.5 border-b border-slate-100 bg-white">
             <input type="hidden" name="tab" value="{{ $tab }}">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-end">
                 <div class="lg:col-span-4">
-                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Pencarian</label>
+                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Pencarian</label>
                     <input type="text" name="search" value="{{ $filters['search'] }}"
                            placeholder="Cari PFKTR, Heat, Kode Produksi, Customer, Item..."
-                           class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                           class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                 </div>
                 <div class="lg:col-span-2">
-                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Dari Tanggal</label>
+                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Dari Tanggal</label>
                     <input type="date" name="date_from" value="{{ $filters['date_from'] }}"
-                           class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
+                           class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
                 </div>
                 <div class="lg:col-span-2">
-                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Sampai Tanggal</label>
+                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Sampai Tanggal</label>
                     <input type="date" name="date_to" value="{{ $filters['date_to'] }}"
-                           class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
+                           class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
                 </div>
                 @if($tab === 'transferred')
                 <div class="lg:col-span-2">
-                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Line Fitting</label>
-                    <select name="line" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
+                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Line Fitting</label>
+                    <select name="line" class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500">
                         <option value="">Semua Line</option>
                         @foreach($lineLabels as $lNum => $lLabel)
                             <option value="{{ $lNum }}" {{ $filters['line'] === (string) $lNum ? 'selected' : '' }}>{{ $lLabel }}</option>
@@ -154,11 +154,11 @@
                 @endif
                 <div class="{{ $tab === 'transferred' ? 'lg:col-span-2' : 'lg:col-span-4' }} flex items-center gap-2">
                     <button type="submit"
-                            class="flex-1 inline-flex items-center justify-center px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition-colors">
+                            class="flex-1 inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition-colors">
                         <i class="fas fa-search mr-1.5"></i> Filter
                     </button>
                     <a href="{{ route('fitting.transfers.index', ['tab' => $tab]) }}"
-                       class="inline-flex items-center justify-center px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+                       class="inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
                        title="Reset Filter">
                         <i class="fas fa-undo"></i>
                     </a>
@@ -184,8 +184,8 @@
                     <input type="hidden" name="idempotency_key" value="{{ $idempotencyKey }}">
 
                     <!-- Selection Action Bar -->
-                    <div class="px-4 py-3 bg-emerald-50/70 border-b border-emerald-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div class="flex flex-wrap items-center gap-3 text-xs">
+                    <div class="px-3.5 py-2 bg-emerald-50/70 border-b border-emerald-200 flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
+                        <div class="flex flex-wrap items-center gap-2.5 text-xs">
                             <span class="font-bold text-emerald-900">
                                 <i class="fas fa-check-square mr-1 text-emerald-600"></i>
                                 Terpilih: <span id="selectedCount" class="font-mono text-sm">0</span> Kitir
@@ -207,9 +207,9 @@
                         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                             <input type="text" name="notes" value="{{ old('notes') }}" maxlength="1000"
                                    placeholder="Catatan transfer (opsional)..."
-                                   class="px-3 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg focus:outline-none focus:border-emerald-600 sm:w-60">
+                                   class="px-2.5 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg focus:outline-none focus:border-emerald-600 sm:w-56">
                             <button type="submit" id="btnSubmitTransfer" disabled
-                                    class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white transition-colors shadow-sm">
+                                    class="inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white transition-colors shadow-sm whitespace-nowrap">
                                 <i class="fas fa-paper-plane mr-1.5"></i> Transfer Terpilih ke NETTO PF
                             </button>
                         </div>
@@ -224,21 +224,18 @@
                         <table class="w-full text-left text-xs border-collapse">
                             <thead class="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
                                 <tr>
-                                    <th class="px-3 py-3 text-center w-10">
+                                    <th class="px-2.5 py-2 text-center w-9">
                                         <input type="checkbox" id="selectAllKitirs" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                                     </th>
-                                    <th class="px-3 py-3">Nomor Kitir (PFKTR)</th>
-                                    <th class="px-3 py-3">Heat / Tgl Cor</th>
-                                    <th class="px-3 py-3">Kode Produksi</th>
-                                    <th class="px-3 py-3">Customer / PO</th>
-                                    <th class="px-3 py-3">Item / Produk</th>
-                                    <th class="px-3 py-3 text-center">Line Rencana</th>
-                                    <th class="px-3 py-3 text-left min-w-[175px]">Line Fitting <span class="text-rose-500">*</span></th>
-                                    <th class="px-3 py-3 text-right">Qty (PCS)</th>
-                                    <th class="px-3 py-3 text-right">Berat Satuan</th>
-                                    <th class="px-3 py-3 text-right">Total Berat</th>
-                                    <th class="px-3 py-3 text-center">Status Kitir</th>
-                                    <th class="px-3 py-3 text-right">Keputusan</th>
+                                    <th class="px-2.5 py-2 whitespace-nowrap">Kitir / Heat</th>
+                                    <th class="px-2.5 py-2 whitespace-nowrap">Kode Produksi</th>
+                                    <th class="px-2.5 py-2 whitespace-nowrap">Customer / PO</th>
+                                    <th class="px-2.5 py-2">Item / Produk</th>
+                                    <th class="px-2.5 py-2 text-left min-w-[165px] whitespace-nowrap">Line Fitting <span class="text-rose-500">*</span></th>
+                                    <th class="px-2.5 py-2 text-right whitespace-nowrap">Qty (PCS)</th>
+                                    <th class="px-2.5 py-2 text-right whitespace-nowrap">Berat Satuan</th>
+                                    <th class="px-2.5 py-2 text-right whitespace-nowrap">Total Berat</th>
+                                    <th class="px-2.5 py-2 text-right whitespace-nowrap">Keputusan</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -257,7 +254,7 @@
                                             : ($suggestedLine !== null ? (string) $suggestedLine : '');
                                     @endphp
                                     <tr class="kitir-transfer-row hover:bg-emerald-50/30 transition-colors" data-kitir-id="{{ $k->id }}">
-                                        <td class="px-3 py-3 text-center">
+                                        <td class="px-2.5 py-2 text-center align-middle">
                                             <input type="checkbox"
                                                    name="kitir_ids[]"
                                                    value="{{ $k->id }}"
@@ -266,24 +263,24 @@
                                                    data-weight="{{ $snap['total_weight_kg'] }}"
                                                    class="kitir-checkbox rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                                         </td>
-                                        <td class="px-3 py-3 font-mono font-bold text-slate-900 whitespace-nowrap">
-                                            <span class="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
-                                                {{ $k->traveler_number }}
-                                            </span>
-                                            <div class="text-[10px] text-slate-400 font-normal mt-1">
-                                                Terbit: {{ $k->issued_at ? $k->issued_at->format('d/m/Y H:i') : '-' }}
+                                        <td class="px-2.5 py-2 whitespace-nowrap align-middle">
+                                            <div>
+                                                <span class="font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded text-[11px]">
+                                                    {{ $k->traveler_number }}
+                                                </span>
+                                            </div>
+                                            <div class="text-[11px] text-slate-600 mt-0.5 leading-tight">
+                                                Heat:
+                                                <a href="{{ route('lost-wax.casting-results.show', $cr) }}"
+                                                   class="font-mono font-bold text-blue-700 hover:underline">{{ $cr->heat_number }}</a>
+                                                <span class="text-slate-300 mx-0.5">•</span>
+                                                <span class="text-slate-500">{{ $cr->cast_date ? $cr->cast_date->format('d/m/Y') : '-' }}</span>
+                                            </div>
+                                            <div class="text-[10px] text-slate-400 leading-tight mt-0.5">
+                                                {{ $k->tree_count }} Pohon
                                             </div>
                                         </td>
-                                        <td class="px-3 py-3 whitespace-nowrap">
-                                            <a href="{{ route('lost-wax.casting-results.show', $cr) }}"
-                                               class="font-mono font-bold text-blue-700 hover:underline">
-                                                {{ $cr->heat_number }}
-                                            </a>
-                                            <div class="text-[10px] text-slate-400">
-                                                {{ $cr->cast_date ? $cr->cast_date->format('d/m/Y') : '-' }} • {{ $k->tree_count }} Pohon
-                                            </div>
-                                        </td>
-                                        <td class="px-3 py-3 font-mono font-bold text-slate-900">
+                                        <td class="px-2.5 py-2 font-mono font-bold text-slate-900 whitespace-nowrap align-middle">
                                             {{ $snap['production_code'] }}
                                             @if($snap['is_multi_allocation'])
                                                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 ml-1">
@@ -291,40 +288,23 @@
                                                 </span>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-3">
-                                            <div class="font-medium text-slate-800">{{ $snap['customer'] ?: '-' }}</div>
+                                        <td class="px-2.5 py-2 align-middle">
+                                            <div class="font-medium text-slate-800 leading-snug">{{ $snap['customer'] ?: '-' }}</div>
                                             @if($snap['po_number'])
-                                                <div class="text-[10px] font-mono text-slate-500">PO: {{ $snap['po_number'] }}</div>
+                                                <div class="text-[10px] font-mono text-slate-500 leading-tight mt-0.5">PO: {{ $snap['po_number'] }}</div>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-3">
-                                            <div class="text-slate-800 font-medium">{{ $snap['item_name'] ?: '-' }}</div>
+                                        <td class="px-2.5 py-2 align-middle">
+                                            <div class="text-slate-800 font-medium leading-snug">{{ $snap['item_name'] ?: '-' }}</div>
                                             @if($snap['item_code'])
-                                                <div class="text-[10px] font-mono text-slate-400">{{ $snap['item_code'] }}</div>
+                                                <div class="text-[10px] font-mono text-slate-400 leading-tight mt-0.5">{{ $snap['item_code'] }}</div>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-3 text-center whitespace-nowrap">
-                                            @if(($snap['suggested_line_status'] ?? null) === \App\Services\Fitting\FittingKitirSnapshotResolverService::SUGGESTED_LINE_CONSISTENT)
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300" title="Rekomendasi dari Production Plan">
-                                                    {{ $snap['suggested_line_label'] }}
-                                                </span>
-                                            @elseif(($snap['suggested_line_status'] ?? null) === \App\Services\Fitting\FittingKitirSnapshotResolverService::SUGGESTED_LINE_INCONSISTENT)
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300"
-                                                      title="{{ $snap['line_status_reason'] ?? 'Tidak Konsisten' }}">
-                                                    Tidak Konsisten
-                                                </span>
-                                            @else
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200"
-                                                      title="{{ $snap['line_status_reason'] ?? 'Belum Ditentukan' }}">
-                                                    Belum Ditentukan
-                                                </span>
-                                            @endif
-                                        </td>
-                                        <td class="px-3 py-3 whitespace-nowrap">
+                                        <td class="px-2.5 py-2 whitespace-nowrap align-middle">
                                             <select name="kitir_lines[{{ $k->id }}]"
                                                     data-kitir-id="{{ $k->id }}"
                                                     data-suggested="{{ $suggestedLine ?? '' }}"
-                                                    class="kitir-line-select w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                                    class="kitir-line-select w-full px-2 py-1 text-xs font-semibold rounded-lg border border-slate-300 bg-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                                 <option value="">-- Pilih Line --</option>
                                                 @foreach($lineLabels as $lNum => $lLabel)
                                                     <option value="{{ $lNum }}" {{ $selectedLineVal === (string) $lNum ? 'selected' : '' }}>{{ $lLabel }}</option>
@@ -334,12 +314,12 @@
                                                 Koreksi dari Line {{ $suggestedLine }}
                                             </div>
                                         </td>
-                                        <td class="px-3 py-3 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                                        <td class="px-2.5 py-2 text-right font-mono font-black text-slate-900 whitespace-nowrap align-middle">
                                             {{ number_format($snap['qty_transferred']) }}
                                         </td>
-                                        <td class="px-3 py-3 text-right font-mono text-slate-600 whitespace-nowrap">
+                                        <td class="px-2.5 py-2 text-right font-mono text-slate-600 whitespace-nowrap align-middle">
                                             @if($snap['has_complete_weight'])
-                                                {{ number_format($snap['unit_weight_kg'], 4, ',', '.') }} kg
+                                                {{ number_format($snap['unit_weight_kg'], 2, ',', '.') }} kg
                                             @elseif($snap['weight_status'] === \App\Services\Fitting\FittingKitirSnapshotResolverService::WEIGHT_STATUS_PARTIAL)
                                                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200"
                                                       title="Berat belum lengkap untuk: {{ implode(', ', $snap['missing_weight_codes']) }}">
@@ -349,7 +329,7 @@
                                                 <span class="text-slate-400">-</span>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                                        <td class="px-2.5 py-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap align-middle">
                                             @if($snap['has_complete_weight'])
                                                 {{ number_format($snap['total_weight_kg'], 2, ',', '.') }} kg
                                             @elseif($snap['weight_status'] === \App\Services\Fitting\FittingKitirSnapshotResolverService::WEIGHT_STATUS_PARTIAL)
@@ -359,22 +339,10 @@
                                                 <span class="text-slate-400">-</span>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-3 text-center whitespace-nowrap">
-                                            <div class="flex flex-col items-center gap-1">
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    Siap Transfer
-                                                </span>
-                                                @if($k->print_count > 0)
-                                                    <span class="text-[9px] text-sky-700 font-semibold">Dicetak {{ $k->print_count }}x</span>
-                                                @else
-                                                    <span class="text-[9px] text-amber-700 font-semibold">Belum Dicetak</span>
-                                                @endif
-                                            </div>
-                                        </td>
-                                        <td class="px-3 py-3 text-right whitespace-nowrap">
+                                        <td class="px-2.5 py-2 text-right whitespace-nowrap align-middle">
                                             <button type="button"
                                                     onclick="openNotContinuedModal({{ $k->id }}, @js($k->traveler_number), @js($snap['production_code']), {{ $snap['qty_transferred'] }})"
-                                                    class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors">
+                                                    class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors">
                                                 <i class="fas fa-ban mr-1"></i> Tidak Dilanjutkan
                                             </button>
                                         </td>
@@ -397,33 +365,33 @@
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
                             <tr>
-                                <th class="px-3 py-3">No. Transfer / Tgl</th>
-                                <th class="px-3 py-3">Nomor Kitir (PFKTR)</th>
-                                <th class="px-3 py-3">Heat / Kode Produksi</th>
-                                <th class="px-3 py-3">Customer / Item</th>
-                                <th class="px-3 py-3 text-center">Line</th>
-                                <th class="px-3 py-3 text-right">Qty (PCS)</th>
-                                <th class="px-3 py-3 text-right">Unit / Total KG</th>
-                                <th class="px-3 py-3 text-center">Stage / Status</th>
-                                <th class="px-3 py-3 text-right">Aksi</th>
+                                <th class="px-2.5 py-2 whitespace-nowrap">No. Transfer / Tgl</th>
+                                <th class="px-2.5 py-2 whitespace-nowrap">Nomor Kitir (PFKTR)</th>
+                                <th class="px-2.5 py-2 whitespace-nowrap">Heat / Kode Produksi</th>
+                                <th class="px-2.5 py-2">Customer / Item</th>
+                                <th class="px-2.5 py-2 text-center whitespace-nowrap">Line</th>
+                                <th class="px-2.5 py-2 text-right whitespace-nowrap">Qty (PCS)</th>
+                                <th class="px-2.5 py-2 text-right whitespace-nowrap">Unit / Total KG</th>
+                                <th class="px-2.5 py-2 text-center whitespace-nowrap">Stage / Status</th>
+                                <th class="px-2.5 py-2 text-right whitespace-nowrap">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-slate-700">
                             @foreach($transferredItems as $item)
                                 <tr class="{{ $item->status === \App\Models\FittingItem::STATUS_CANCELLED ? 'bg-slate-50/80 opacity-75' : 'hover:bg-slate-50/70' }}">
-                                    <td class="px-3 py-3 whitespace-nowrap">
+                                    <td class="px-2.5 py-2 whitespace-nowrap">
                                         <div class="font-mono font-bold text-slate-900">{{ $item->transfer?->transfer_number ?? '-' }}</div>
                                         <div class="text-[10px] text-slate-400">
                                             {{ $item->transfer?->transfer_date ? $item->transfer->transfer_date->format('d/m/Y') : '-' }}
                                             • {{ $item->transfer?->transferredBy?->name ?? '-' }}
                                         </div>
                                     </td>
-                                    <td class="px-3 py-3 font-mono font-bold whitespace-nowrap">
-                                        <span class="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[11px]">
+                                    <td class="px-2.5 py-2 font-mono font-bold whitespace-nowrap">
+                                        <span class="bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.5 rounded text-[11px]">
                                             {{ $item->traveler_number }}
                                         </span>
                                     </td>
-                                    <td class="px-3 py-3">
+                                    <td class="px-2.5 py-2">
                                         <div class="font-mono font-bold text-slate-900">{{ $item->heat_number }}</div>
                                         <div class="font-mono text-[11px] text-slate-600">
                                             {{ $item->production_code }}
@@ -434,11 +402,11 @@
                                             @endif
                                         </div>
                                     </td>
-                                    <td class="px-3 py-3">
+                                    <td class="px-2.5 py-2">
                                         <div class="font-medium text-slate-800">{{ $item->customer ?: '-' }}</div>
                                         <div class="text-[11px] text-slate-500">{{ $item->item_name ?: '-' }}</div>
                                     </td>
-                                    <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-center whitespace-nowrap">
                                         @if($item->line_number !== null)
                                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
                                                   title="{{ \App\Models\FittingItem::lineLabelFor($item->line_number) }}">
@@ -450,14 +418,14 @@
                                             </span>
                                         @endif
                                     </td>
-                                    <td class="px-3 py-3 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">
                                         {{ number_format($item->qty_transferred) }}
                                     </td>
-                                    <td class="px-3 py-3 text-right font-mono whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-right font-mono whitespace-nowrap">
                                         <div class="font-bold text-slate-900">{{ number_format((float) $item->total_weight_kg, 2, ',', '.') }} kg</div>
-                                        <div class="text-[10px] text-slate-400">@ {{ number_format((float) $item->unit_weight_kg, 4, ',', '.') }} kg</div>
+                                        <div class="text-[10px] text-slate-400">@ {{ number_format((float) $item->unit_weight_kg, 2, ',', '.') }} kg</div>
                                     </td>
-                                    <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-center whitespace-nowrap">
                                         @if($item->status === \App\Models\FittingItem::STATUS_ACTIVE)
                                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                                 {{ \App\Services\Fitting\FittingStageAuthorizationService::STAGE_LABELS[$item->current_stage] ?? strtoupper((string) $item->current_stage) }}
@@ -473,11 +441,11 @@
                                             @endif
                                         @endif
                                     </td>
-                                    <td class="px-3 py-3 text-right whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-right whitespace-nowrap">
                                         @if($item->status === \App\Models\FittingItem::STATUS_ACTIVE && ($item->stage_executions_count ?? 0) === 0)
                                             <button type="button"
                                                     onclick="openCancelTransferModal({{ $item->id }}, @js($item->traveler_number))"
-                                                    class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors">
+                                                    class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors">
                                                 <i class="fas fa-times-circle mr-1"></i> Batalkan Transfer
                                             </button>
                                         @elseif($item->status === \App\Models\FittingItem::STATUS_ACTIVE)
@@ -491,7 +459,7 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="p-4 border-t border-slate-100">
+                <div class="p-3 border-t border-slate-100">
                     {{ $transferredItems->links() }}
                 </div>
             @endif
@@ -507,14 +475,14 @@
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
                             <tr>
-                                <th class="px-3 py-3">Nomor Kitir (PFKTR)</th>
-                                <th class="px-3 py-3">Heat / Kode Produksi</th>
-                                <th class="px-3 py-3">Customer / Item</th>
-                                <th class="px-3 py-3 text-right">Qty (PCS)</th>
-                                <th class="px-3 py-3">Keputusan & Alasan</th>
-                                <th class="px-3 py-3">Diputuskan Oleh</th>
-                                <th class="px-3 py-3 text-center">Status</th>
-                                <th class="px-3 py-3 text-right">Aksi</th>
+                                <th class="px-2.5 py-2 whitespace-nowrap">Nomor Kitir (PFKTR)</th>
+                                <th class="px-2.5 py-2 whitespace-nowrap">Heat / Kode Produksi</th>
+                                <th class="px-2.5 py-2">Customer / Item</th>
+                                <th class="px-2.5 py-2 text-right whitespace-nowrap">Qty (PCS)</th>
+                                <th class="px-2.5 py-2">Keputusan & Alasan</th>
+                                <th class="px-2.5 py-2 whitespace-nowrap">Diputuskan Oleh</th>
+                                <th class="px-2.5 py-2 text-center whitespace-nowrap">Status</th>
+                                <th class="px-2.5 py-2 text-right whitespace-nowrap">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -529,23 +497,23 @@
                                         && $dcr->status === 'COMPLETED';
                                 @endphp
                                 <tr class="{{ $dec->status === \App\Models\FittingKitirDecision::STATUS_REOPENED ? 'bg-slate-50/80' : 'hover:bg-amber-50/30' }}">
-                                    <td class="px-3 py-3 font-mono font-bold whitespace-nowrap">
-                                        <span class="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
+                                    <td class="px-2.5 py-2 font-mono font-bold whitespace-nowrap">
+                                        <span class="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded text-[11px]">
                                             {{ $dk?->traveler_number ?? '-' }}
                                         </span>
                                     </td>
-                                    <td class="px-3 py-3">
+                                    <td class="px-2.5 py-2">
                                         <div class="font-mono font-bold text-slate-900">{{ $dcr?->heat_number ?? '-' }}</div>
                                         <div class="font-mono text-[11px] text-slate-600">{{ $dk?->production_code ?? '-' }}</div>
                                     </td>
-                                    <td class="px-3 py-3">
+                                    <td class="px-2.5 py-2">
                                         <div class="font-medium text-slate-800">{{ $dk?->customer ?: '-' }}</div>
                                         <div class="text-[11px] text-slate-500">{{ $dk?->item_name ?: '-' }}</div>
                                     </td>
-                                    <td class="px-3 py-3 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">
                                         {{ number_format((int) ($dk?->quantity_pcs ?? 0)) }}
                                     </td>
-                                    <td class="px-3 py-3">
+                                    <td class="px-2.5 py-2">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                             {{ $dec->decision }}
                                         </span>
@@ -563,13 +531,13 @@
                                             </div>
                                         @endif
                                     </td>
-                                    <td class="px-3 py-3 whitespace-nowrap">
+                                    <td class="px-2.5 py-2 whitespace-nowrap">
                                         <div class="font-semibold text-slate-800">{{ $dec->decidedBy?->name ?? '-' }}</div>
                                         <div class="text-[10px] text-slate-400">
                                             {{ $dec->decided_at ? $dec->decided_at->format('d/m/Y H:i') : '-' }}
                                         </div>
                                     </td>
-                                    <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-center whitespace-nowrap">
                                         @if($dec->status === \App\Models\FittingKitirDecision::STATUS_ACTIVE)
                                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                                                 NOT_CONTINUED
@@ -580,11 +548,11 @@
                                             </span>
                                         @endif
                                     </td>
-                                    <td class="px-3 py-3 text-right whitespace-nowrap">
+                                    <td class="px-2.5 py-2 text-right whitespace-nowrap">
                                         @if($canReopen)
                                             <button type="button"
                                                     onclick="openReopenModal({{ $dec->id }}, @js($dk->traveler_number))"
-                                                    class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm">
+                                                    class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm">
                                                 <i class="fas fa-undo mr-1"></i> Kembalikan ke Daftar Transfer
                                             </button>
                                         @else
@@ -598,7 +566,7 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="p-4 border-t border-slate-100">
+                <div class="p-3 border-t border-slate-100">
                     {{ $decisions->links() }}
                 </div>
             @endif

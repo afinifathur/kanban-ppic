@@ -29,7 +29,7 @@
                 <input type="hidden" name="production_code" value="{{ $activeFilters['production_code'] }}">
             @endif
 
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                 {{-- 1. Date From --}}
                 <div>
                     <label for="date_from" class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -75,7 +75,23 @@
                     </select>
                 </div>
 
-                {{-- 4. Search Input --}}
+                {{-- 4. Defect Context Dropdown --}}
+                <div>
+                    <label for="defect_context" class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        <i class="fas fa-clock text-purple-600 mr-1"></i> Konteks Waktu
+                    </label>
+                    <select
+                        name="defect_context"
+                        id="defect_context"
+                        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 text-xs font-semibold focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
+                    >
+                        @foreach($contexts as $ctxKey => $ctxLabel)
+                            <option value="{{ $ctxKey }}" {{ ($activeFilters['defect_context'] ?? 'all') === $ctxKey ? 'selected' : '' }}>{{ $ctxLabel }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                {{-- 5. Search Input --}}
                 <div>
                     <label for="search" class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                         <i class="fas fa-search text-blue-600 mr-1"></i> Cari (Kode / Nama / Barcode)
@@ -224,10 +240,16 @@
         </div>
 
         {{-- 10. Oven --}}
-        <div class="bg-white p-3 rounded-xl border border-slate-200 text-center shadow-xs">
+        <div class="bg-white p-3 rounded-xl border border-slate-200 text-center shadow-xs" title="Pra-Siap Cor: {{ number_format($summary['oven_pre_siap_cor'] ?? 0) }} pcs | Pasca-Siap Cor: {{ number_format($summary['oven_post_siap_cor'] ?? 0) }} pcs">
             <div class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Oven</div>
             <div class="text-base font-black text-slate-800 mt-1 font-mono">{{ number_format($summary['oven']) }}</div>
-            <div class="text-[9px] text-slate-400">pcs</div>
+            @if(($summary['oven_post_siap_cor'] ?? 0) > 0)
+                <div class="text-[8.5px] text-purple-700 font-semibold leading-tight mt-0.5">
+                    Pra {{ number_format($summary['oven_pre_siap_cor'] ?? 0) }} / Pasca {{ number_format($summary['oven_post_siap_cor'] ?? 0) }}
+                </div>
+            @else
+                <div class="text-[9px] text-slate-400">pcs</div>
+            @endif
         </div>
 
         {{-- 11. GRAND TOTAL --}}
@@ -248,6 +270,7 @@
                 <p class="text-[11px] text-slate-500">
                     Periode: <span class="font-semibold text-slate-700">{{ $activeFilters['date_from'] }}</span> s/d <span class="font-semibold text-slate-700">{{ $activeFilters['date_to'] }}</span>
                     &bull; Tahapan: <span class="font-semibold text-slate-700">{{ strtoupper($activeFilters['stage']) }}</span>
+                    &bull; Konteks: <span class="font-semibold text-slate-700">{{ $contexts[$activeFilters['defect_context'] ?? 'all'] ?? 'Semua Konteks' }}</span>
                     &bull; Total: <span class="font-bold text-rose-600">{{ number_format($summary['grand_total']) }} pcs</span> ({{ $items->count() }} baris)
                 </p>
             </div>
@@ -297,6 +320,22 @@
                                     <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold {{ $item['stage'] === 'cetak' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : ($item['stage'] === 'assembly' ? 'bg-blue-50 text-blue-700 border border-blue-200' : ($item['stage'] === 'oven' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-800 border border-amber-200')) }}">
                                         {{ strtoupper($item['stage_label']) }}
                                     </span>
+                                    @if(($item['defect_context'] ?? 'pre_siap_cor') === 'post_siap_cor')
+                                        <div class="mt-1">
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                                Pasca-Siap Cor
+                                            </span>
+                                        </div>
+                                    @elseif($item['stage'] === 'oven')
+                                        <div class="mt-1 text-[9px] text-slate-400 font-semibold">Pra-Siap Cor</div>
+                                    @endif
+                                    @if(!empty($item['is_late_entry']))
+                                        <div class="mt-0.5">
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                Koreksi Terlambat
+                                            </span>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="py-2.5 px-3 text-right font-mono font-black text-rose-600">
                                     {{ number_format($item['defect_qty']) }} pcs
@@ -310,8 +349,17 @@
                                 <td class="py-2.5 px-3 text-slate-600">
                                     {{ $item['operator'] }}
                                 </td>
-                                <td class="py-2.5 px-3 text-center font-mono text-[11px] text-slate-500">
-                                    {{ $item['occurred_at'] ? \Carbon\Carbon::parse($item['occurred_at'])->format('d-m-Y H:i') : '-' }}
+                                <td class="py-2.5 px-3 text-center font-mono text-[11px] text-slate-600">
+                                    @if(!empty($item['occurred_at']))
+                                        <div>{{ \Carbon\Carbon::parse($item['occurred_at'])->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') }}</div>
+                                    @else
+                                        <div class="text-slate-400 italic font-sans text-[10px]">Tidak diketahui</div>
+                                    @endif
+                                    @if(!empty($item['created_at']))
+                                        <div class="text-[9px] text-slate-400 mt-0.5" title="Waktu pencatatan ke sistem (WIB)">
+                                            Catat: {{ \Carbon\Carbon::parse($item['created_at'])->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') }}
+                                        </div>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
@@ -356,6 +404,11 @@
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-bold {{ $item['stage'] === 'cetak' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : ($item['stage'] === 'assembly' ? 'bg-blue-50 text-blue-700 border border-blue-200' : ($item['stage'] === 'oven' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-800 border border-amber-200')) }}">
                                         {{ strtoupper($item['stage_label']) }}
                                     </span>
+                                    @if($item['stage'] === 'oven' && ($item['post_siap_cor_qty'] ?? 0) > 0)
+                                        <div class="text-[9px] text-purple-700 font-semibold mt-0.5">
+                                            Pra: {{ number_format($item['pre_siap_cor_qty'] ?? 0) }} | Pasca: {{ number_format($item['post_siap_cor_qty'] ?? 0) }}
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="py-3 px-4 text-right font-mono font-black text-rose-600 text-sm">
                                     {{ number_format($item['defect_qty']) }} pcs

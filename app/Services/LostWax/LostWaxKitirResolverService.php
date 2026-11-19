@@ -73,13 +73,11 @@ class LostWaxKitirResolverService
             $qtyPcs = (int) $groupTrees->sum('quantity_pcs');
             $totalGroupPcs += $qtyPcs;
 
-            // Resolve customer: first non-empty, or comma-separated unique
-            $customers = $groupTrees->pluck('customer')->filter()->map('trim')->unique()->values();
-            $customerStr = $customers->isNotEmpty() ? $customers->implode(', ') : '-';
+            // Resolve customer: first non-empty, or comma-separated unique (exact equality, preserved order)
+            $customerStr = \App\Helpers\FormatHelper::formatDeduplicatedList($groupTrees->pluck('customer'));
 
-            // Resolve item name: first non-empty, or comma-separated unique
-            $items = $groupTrees->pluck('item_name')->filter()->map('trim')->unique()->values();
-            $itemStr = $items->isNotEmpty() ? $items->implode(', ') : '-';
+            // Resolve item name: first non-empty, or comma-separated unique (exact equality, preserved order)
+            $itemStr = \App\Helpers\FormatHelper::formatDeduplicatedList($groupTrees->pluck('item_name'));
 
             $barcodes = $groupTrees->pluck('barcode')->filter()->values()->all();
 

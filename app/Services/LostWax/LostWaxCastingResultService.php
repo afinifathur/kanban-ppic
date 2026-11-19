@@ -154,13 +154,13 @@ class LostWaxCastingResultService
                         }
                     }
                     if (! empty($codes)) {
-                        $code = implode(', ', $codes);
+                        $code = \App\Helpers\FormatHelper::formatDeduplicatedList($codes, ', ', $code);
                     }
                     if (! empty($custs)) {
-                        $customer = implode(', ', $custs);
+                        $customer = \App\Helpers\FormatHelper::formatDeduplicatedList($custs, ', ', $customer);
                     }
                     if (! empty($prods)) {
-                        $product = implode(', ', $prods);
+                        $product = \App\Helpers\FormatHelper::formatDeduplicatedList($prods, ', ', $product);
                     }
                 }
 

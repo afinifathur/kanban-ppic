@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use LogicException;
 
 class LostWaxScanEvent extends Model
 {
@@ -14,6 +15,7 @@ class LostWaxScanEvent extends Model
         'tree_id',
         'barcode',
         'stage',
+        'scanned_qty',
         'scanned_at',
         'operator_id',
         'result',
@@ -25,9 +27,19 @@ class LostWaxScanEvent extends Model
     ];
 
     protected $casts = [
+        'scanned_qty' => 'integer',
         'scanned_at' => 'datetime',
         'aging_minutes' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(function (self $event) {
+            if ($event->isDirty('scanned_qty')) {
+                throw new LogicException('Kolom scanned_qty pada lost_wax_scan_events bersifat immutable dan tidak boleh diubah atau di-backfill.');
+            }
+        });
+    }
 
     public function getIsReconciliationAttribute(): bool
     {

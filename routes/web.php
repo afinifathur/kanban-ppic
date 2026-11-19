@@ -177,6 +177,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/trees/{tree}', [TreeController::class, 'show'])->name('trees.show');
             Route::patch('/trees/{tree}', [TreeController::class, 'update'])->name('trees.update');
             Route::post('/trees/{tree}/defects', [TreeController::class, 'storeDefect'])->name('trees.defects.store');
+            Route::post('/trees/{tree}/defects/{defect}/void', [TreeController::class, 'voidDefect'])->name('trees.defects.void');
             Route::get('/trees/{tree}/traveler', [TreeController::class, 'traveler'])->name('trees.traveler');
             Route::get('/trees/{tree}/barcode', [TreeController::class, 'barcode'])->name('trees.barcode');
             Route::post('/trees/print-thermal', [TreeController::class, 'printThermal'])->name('trees.print-thermal');

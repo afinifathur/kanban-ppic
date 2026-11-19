@@ -7,6 +7,7 @@ use App\Models\LostWaxScanEvent;
 use App\Models\LostWaxTree;
 use App\Models\LostWaxTreeDefect;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -55,9 +56,10 @@ class LostWaxProductionReportService
         $isPpic = $currentUser?->hasRole('ppic');
         $scope = ($isPpic && $currentUser?->product_scope) ? $currentUser->product_scope : null;
 
-        $dateFrom = ! empty($filters['date_from']) ? $filters['date_from'] : date('Y-m-d');
-        $dateTo = ! empty($filters['date_to']) ? $filters['date_to'] : date('Y-m-d');
-        $selectedStage = ! empty($filters['stage']) ? $filters['stage'] : 'all';
+        $todayWib = Carbon::now('Asia/Jakarta')->format('Y-m-d');
+        $dateFrom = ! empty($filters['date_from']) ? (string) $filters['date_from'] : $todayWib;
+        $dateTo = ! empty($filters['date_to']) ? (string) $filters['date_to'] : $todayWib;
+        $selectedStage = ! empty($filters['stage']) ? (string) $filters['stage'] : 'all';
         $search = trim((string) ($filters['search'] ?? ''));
         $searchLower = strtolower($search);
 
@@ -65,8 +67,18 @@ class LostWaxProductionReportService
             [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
         }
 
+        $sqlBufferStart = Carbon::createFromFormat('!Y-m-d', $dateFrom, 'Asia/Jakarta')
+            ->subDay()
+            ->startOfDay()
+            ->format('Y-m-d H:i:s');
+        $sqlBufferEnd = Carbon::createFromFormat('!Y-m-d', $dateTo, 'Asia/Jakarta')
+            ->addDay()
+            ->endOfDay()
+            ->format('Y-m-d H:i:s');
+
         $rawEntries = collect();
         $defectsMap = [];
+        $defectMetadata = [];
 
         // -------------------------------------------------------------
         // 1. STAGE: CETAK (LostWaxPrintExecution)
@@ -329,7 +341,7 @@ class LostWaxProductionReportService
         }
 
         // -------------------------------------------------------------
-        // 4. TREE DEFECTS MAPPING (LostWaxTreeDefect)
+        // 4. TREE DEFECTS MAPPING (LostWaxTreeDefect — active/non-void only, WIB effective date)
         // -------------------------------------------------------------
         if ($selectedStage !== 'cetak') {
             $treeDefectsQuery = LostWaxTreeDefect::with([
@@ -337,11 +349,10 @@ class LostWaxProductionReportService
                 'tree.workOrder.itemReference',
                 'tree.allocations.printOrderLine.productionPlan',
             ])
+                ->whereNull('voided_at')
                 ->where('defect_qty', '>', 0)
-                ->where(function ($q) use ($dateFrom, $dateTo) {
-                    $q->whereDate(DB::raw('COALESCE(occurred_at, created_at)'), '>=', $dateFrom)
-                        ->whereDate(DB::raw('COALESCE(occurred_at, created_at)'), '<=', $dateTo);
-                });
+                ->whereRaw('COALESCE(occurred_at, created_at) >= ?', [$sqlBufferStart])
+                ->whereRaw('COALESCE(occurred_at, created_at) <= ?', [$sqlBufferEnd]);
 
             if ($selectedStage !== 'all') {
                 $treeDefectsQuery->where('stage', $selectedStage);
@@ -370,12 +381,41 @@ class LostWaxProductionReportService
             }
 
             foreach ($treeDefectsQuery->get() as $defect) {
+                // Canonical effective_defect_date in Asia/Jakarta (independent of DB session timezone)
+                $effectiveDateWib = $defect->effective_date_wib;
+                if (! $effectiveDateWib || $effectiveDateWib < $dateFrom || $effectiveDateWib > $dateTo) {
+                    continue;
+                }
+
                 $tree = $defect->tree;
-                $prodCode = $tree?->printOrderLine?->productionPlan?->code
+                $plan = $tree?->printOrderLine?->productionPlan;
+                $wo = $tree?->workOrder;
+                $prodCode = $plan?->code
                     ?? $tree?->getSourceCode()
                     ?? '-';
-                $key = ((string) $prodCode).'__'.$defect->stage;
+                $customerCode = $plan?->customer
+                    ?? $tree?->getSourceCustomer()
+                    ?? '-';
+                $itemName = $plan?->item_name
+                    ?? $tree?->getSourceProduct()
+                    ?? '-';
+                $weight = (float) ($plan?->weight ?? $wo?->itemReference?->unit_weight_snapshot ?? 0.0);
+
+                $stage = (string) $defect->stage;
+                $key = ((string) $prodCode).'__'.$stage;
                 $defectsMap[$key] = ($defectsMap[$key] ?? 0) + (int) $defect->defect_qty;
+
+                if (! isset($defectMetadata[$key])) {
+                    $defectMetadata[$key] = [
+                        'production_code' => (string) $prodCode,
+                        'customer_code' => (string) $customerCode,
+                        'item_name' => (string) $itemName,
+                        'stage' => $stage,
+                        'stage_label' => self::STAGES[$stage] ?? ucfirst(str_replace('_', ' ', $stage)),
+                        'stage_order' => self::getStageOrder($stage),
+                        'weight' => $weight,
+                    ];
+                }
             }
         }
 
@@ -409,6 +449,29 @@ class LostWaxProductionReportService
                 'qty_defect' => $qtyDefect,
             ];
         });
+
+        // Emit defect-only rows (qty_processed = 0) when active defects occur on dates with zero scans for that code+stage
+        // (e.g., post-Siap Cor breakage or late pre-Siap Cor correction recorded on a subsequent day)
+        foreach ($defectsMap as $defectKey => $qtyDefect) {
+            if ($qtyDefect <= 0 || $grouped->has($defectKey) || ! isset($defectMetadata[$defectKey])) {
+                continue;
+            }
+            $meta = $defectMetadata[$defectKey];
+            $grouped->put($defectKey, [
+                'group_key' => $defectKey,
+                'production_code' => (string) $meta['production_code'],
+                'customer_code' => (string) $meta['customer_code'],
+                'item_name' => (string) $meta['item_name'],
+                'stage' => (string) $meta['stage'],
+                'stage_label' => (string) $meta['stage_label'],
+                'stage_order' => (int) $meta['stage_order'],
+                'barcode_count' => 0,
+                'weight' => (float) ($meta['weight'] ?? 0.0),
+                'qty_processed' => 0,
+                'total_weight' => 0.0,
+                'qty_defect' => (int) $qtyDefect,
+            ]);
+        }
 
         // -------------------------------------------------------------
         // 6. SEARCH FILTER

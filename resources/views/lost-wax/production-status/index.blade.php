@@ -493,12 +493,30 @@
                                 @endforeach
                                 
                                 <td class="compact-td text-center font-mono {{ $row['oven_qty']>0?'cell-oven':'text-slate-400' }}">{{ $row['oven_qty'] > 0 ? $row['oven_qty'] : '-' }}</td>
-                                @php $rOven = $row['r_oven'] ?? 0; @endphp
-                                <td class="compact-td text-center font-mono {{ $rOven > 0 ? 'font-bold text-red-600 bg-red-50/50' : 'text-slate-400' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
+                                @php
+                                    $rOven = (int) ($row['r_oven'] ?? 0);
+                                    $rOvenPre = (int) ($row['r_oven_pre_siap_cor'] ?? $rOven);
+                                    $rOvenPost = (int) ($row['r_oven_post_siap_cor'] ?? 0);
+                                    $rOvenTitle = $rOven > 0
+                                        ? "Total Rusak Oven: {$rOven} pcs (Pra-Siap Cor: {$rOvenPre} pcs | Pasca-Siap Cor: {$rOvenPost} pcs)"
+                                        : '';
+                                @endphp
+                                <td class="compact-td text-center font-mono {{ $rOven > 0 ? 'font-bold text-red-600 bg-red-50/50' : 'text-slate-400' }}" @if($rOvenTitle) title="{{ $rOvenTitle }}" @endif>{{ $rOven > 0 ? $rOven : '-' }}</td>
                                 
                                 <!-- Siap Cor & Cor -->
-                                <td class="compact-td text-center font-mono {{ ($row['siap_cor_qty'] ?? 0) > 0 ? 'font-bold text-sky-800 bg-sky-50/70' : 'text-slate-400' }}">
-                                    {{ ($row['siap_cor_qty'] ?? 0) > 0 ? $row['siap_cor_qty'] : '-' }}
+                                @php
+                                    $siapCorActive = (int) ($row['siap_cor_qty'] ?? 0);
+                                    $siapCorHist = (int) ($row['siap_cor_historical_qty'] ?? 0);
+                                    $siapCorScan = $row['siap_cor_scanned_qty'] ?? null;
+                                    $siapCorTitle = ($siapCorActive > 0 || $siapCorHist > 0)
+                                        ? "Siap Cor Aktif: {$siapCorActive} pcs | Siap Cor Historis: {$siapCorHist} pcs" . ($siapCorScan !== null ? " | Snapshot Scan Awal: {$siapCorScan} pcs" : '')
+                                        : '';
+                                @endphp
+                                <td class="compact-td text-center font-mono {{ $siapCorActive > 0 ? 'font-bold text-sky-800 bg-sky-50/70' : 'text-slate-400' }}" @if($siapCorTitle) title="{{ $siapCorTitle }}" @endif>
+                                    <div>{{ $siapCorActive > 0 ? $siapCorActive : '-' }}</div>
+                                    @if($siapCorHist > 0 && $siapCorHist !== $siapCorActive)
+                                        <div class="text-[8px] font-normal text-slate-500 leading-tight">Hist: {{ $siapCorHist }}</div>
+                                    @endif
                                 </td>
                                 <td class="compact-td text-center font-mono {{ ($row['cor_qty'] ?? 0) > 0 ? 'font-bold text-amber-900 bg-amber-100/60' : 'text-slate-400' }}">
                                     {{ ($row['cor_qty'] ?? 0) > 0 ? $row['cor_qty'] : '-' }}
@@ -669,7 +687,12 @@
                         @php $rOven = $row['r_oven'] ?? 0; @endphp
                         <td class="{{ $rOven > 0 ? 'ps-cell-red' : '' }}">{{ $rOven > 0 ? $rOven : '-' }}</td>
 
-                        <td class="{{ $row['siap_cor_qty']>0?'ps-cell-siap-cor':'' }}">{{ $row['siap_cor_qty'] > 0 ? $row['siap_cor_qty'] : '-' }}</td>
+                        <td class="{{ $row['siap_cor_qty']>0?'ps-cell-siap-cor':'' }}">
+                            {{ $row['siap_cor_qty'] > 0 ? $row['siap_cor_qty'] : '-' }}
+                            @if(($row['siap_cor_historical_qty'] ?? 0) > 0 && ($row['siap_cor_historical_qty'] ?? 0) !== (int) ($row['siap_cor_qty'] ?? 0))
+                                <div style="font-size: 6.5px; font-weight: 400; color: #475569;">H:{{ $row['siap_cor_historical_qty'] }}</div>
+                            @endif
+                        </td>
                         <td class="{{ $row['cor_qty']>0?'ps-cell-cor':'' }}">{{ $row['cor_qty'] > 0 ? $row['cor_qty'] : '-' }}</td>
                         
                         <td class="ps-status-cell">
