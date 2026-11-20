@@ -480,6 +480,19 @@ class FittingStageAuthorizationService
     }
 
     /**
+     * Authorize user to view Fitting Production Status.
+     * Throws AuthorizationException if denied.
+     *
+     * @throws AuthorizationException
+     */
+    public function authorizeViewProductionStatus(?User $user): void
+    {
+        if (! self::canViewProductionStatus($user)) {
+            throw new AuthorizationException('Anda tidak memiliki hak akses untuk melihat Status Produksi Fitting.');
+        }
+    }
+
+    /**
      * Check if user can view Fitting Management Dashboard.
      * Strictly excludes Sales and ALL `spv_fitting` accounts (including single-stage & spvgdpf).
      */

@@ -236,7 +236,7 @@
                             data-item="{{ strtolower($tree['item_name']) }}"
                             data-qty="{{ $tree['quantity_pcs'] }}"
                             data-scan-date="{{ $tree['scan_date'] }}">
-                            <td class="px-3 py-2 text-center" onclick="event.stopPropagation();">
+                            <td class="px-3 py-2 text-center">
                                 <input type="checkbox"
                                        name="tree_ids[]"
                                        value="{{ $tree['tree_id'] }}"
@@ -329,8 +329,6 @@
 document.addEventListener('DOMContentLoaded', function () {
     const tableBody = document.getElementById('treeTableBody');
     const headerCheckbox = document.getElementById('headerCheckbox');
-    const checkboxes = Array.from(document.querySelectorAll('.tree-checkbox'));
-    const rows = Array.from(document.querySelectorAll('.tree-row'));
     const quickSearch = document.getElementById('quickSearch');
     const scanDateFromInput = document.getElementById('scan_date_from');
     const scanDateToInput = document.getElementById('scan_date_to');
@@ -347,29 +345,114 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('castingResultForm');
     const heatNumberInput = document.getElementById('heat_number');
 
+    function getAllRows() {
+        return Array.from(document.querySelectorAll('.tree-row'));
+    }
+
+    function getAllCheckboxes() {
+        return Array.from(document.querySelectorAll('.tree-checkbox'));
+    }
+
     // Update totals and submit button state
     function updateSummary() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.tree-checkbox:checked'));
+        const seenIds = new Set();
         let count = 0;
         let pcs = 0;
 
-        checkboxes.forEach(cb => {
-            if (cb.checked) {
+        checkedBoxes.forEach(cb => {
+            const id = cb.value;
+            if (!seenIds.has(id)) {
+                seenIds.add(id);
                 count++;
-                pcs += parseInt(cb.dataset.qty || 0, 10);
+                pcs += parseInt(cb.dataset.qty || '0', 10);
             }
         });
 
-        selectedCountSpan.textContent = count.toLocaleString('id-ID');
-        selectedPcsSpan.textContent = pcs.toLocaleString('id-ID');
+        if (selectedCountSpan) selectedCountSpan.textContent = count.toLocaleString('id-ID');
+        if (selectedPcsSpan) selectedPcsSpan.textContent = pcs.toLocaleString('id-ID');
 
-        if (count > 0) {
-            btnSubmit.disabled = false;
-            btnSubmit.className = 'px-6 py-2.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-all shadow-sm bg-amber-500 hover:bg-amber-600 text-white cursor-pointer';
+        if (btnSubmit) {
+            if (count > 0) {
+                btnSubmit.disabled = false;
+                btnSubmit.className = 'px-6 py-2.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-all shadow-sm bg-amber-500 hover:bg-amber-600 text-white cursor-pointer';
+            } else {
+                btnSubmit.disabled = true;
+                btnSubmit.className = 'px-6 py-2.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-all shadow-sm bg-slate-200 text-slate-400 cursor-not-allowed';
+            }
+        }
+
+        // Update row highlight
+        getAllRows().forEach(row => {
+            const cb = row.querySelector('.tree-checkbox');
+            if (cb && cb.checked) {
+                row.classList.add('bg-amber-50/70');
+            } else {
+                row.classList.remove('bg-amber-50/70');
+            }
+        });
+    }
+
+    // Synchronize header checkbox based on visible rows
+    function syncHeaderCheckbox() {
+        if (!headerCheckbox) return;
+        const visibleRows = getAllRows().filter(row => row.style.display !== 'none');
+        const visibleCount = visibleRows.length;
+        let visibleCheckedCount = 0;
+
+        visibleRows.forEach(row => {
+            const cb = row.querySelector('.tree-checkbox');
+            if (cb && cb.checked) {
+                visibleCheckedCount++;
+            }
+        });
+
+        if (visibleCount > 0 && visibleCheckedCount === visibleCount) {
+            headerCheckbox.checked = true;
+            headerCheckbox.indeterminate = false;
+        } else if (visibleCheckedCount > 0) {
+            headerCheckbox.checked = false;
+            headerCheckbox.indeterminate = true;
         } else {
-            btnSubmit.disabled = true;
-            btnSubmit.className = 'px-6 py-2.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-all shadow-sm bg-slate-200 text-slate-400 cursor-not-allowed';
+            headerCheckbox.checked = false;
+            headerCheckbox.indeterminate = false;
         }
     }
+
+    // Delegated event handling on tableBody for both dynamic & static elements
+    if (tableBody) {
+        // Individual checkbox change
+        tableBody.addEventListener('change', function (e) {
+            if (e.target && e.target.classList.contains('tree-checkbox')) {
+                updateSummary();
+                syncHeaderCheckbox();
+            }
+        });
+
+        // Row click toggles checkbox (ignores clicks directly on interactive inputs/buttons/links)
+        tableBody.addEventListener('click', function (e) {
+            if (e.target.closest('input, button, a, label')) {
+                return;
+            }
+            const row = e.target.closest('.tree-row');
+            if (!row) return;
+
+            const cb = row.querySelector('.tree-checkbox');
+            if (cb) {
+                cb.checked = !cb.checked;
+                updateSummary();
+                syncHeaderCheckbox();
+            }
+        });
+    }
+
+    // Direct change listener on checkboxes as reinforcement
+    getAllCheckboxes().forEach(cb => {
+        cb.addEventListener('change', function () {
+            updateSummary();
+            syncHeaderCheckbox();
+        });
+    });
 
     // Combined filter function (date range + quick search)
     function applyFilters() {
@@ -387,8 +470,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const term = quickSearch ? quickSearch.value.toLowerCase().trim() : '';
         let visibleCount = 0;
+        let runningNo = 1;
 
-        rows.forEach(row => {
+        getAllRows().forEach(row => {
             let matchesDate = true;
             const rowScanDate = row.dataset.scanDate || '';
 
@@ -411,6 +495,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (matchesDate && matchesSearch) {
                 row.style.display = '';
                 visibleCount++;
+                const noEl = row.querySelector('.row-number');
+                if (noEl) noEl.textContent = runningNo++;
             } else {
                 row.style.display = 'none';
             }
@@ -446,10 +532,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        // If header checkbox is checked, sync state to visible rows
-        if (headerCheckbox && headerCheckbox.checked) {
-            headerCheckbox.checked = false;
-        }
+        // Sync header checkbox with visible rows
+        syncHeaderCheckbox();
     }
 
     if (btnApplyDateFilter) {
@@ -483,75 +567,104 @@ document.addEventListener('DOMContentLoaded', function () {
         quickSearch.addEventListener('input', applyFilters);
     }
 
-    // Select all currently visible rows
-    btnSelectAll.addEventListener('click', function () {
-        rows.forEach(row => {
-            if (row.style.display !== 'none') {
-                const cb = row.querySelector('.tree-checkbox');
-                if (cb) cb.checked = true;
-            }
-        });
-        updateSummary();
+    // Prevent accidental form submission on Enter in filter & search inputs
+    [quickSearch, scanDateFromInput, scanDateToInput].forEach(input => {
+        if (input) {
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applyFilters();
+                }
+            });
+        }
     });
 
+    // Select all currently visible rows
+    if (btnSelectAll) {
+        btnSelectAll.addEventListener('click', function () {
+            getAllRows().forEach(row => {
+                if (row.style.display !== 'none') {
+                    const cb = row.querySelector('.tree-checkbox');
+                    if (cb) cb.checked = true;
+                }
+            });
+            updateSummary();
+            syncHeaderCheckbox();
+        });
+    }
+
     // Deselect all
-    btnDeselectAll.addEventListener('click', function () {
-        checkboxes.forEach(cb => cb.checked = false);
-        if (headerCheckbox) headerCheckbox.checked = false;
-        updateSummary();
-    });
+    if (btnDeselectAll) {
+        btnDeselectAll.addEventListener('click', function () {
+            getAllCheckboxes().forEach(cb => cb.checked = false);
+            if (headerCheckbox) {
+                headerCheckbox.checked = false;
+                headerCheckbox.indeterminate = false;
+            }
+            updateSummary();
+            syncHeaderCheckbox();
+        });
+    }
 
     // Header checkbox toggles visible
     if (headerCheckbox) {
         headerCheckbox.addEventListener('change', function () {
             const shouldCheck = this.checked;
-            rows.forEach(row => {
+            getAllRows().forEach(row => {
                 if (row.style.display !== 'none') {
                     const cb = row.querySelector('.tree-checkbox');
                     if (cb) cb.checked = shouldCheck;
                 }
             });
             updateSummary();
+            syncHeaderCheckbox();
         });
     }
 
     // Form submission confirmation
-    form.addEventListener('submit', function (e) {
-        const heat = heatNumberInput.value.trim();
-        let count = 0;
-        let pcs = 0;
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            const heat = heatNumberInput ? heatNumberInput.value.trim() : '';
+            const checkedBoxes = Array.from(document.querySelectorAll('.tree-checkbox:checked'));
+            const seenIds = new Set();
+            let count = 0;
+            let pcs = 0;
 
-        checkboxes.forEach(cb => {
-            if (cb.checked) {
-                count++;
-                pcs += parseInt(cb.dataset.qty || 0, 10);
+            checkedBoxes.forEach(cb => {
+                const id = cb.value;
+                if (!seenIds.has(id)) {
+                    seenIds.add(id);
+                    count++;
+                    pcs += parseInt(cb.dataset.qty || '0', 10);
+                }
+            });
+
+            if (count === 0) {
+                e.preventDefault();
+                alert('Pilih minimal satu Traveler Card untuk disimpan.');
+                return;
             }
+
+            const confirmMessage = `Konfirmasi Simpan Hasil Cor:\n\n` +
+                `Heat Number: ${heat}\n` +
+                `Total Pohon: ${count} pohon\n` +
+                `Total Kuantitas: ${pcs.toLocaleString('id-ID')} PCS\n\n` +
+                `Traveler Card terpilih akan dipindahkan ke status Selesai Cor dan keluar dari antrean Siap Cor. Lanjutkan?`;
+
+            if (!confirm(confirmMessage)) {
+                e.preventDefault();
+                return;
+            }
+
+            // Disable button to prevent duplicate clicks
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Menyimpan...';
         });
-
-        if (count === 0) {
-            e.preventDefault();
-            alert('Pilih minimal satu Traveler Card untuk disimpan.');
-            return;
-        }
-
-        const confirmMessage = `Konfirmasi Simpan Hasil Cor:\n\n` +
-            `Heat Number: ${heat}\n` +
-            `Total Pohon: ${count} pohon\n` +
-            `Total Kuantitas: ${pcs.toLocaleString('id-ID')} PCS\n\n` +
-            `Traveler Card terpilih akan dipindahkan ke status Selesai Cor dan keluar dari antrean Siap Cor. Lanjutkan?`;
-
-        if (!confirm(confirmMessage)) {
-            e.preventDefault();
-            return;
-        }
-
-        // Disable button to prevent duplicate clicks
-        btnSubmit.disabled = true;
-        btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Menyimpan...';
-    });
+    }
 
     // Initial calculation on load
     updateSummary();
+    syncHeaderCheckbox();
 });
 </script>
 @endsection

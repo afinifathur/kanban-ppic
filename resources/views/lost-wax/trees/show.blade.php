@@ -478,146 +478,149 @@
     </div>
 
     <!-- MODAL CATAT DEFECT -->
-    <div id="defectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden p-4">
-        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden transform transition-all">
-            <div class="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+    <div id="defectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden p-4 sm:p-6 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg my-auto flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] overflow-hidden transform transition-all">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
                 <h3 class="text-sm font-black text-slate-900 flex items-center gap-2">
                     <i class="fas fa-exclamation-triangle text-rose-600"></i> Catat Defect Tree
                 </h3>
-                <button type="button" onclick="closeDefectModal()" class="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg">
+                <button type="button" onclick="closeDefectModal()" class="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg transition-colors" title="Tutup">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
 
-            <form id="defectForm" method="POST" action="{{ route('lost-wax.trees.defects.store', $tree) }}" class="p-5 space-y-4">
+            <form id="defectForm" method="POST" action="{{ route('lost-wax.trees.defects.store', $tree) }}" class="flex flex-col flex-1 min-h-0 overflow-hidden">
                 @csrf
 
-                <!-- Balance Preview Card -->
-                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs flex justify-between items-center text-amber-900">
-                    <div>
-                        <span class="text-[10px] uppercase font-bold text-amber-700 block">Kuantitas Pohon</span>
-                        <span class="font-extrabold font-mono text-slate-800">{{ $tree->quantity }} pcs</span>
+                <!-- Scrollable Fields Body -->
+                <div class="p-5 space-y-4 overflow-y-auto flex-1 overscroll-contain">
+                    <!-- Balance Preview Card -->
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs flex justify-between items-center text-amber-900">
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-amber-700 block">Kuantitas Pohon</span>
+                            <span class="font-extrabold font-mono text-slate-800">{{ $tree->quantity }} pcs</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-amber-700 block">Cacat Terdaftar</span>
+                            <span class="font-extrabold font-mono text-rose-700">{{ $tree->total_defect_quantity }} pcs</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-amber-700 block">Maksimal Defect</span>
+                            <span id="maxRemainingQty" class="font-black font-mono text-emerald-800 text-sm">{{ $tree->usable_quantity }} pcs</span>
+                        </div>
                     </div>
-                    <div>
-                        <span class="text-[10px] uppercase font-bold text-amber-700 block">Cacat Terdaftar</span>
-                        <span class="font-extrabold font-mono text-rose-700">{{ $tree->total_defect_quantity }} pcs</span>
-                    </div>
-                    <div>
-                        <span class="text-[10px] uppercase font-bold text-amber-700 block">Maksimal Defect</span>
-                        <span id="maxRemainingQty" class="font-black font-mono text-emerald-800 text-sm">{{ $tree->usable_quantity }} pcs</span>
-                    </div>
-                </div>
 
-                <!-- Stage Selection -->
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Tahapan Kejadian Cacat <span class="text-rose-500">*</span>
-                    </label>
-                    <select name="stage" id="defectStageInput" required onchange="syncDefectContextUi()"
-                        class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
-                        <option value="assembly" {{ $tree->current_stage === null ? 'selected' : '' }}>Rangkai (Assembly)</option>
-                        <option value="layer_1" {{ $tree->current_stage === 'layer_1' ? 'selected' : '' }}>Lapisan 1 (Layer 1)</option>
-                        <option value="layer_2" {{ $tree->current_stage === 'layer_2' ? 'selected' : '' }}>Lapisan 2 (Layer 2)</option>
-                        <option value="layer_3" {{ $tree->current_stage === 'layer_3' ? 'selected' : '' }}>Lapisan 3 (Layer 3)</option>
-                        <option value="layer_4" {{ $tree->current_stage === 'layer_4' ? 'selected' : '' }}>Lapisan 4 (Layer 4)</option>
-                        <option value="layer_5" {{ $tree->current_stage === 'layer_5' ? 'selected' : '' }}>Lapisan 5 (Layer 5)</option>
-                        <option value="layer_6" {{ $tree->current_stage === 'layer_6' ? 'selected' : '' }}>Lapisan 6 (Layer 6)</option>
-                        <option value="layer_7" {{ $tree->current_stage === 'layer_7' ? 'selected' : '' }}>Lapisan 7 (Layer 7)</option>
-                        <option value="oven" {{ in_array($tree->current_stage, ['oven', 'siap_cor'], true) ? 'selected' : '' }}>Oven (Dewaxing)</option>
-                    </select>
-                    <p class="text-[10px] text-slate-400 mt-1">Pilih tahapan aktual tempat cacat fisik terjadi. Kerusakan pasca-Siap Cor tetap dicatat pada Departemen Oven.</p>
-                </div>
-
-                @if($tree->current_stage === 'siap_cor' && $hasActiveSiapCor)
-                    <!-- Defect Timing Context (Pre vs Post Scan Siap Cor) -->
-                    <div id="defectContextBox" class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
-                        <label class="block text-[11px] font-bold text-slate-700 uppercase">
-                            Konteks Waktu Kejadian (Terkait Scan Siap Cor {{ $activeSiapCorEvent->scanned_at->copy()->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') }} WIB) <span class="text-rose-500">*</span>
+                    <!-- Stage Selection -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Tahapan Kejadian Cacat <span class="text-rose-500">*</span>
                         </label>
-                        <input type="hidden" name="scan_event_id" id="defectScanEventIdInput" value="{{ $activeSiapCorEvent->id }}">
-                        <div class="space-y-1.5 text-xs">
-                            <label class="flex items-start gap-2 cursor-pointer p-2 rounded-lg border border-rose-200 bg-rose-50/50">
-                                <input type="radio" name="defect_context" value="post_siap_cor" checked onchange="syncDefectContextUi()" class="mt-0.5 text-rose-600 focus:ring-rose-500">
-                                <span>
-                                    <strong class="text-rose-800 block">Pasca-Siap Cor (Antrean Cor)</strong>
-                                    <span class="text-[10px] text-slate-600">Kerusakan terjadi setelah scan Siap Cor (tersenggol, jatuh, pecah di antrean). Histori Siap Cor ({{ $tree->siap_cor_historical_quantity }} pcs) tetap dipertahankan.</span>
-                                </span>
-                            </label>
-                            <label class="flex items-start gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white">
-                                <input type="radio" name="defect_context" value="pre_siap_cor" onchange="syncDefectContextUi()" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
-                                <span>
-                                    <strong class="text-indigo-800 block">Pra-Siap Cor (Koreksi Terlambat)</strong>
-                                    <span class="text-[10px] text-slate-600">Kerusakan sebenarnya terjadi sebelum scan Siap Cor namun baru dicatat sekarang. Wajib mengisi alasan keterlambatan di Catatan.</span>
-                                </span>
-                            </label>
-                        </div>
-                        <div id="lateUnknownConfirmWrap" class="hidden pt-1 border-t border-slate-200">
-                            <label class="flex items-start gap-2 text-[11px] text-indigo-800 font-semibold cursor-pointer">
-                                <input type="checkbox" name="confirm_unknown_occurred_at" id="confirmUnknownOccurredAtInput" value="1" class="mt-0.5 rounded border-indigo-300 text-indigo-600">
-                                <span>Waktu kejadian fisik persis tidak diketahui, tetapi dikonfirmasi terjadi sebelum Scan Siap Cor.</span>
-                            </label>
-                        </div>
+                        <select name="stage" id="defectStageInput" required onchange="syncDefectContextUi()"
+                            class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                            <option value="assembly" {{ $tree->current_stage === null ? 'selected' : '' }}>Rangkai (Assembly)</option>
+                            <option value="layer_1" {{ $tree->current_stage === 'layer_1' ? 'selected' : '' }}>Lapisan 1 (Layer 1)</option>
+                            <option value="layer_2" {{ $tree->current_stage === 'layer_2' ? 'selected' : '' }}>Lapisan 2 (Layer 2)</option>
+                            <option value="layer_3" {{ $tree->current_stage === 'layer_3' ? 'selected' : '' }}>Lapisan 3 (Layer 3)</option>
+                            <option value="layer_4" {{ $tree->current_stage === 'layer_4' ? 'selected' : '' }}>Lapisan 4 (Layer 4)</option>
+                            <option value="layer_5" {{ $tree->current_stage === 'layer_5' ? 'selected' : '' }}>Lapisan 5 (Layer 5)</option>
+                            <option value="layer_6" {{ $tree->current_stage === 'layer_6' ? 'selected' : '' }}>Lapisan 6 (Layer 6)</option>
+                            <option value="layer_7" {{ $tree->current_stage === 'layer_7' ? 'selected' : '' }}>Lapisan 7 (Layer 7)</option>
+                            <option value="oven" {{ in_array($tree->current_stage, ['oven', 'siap_cor'], true) ? 'selected' : '' }}>Oven (Dewaxing)</option>
+                        </select>
+                        <p class="text-[10px] text-slate-400 mt-1">Pilih tahapan aktual tempat cacat fisik terjadi. Kerusakan pasca-Siap Cor tetap dicatat pada Departemen Oven.</p>
                     </div>
-                @endif
 
-                <!-- Defect Quantity -->
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Jumlah Rusak / Cacat (pcs) <span class="text-rose-500">*</span>
-                    </label>
-                    <input type="number" name="defect_qty" id="defectQtyInput" min="1" max="{{ $tree->usable_quantity }}" value="1" required
-                        class="w-full rounded-lg border-slate-300 text-xs font-bold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
-                    <p id="defectQtyWarning" class="text-[10px] text-rose-600 font-bold mt-1 hidden">
-                        <i class="fas fa-exclamation-circle mr-0.5"></i> Jumlah cacat melebihi sisa usable pohon ({{ $tree->usable_quantity }} pcs).
-                    </p>
+                    @if($tree->current_stage === 'siap_cor' && $hasActiveSiapCor)
+                        <!-- Defect Timing Context (Pre vs Post Scan Siap Cor) -->
+                        <div id="defectContextBox" class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                            <label class="block text-[11px] font-bold text-slate-700 uppercase">
+                                Konteks Waktu Kejadian (Terkait Scan Siap Cor {{ $activeSiapCorEvent->scanned_at->copy()->setTimezone('Asia/Jakarta')->format('d-m-Y H:i') }} WIB) <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="hidden" name="scan_event_id" id="defectScanEventIdInput" value="{{ $activeSiapCorEvent->id }}">
+                            <div class="space-y-1.5 text-xs">
+                                <label class="flex items-start gap-2 cursor-pointer p-2 rounded-lg border border-rose-200 bg-rose-50/50">
+                                    <input type="radio" name="defect_context" value="post_siap_cor" checked onchange="syncDefectContextUi()" class="mt-0.5 text-rose-600 focus:ring-rose-500">
+                                    <span>
+                                        <strong class="text-rose-800 block">Pasca-Siap Cor (Antrean Cor)</strong>
+                                        <span class="text-[10px] text-slate-600">Kerusakan terjadi setelah scan Siap Cor (tersenggol, jatuh, pecah di antrean). Histori Siap Cor ({{ $tree->siap_cor_historical_quantity }} pcs) tetap dipertahankan.</span>
+                                    </span>
+                                </label>
+                                <label class="flex items-start gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white">
+                                    <input type="radio" name="defect_context" value="pre_siap_cor" onchange="syncDefectContextUi()" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                                    <span>
+                                        <strong class="text-indigo-800 block">Pra-Siap Cor (Koreksi Terlambat)</strong>
+                                        <span class="text-[10px] text-slate-600">Kerusakan sebenarnya terjadi sebelum scan Siap Cor namun baru dicatat sekarang. Wajib mengisi alasan keterlambatan di Catatan.</span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div id="lateUnknownConfirmWrap" class="hidden pt-1 border-t border-slate-200">
+                                <label class="flex items-start gap-2 text-[11px] text-indigo-800 font-semibold cursor-pointer">
+                                    <input type="checkbox" name="confirm_unknown_occurred_at" id="confirmUnknownOccurredAtInput" value="1" class="mt-0.5 rounded border-indigo-300 text-indigo-600">
+                                    <span>Waktu kejadian fisik persis tidak diketahui, tetapi dikonfirmasi terjadi sebelum Scan Siap Cor.</span>
+                                </label>
+                            </div>
+                        </div>
+                    @endif
+
+                    <!-- Defect Quantity -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Jumlah Rusak / Cacat (pcs) <span class="text-rose-500">*</span>
+                        </label>
+                        <input type="number" name="defect_qty" id="defectQtyInput" min="1" max="{{ $tree->usable_quantity }}" value="1" required
+                            class="w-full rounded-lg border-slate-300 text-xs font-bold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                        <p id="defectQtyWarning" class="text-[10px] text-rose-600 font-bold mt-1 hidden">
+                            <i class="fas fa-exclamation-circle mr-0.5"></i> Jumlah cacat melebihi sisa usable pohon ({{ $tree->usable_quantity }} pcs).
+                        </p>
+                    </div>
+
+                    <!-- Defect Reason -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Alasan / Kategori Cacat <span class="text-rose-500">*</span>
+                        </label>
+                        <select name="defect_reason" id="defectReasonInput" required
+                            class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                            <option value="tersenggol_jatuh" {{ $tree->current_stage === 'siap_cor' ? 'selected' : '' }}>Tersenggol / Jatuh (Handling Pasca-Oven)</option>
+                            <option value="cangkang_pecah_antrean">Cangkang Pecah di Antrean Siap Cor</option>
+                            <option value="retak_lapisan" {{ $tree->current_stage !== 'siap_cor' ? 'selected' : '' }}>Retak Lapisan / Slurry</option>
+                            <option value="lapisan_rontok">Lapisan Slurry Rontok / Mengelupas</option>
+                            <option value="lapisan_tipis">Ketebalan Coating Tidak Merata</option>
+                            <option value="pola_patah">Pola Lilin Patah / Rusak</option>
+                            <option value="lilin_bocor_dini">Lilin Meleleh / Bocor Dini</option>
+                            <option value="oven_pecah">Cangkang Keramik Pecah di Oven</option>
+                            <option value="lainnya">Alasan Lainnya</option>
+                        </select>
+                    </div>
+
+                    <!-- Occurred At -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Waktu Kejadian Fisik <span class="text-slate-400 font-normal lowercase">(opsional — WIB)</span>
+                        </label>
+                        <input type="datetime-local" name="occurred_at" id="defectOccurredAtInput" oninput="syncDefectContextUi()"
+                            class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
+                        <p class="text-[10px] text-slate-400 mt-1">Kosongkan bila waktu kejadian fisik tidak diketahui (tidak akan memalsukan waktu pencatatan).</p>
+                    </div>
+
+                    <!-- Notes -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Catatan Tambahan <span id="notesRequiredMark" class="text-slate-400 font-normal lowercase">(opsional)</span>
+                        </label>
+                        <textarea name="notes" id="defectNotesInput" rows="2" placeholder="Contoh: Pohon tersenggol di rak antrean cor / alasan koreksi terlambat..."
+                            class="w-full rounded-lg border-slate-300 text-xs py-2 px-3 focus:ring-amber-500 focus:border-amber-500"></textarea>
+                    </div>
                 </div>
 
-                <!-- Defect Reason -->
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Alasan / Kategori Cacat <span class="text-rose-500">*</span>
-                    </label>
-                    <select name="defect_reason" id="defectReasonInput" required
-                        class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
-                        <option value="tersenggol_jatuh" {{ $tree->current_stage === 'siap_cor' ? 'selected' : '' }}>Tersenggol / Jatuh (Handling Pasca-Oven)</option>
-                        <option value="cangkang_pecah_antrean">Cangkang Pecah di Antrean Siap Cor</option>
-                        <option value="retak_lapisan" {{ $tree->current_stage !== 'siap_cor' ? 'selected' : '' }}>Retak Lapisan / Slurry</option>
-                        <option value="lapisan_rontok">Lapisan Slurry Rontok / Mengelupas</option>
-                        <option value="lapisan_tipis">Ketebalan Coating Tidak Merata</option>
-                        <option value="pola_patah">Pola Lilin Patah / Rusak</option>
-                        <option value="lilin_bocor_dini">Lilin Meleleh / Bocor Dini</option>
-                        <option value="oven_pecah">Cangkang Keramik Pecah di Oven</option>
-                        <option value="lainnya">Alasan Lainnya</option>
-                    </select>
-                </div>
-
-                <!-- Occurred At -->
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Waktu Kejadian Fisik <span class="text-slate-400 font-normal lowercase">(opsional — WIB)</span>
-                    </label>
-                    <input type="datetime-local" name="occurred_at" id="defectOccurredAtInput" oninput="syncDefectContextUi()"
-                        class="w-full rounded-lg border-slate-300 text-xs font-semibold py-2 px-3 focus:ring-amber-500 focus:border-amber-500">
-                    <p class="text-[10px] text-slate-400 mt-1">Kosongkan bila waktu kejadian fisik tidak diketahui (tidak akan memalsukan waktu pencatatan).</p>
-                </div>
-
-                <!-- Notes -->
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                        Catatan Tambahan <span id="notesRequiredMark" class="text-slate-400 font-normal lowercase">(opsional)</span>
-                    </label>
-                    <textarea name="notes" id="defectNotesInput" rows="2" placeholder="Contoh: Pohon tersenggol di rak antrean cor / alasan koreksi terlambat..."
-                        class="w-full rounded-lg border-slate-300 text-xs py-2 px-3 focus:ring-amber-500 focus:border-amber-500"></textarea>
-                </div>
-
-                <!-- Footer Buttons -->
-                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <!-- Footer Buttons (Sticky at Bottom) -->
+                <div class="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-slate-100 bg-slate-50/80 shrink-0">
                     <button type="button" onclick="closeDefectModal()"
-                        class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                        class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 rounded-lg transition-colors">
                         Batal
                     </button>
                     <button type="submit" id="submitDefectBtn"
-                        class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-5 rounded-lg shadow-2xs transition-colors">
+                        class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-5 rounded-lg shadow-2xs transition-colors cursor-pointer">
                         Simpan Defect
                     </button>
                 </div>

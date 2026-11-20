@@ -891,10 +891,10 @@ class FittingPhase2TransferTest extends TestCase
             $resp->assertSee('Fitting Production');
             $resp->assertSee('Transfer Kitir');
             $resp->assertSee($kitir->traveler_number);
-            // Phase 2-4 live menus by role; NO Phase 5-6 placeholder menus in sidebar
+            // Live menus by role (Phase 2-5); NO future placeholder menus in sidebar
             $resp->assertSee('Kanban Floor Fitting');
+            $resp->assertSee('Production Status Fitting');
             $resp->assertDontSee('Fitting Dashboard');
-            $resp->assertDontSee('Production Status Fitting');
             $resp->assertDontSee('Laporan Produksi Fitting');
 
             if ($authorized->is($this->systemAdmin)) {

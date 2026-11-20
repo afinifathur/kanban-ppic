@@ -114,6 +114,13 @@ class TreeDefectUxTest extends TestCase
         $response->assertSee('Gross Qty');
         $response->assertSee('Sisa Usable');
         $response->assertSee('Catat Defect');
+
+        // Verify defect modal scroll and viewport boundary layout
+        $response->assertSee('id="defectModal"', false);
+        $response->assertSee('overflow-y-auto', false);
+        $response->assertSee('max-h-[calc(100vh-2rem)]', false);
+        $response->assertSee('overscroll-contain', false);
+        $response->assertSee('id="submitDefectBtn"', false);
     }
 
     /**

@@ -413,6 +413,14 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/{execution}/return', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'returnForCorrection'])->name('return');
             Route::post('/{execution}/reopen', [\App\Http\Controllers\Fitting\FittingQcDefectController::class, 'reopen'])->name('reopen');
         });
+
+        // Fitting Production Status (Phase 5)
+        Route::prefix('production-status')->name('production-status.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'index'])->name('index');
+            Route::get('/export', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'exportXlsx'])->name('export');
+            Route::get('/details', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'details'])->name('details');
+            Route::get('/{plan}/details', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'details'])->name('plan-details');
+        });
     });
 
     // Generic Scanner Endpoints (Direct alias)

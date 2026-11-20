@@ -88,6 +88,16 @@ class ProductionPlan extends Model
         return $this->hasMany(SandCastingCastingResultLine::class, 'production_plan_id');
     }
 
+    public function fittingItems()
+    {
+        return $this->hasMany(FittingItem::class, 'production_plan_id');
+    }
+
+    public function fittingItemAllocations()
+    {
+        return $this->hasMany(FittingItemAllocation::class, 'production_plan_id');
+    }
+
     public function getQtyCastingScheduledAttribute(): int
     {
         if (array_key_exists('qty_casting_scheduled', $this->attributes)) {

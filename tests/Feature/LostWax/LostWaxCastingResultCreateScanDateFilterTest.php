@@ -263,4 +263,123 @@ class LostWaxCastingResultCreateScanDateFilterTest extends TestCase
         $response->assertSee('data-scan-date="2026-11-18"', false);
         $response->assertSee('18/11/2026 14:25:30');
     }
+
+    public function test_05_javascript_includes_delegation_change_listeners_and_sync_helpers(): void
+    {
+        $this->createTreeWithScanDate('CODE-JS', 'CUST-JS', 15, '2026-11-18 10:00:00');
+
+        $response = $this->actingAs($this->admin)->get(route('lost-wax.casting-results.create'));
+        $response->assertOk();
+
+        // Check that event delegation and individual change listeners are present
+        $response->assertSee("tableBody.addEventListener('change'", false);
+        $response->assertSee("tableBody.addEventListener('click'", false);
+        $response->assertSee('getAllCheckboxes().forEach', false);
+        $response->assertSee('syncHeaderCheckbox()', false);
+        $response->assertSee('new Set()', false);
+        $response->assertSee('bg-amber-50/70', false);
+
+        // Check that inline onclick="event.stopPropagation();" on checkbox cell is removed
+        $response->assertDontSee('<td class="px-3 py-2 text-center" onclick="event.stopPropagation();">', false);
+    }
+
+    public function test_06_individual_traveler_selection_and_uncheck_submission(): void
+    {
+        $tree1 = $this->createTreeWithScanDate('CODE-IND-1', 'CUST-A', 10, '2026-11-18 09:00:00');
+        $tree2 = $this->createTreeWithScanDate('CODE-IND-2', 'CUST-B', 20, '2026-11-18 09:30:00');
+        $tree3 = $this->createTreeWithScanDate('CODE-IND-3', 'CUST-C', 30, '2026-11-18 10:00:00');
+
+        // User checks Tree 1 and Tree 3 (Tree 2 is left unchecked)
+        $post = $this->actingAs($this->admin)->post(route('lost-wax.casting-results.store'), [
+            'heat_number' => 'HEAT-IND-01',
+            'cast_date' => '2026-11-18',
+            'shift' => '1',
+            'tree_ids' => [$tree1->id, $tree3->id],
+        ]);
+
+        $post->assertRedirect();
+
+        $this->assertDatabaseHas('lost_wax_casting_results', [
+            'heat_number' => 'HEAT-IND-01',
+            'total_trees' => 2,
+            'total_pcs' => 40,
+        ]);
+
+        // Tree 1 & Tree 3 transitioned to casting result
+        $this->assertDatabaseHas('lost_wax_trees', [
+            'id' => $tree1->id,
+            'current_stage' => 'cor',
+        ]);
+        $this->assertDatabaseHas('lost_wax_trees', [
+            'id' => $tree3->id,
+            'current_stage' => 'cor',
+        ]);
+
+        // Tree 2 is untouched and remains in siap_cor
+        $this->assertDatabaseHas('lost_wax_trees', [
+            'id' => $tree2->id,
+            'current_stage' => 'siap_cor',
+        ]);
+    }
+
+    public function test_07_select_all_visible_after_date_filtering_submits_only_filtered_travelers(): void
+    {
+        $t1 = $this->createTreeWithScanDate('CODE-V1', 'CUST-1', 10, '2026-11-16 08:00:00');
+        $t2 = $this->createTreeWithScanDate('CODE-V2', 'CUST-2', 25, '2026-11-17 09:00:00');
+        $t3 = $this->createTreeWithScanDate('CODE-V3', 'CUST-3', 35, '2026-11-18 10:00:00');
+
+        // When date filter 17 to 18 Nov is used, only t2 and t3 are candidate trees
+        $resp = $this->actingAs($this->admin)->get(route('lost-wax.casting-results.create', [
+            'scan_date_from' => '2026-11-17',
+            'scan_date_to' => '2026-11-18',
+        ]));
+        $resp->assertOk();
+        $items = $resp->viewData('items');
+        $this->assertCount(2, $items);
+        $visibleTreeIds = $items->pluck('tree_id')->all();
+        $this->assertEquals([$t2->id, $t3->id], $visibleTreeIds);
+
+        // Submitting only the visible tree IDs (Pilih Semua Terlihat)
+        $post = $this->actingAs($this->admin)->post(route('lost-wax.casting-results.store'), [
+            'heat_number' => 'HEAT-VIS-01',
+            'cast_date' => '2026-11-18',
+            'shift' => '1',
+            'tree_ids' => $visibleTreeIds,
+        ]);
+        $post->assertRedirect();
+
+        $this->assertDatabaseHas('lost_wax_casting_results', [
+            'heat_number' => 'HEAT-VIS-01',
+            'total_trees' => 2,
+            'total_pcs' => 60,
+        ]);
+
+        // t1 is still in siap_cor
+        $this->assertDatabaseHas('lost_wax_trees', [
+            'id' => $t1->id,
+            'current_stage' => 'siap_cor',
+        ]);
+    }
+
+    public function test_08_no_duplicate_traveler_ids_double_counting(): void
+    {
+        $tree1 = $this->createTreeWithScanDate('CODE-DUP-1', 'CUST-A', 15, '2026-11-18 09:00:00');
+
+        // Submit with duplicate IDs in array
+        $post = $this->actingAs($this->admin)->post(route('lost-wax.casting-results.store'), [
+            'heat_number' => 'HEAT-DUP-01',
+            'cast_date' => '2026-11-18',
+            'shift' => '1',
+            'tree_ids' => [$tree1->id, $tree1->id],
+        ]);
+
+        $post->assertRedirect();
+
+        // Exactly 1 tree and 15 pcs
+        $this->assertDatabaseHas('lost_wax_casting_results', [
+            'heat_number' => 'HEAT-DUP-01',
+            'total_trees' => 1,
+            'total_pcs' => 15,
+        ]);
+    }
 }
