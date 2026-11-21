@@ -445,39 +445,71 @@ class FinalQualityLockTest extends TestCase
     }
 
     /**
-     * TC-06 — Defect QC setelah finalisasi: Coba save-draft dan verify (harus ditolak).
+     * TC-06 — Defect QC setelah finalisasi: QC dapat mengoreksi klasifikasi dan menyelesaikan verifikasi pasca Gudang Jadi,
+     * tetapi tidak boleh mengubah total kuantitas defect PPIC.
      */
-    public function test_tc06_qc_defect_draft_and_verify_rejected_after_finalization(): void
+    public function test_tc06_qc_defect_classification_allowed_after_finalization_with_strict_total_match(): void
     {
         $line = $this->createKtrLine(['current_stage' => 'netto']);
         $executions = $this->progressKtrToGudangJadiCompleted($line);
         $qcExec = $executions['qc'];
 
-        // 1. Try save draft QC
-        $resDraft = $this->actingAs($this->qcUser)
-            ->postJson("/sand-casting/qc-defects/{$qcExec->id}/save-draft", [
-                'defects' => [
-                    ['defect_type_id' => $this->defectTypeQc->id, 'qty' => 3],
-                ],
-                'notes' => 'Mencoba simpan draft QC pasca gudang jadi',
-            ]);
+        $defectTypeSecond = DefectType::create([
+            'name' => 'Keropos Halus',
+            'department' => 'qc',
+            'is_active' => true,
+        ]);
 
-        $resDraft->assertStatus(422);
-        $resDraft->assertJson(['success' => false]);
-        $this->assertStringContainsString('TERKUNCI', $resDraft->json('message'));
-
-        // 2. Try verify QC
+        // 1. QC corrects classification distribution (2 pcs + 3 pcs = 5 pcs) on confirmed record -> SUCCEEDS
         $resVerify = $this->actingAs($this->qcUser)
             ->postJson("/sand-casting/qc-defects/{$qcExec->id}/verify", [
+                'stage' => 'qc',
                 'defects' => [
-                    ['defect_type_id' => $this->defectTypeQc->id, 'qty' => $qcExec->defect_qty],
+                    ['defect_type_id' => $this->defectTypeQc->id, 'qty' => 2],
+                    ['defect_type_id' => $defectTypeSecond->id, 'qty' => 3],
                 ],
-                'notes' => 'Mencoba verifikasi QC pasca gudang jadi',
+                'notes' => 'Koreksi sebaran klasifikasi defect QC pasca gudang jadi',
             ]);
 
-        $resVerify->assertStatus(422);
-        $resVerify->assertJson(['success' => false]);
-        $this->assertStringContainsString('TERKUNCI', $resVerify->json('message'));
+        $resVerify->assertStatus(200);
+        $resVerify->assertJson(['success' => true]);
+        $this->assertEquals(5, $qcExec->fresh()->defect_qty);
+        $this->assertCount(2, $qcExec->fresh()->defects);
+
+        // 2. QC tries to increase total defect (6 != 5) -> REJECTED
+        $resExceed = $this->actingAs($this->qcUser)
+            ->postJson("/sand-casting/qc-defects/{$qcExec->id}/verify", [
+                'stage' => 'qc',
+                'defects' => [
+                    ['defect_type_id' => $this->defectTypeQc->id, 'qty' => 3],
+                    ['defect_type_id' => $defectTypeSecond->id, 'qty' => 3],
+                ],
+            ]);
+
+        $resExceed->assertStatus(422);
+        $resExceed->assertJson(['success' => false]);
+        $this->assertStringContainsString('tidak sesuai dengan total defect', $resExceed->json('message'));
+
+        // 3. QC tries to decrease total defect (4 != 5) -> REJECTED
+        $resDeficit = $this->actingAs($this->qcUser)
+            ->postJson("/sand-casting/qc-defects/{$qcExec->id}/verify", [
+                'stage' => 'qc',
+                'defects' => [
+                    ['defect_type_id' => $this->defectTypeQc->id, 'qty' => 4],
+                ],
+            ]);
+
+        $resDeficit->assertStatus(422);
+        $resDeficit->assertJson(['success' => false]);
+        $this->assertStringContainsString('tidak sesuai dengan total defect', $resDeficit->json('message'));
+
+        // 4. PPIC quantity mutation on QC stage remains strictly locked (TERKUNCI)
+        $resPpic = $this->actingAs($this->adminPpic)
+            ->postJson("/sand-casting/defects/{$qcExec->id}/add", [
+                'added_qty' => 1,
+            ]);
+        $resPpic->assertStatus(422);
+        $this->assertStringContainsString('TERKUNCI', $resPpic->json('message'));
     }
 
     /**

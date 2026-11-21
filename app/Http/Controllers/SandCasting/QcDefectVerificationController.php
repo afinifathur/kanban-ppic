@@ -191,8 +191,14 @@ class QcDefectVerificationController extends Controller
                 ]);
             }
 
+            $redirectParams = ['stage' => $confirmedExecution->stage];
+            $modeParam = $request->input('mode') ?? $request->query('mode');
+            if (in_array($modeParam, ['unrecorded', 'recorded'], true)) {
+                $redirectParams['mode'] = $modeParam;
+            }
+
             return redirect()
-                ->route('sand-casting.qc-defects.index', ['stage' => $confirmedExecution->stage])
+                ->route('sand-casting.qc-defects.index', $redirectParams)
                 ->with('success', $successMessage);
 
         } catch (AuthorizationException $e) {

@@ -258,6 +258,7 @@
                                     <th class="py-2.5 px-3 bg-slate-100">Rincian Defect QC</th>
                                     <th class="py-2.5 px-3 bg-slate-100">Diverifikasi Oleh</th>
                                     <th class="py-2.5 px-3 text-center bg-slate-100 w-32">Status</th>
+                                    <th class="py-2.5 px-3 text-center bg-slate-100 min-w-[90px]">Aksi</th>
                                 @else
                                     <th class="py-2.5 px-3 text-right bg-slate-100">Total Defect</th>
                                     <th class="py-2.5 px-3 text-right bg-slate-100">Good</th>
@@ -395,6 +396,21 @@
                                                 TERKONFIRMASI
                                             </span>
                                         </td>
+
+                                        <!-- Aksi Koreksi Klasifikasi -->
+                                        <td class="py-2 px-3 text-center whitespace-nowrap">
+                                            @if($card['defect_qty'] > 0)
+                                                <button type="button"
+                                                    onclick="openQcModal({{ json_encode($card) }})"
+                                                    class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
+                                                    title="Koreksi klasifikasi / jenis defect (Total {{ $card['defect_qty'] }} pcs tetap terkunci)">
+                                                    <i class="fas fa-edit text-[10px]"></i>
+                                                    KOREKSI
+                                                </button>
+                                            @else
+                                                <span class="text-slate-400 text-xs italic">-</span>
+                                            @endif
+                                        </td>
                                     @else
                                         <!-- Total Defect PPIC -->
                                         <td class="py-2 px-3 text-right whitespace-nowrap font-black {{ $card['defect_qty'] > 0 ? 'text-red-600' : 'text-slate-500' }}">
@@ -432,28 +448,32 @@
 
                                         <!-- Aksi Button (Blue QC Action) -->
                                         <td id="action-cell-{{ $card['id'] }}" class="py-2 px-3 text-center whitespace-nowrap">
-                                            @if(!empty($card['is_quality_locked']))
-                                                <span class="bg-slate-100 text-slate-400 font-bold px-2.5 py-1.5 rounded-md text-xs inline-flex items-center gap-1 border border-slate-200 cursor-not-allowed select-none"
-                                                    title="Terkunci permanen karena KTR telah selesai di Gudang Jadi.">
-                                                    <i class="fas fa-lock text-slate-400 text-[10px]"></i>
-                                                    TERKUNCI
-                                                </span>
-                                            @elseif(!empty($card['has_draft']))
-                                                <button type="button"
-                                                    onclick="openQcModal({{ json_encode($card) }})"
-                                                    class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold px-2.5 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
-                                                    title="Lanjutkan pengisian draft ({{ $card['draft_defect_qty'] }}/{{ $card['defect_qty'] }} pcs)">
-                                                    <i class="fas fa-edit text-[10px]"></i>
-                                                    LANJUTKAN DRAFT
-                                                </button>
-                                            @else
-                                                <button type="button"
-                                                    onclick="openQcModal({{ json_encode($card) }})"
-                                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
-                                                    <i class="fas fa-check-double text-[10px]"></i>
-                                                    VERIFIKASI
-                                                </button>
-                                            @endif
+                                            <div class="inline-flex items-center gap-1.5 justify-center">
+                                                @if(!empty($card['is_quality_locked']))
+                                                    <span class="bg-amber-50 text-amber-700 border border-amber-200 font-semibold px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-0.5"
+                                                        title="Kuantitas defect telah dikunci oleh PPIC (Gudang Jadi selesai). QC tetap dapat melengkapi atau mengoreksi klasifikasi.">
+                                                        <i class="fas fa-lock text-[9px] text-amber-600"></i>
+                                                        Kuantitas Terkunci
+                                                    </span>
+                                                @endif
+
+                                                @if(!empty($card['has_draft']))
+                                                    <button type="button"
+                                                        onclick="openQcModal({{ json_encode($card) }})"
+                                                        class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold px-2.5 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1"
+                                                        title="Lanjutkan pengisian draft ({{ $card['draft_defect_qty'] }}/{{ $card['defect_qty'] }} pcs)">
+                                                        <i class="fas fa-edit text-[10px]"></i>
+                                                        LANJUTKAN DRAFT
+                                                    </button>
+                                                @else
+                                                    <button type="button"
+                                                        onclick="openQcModal({{ json_encode($card) }})"
+                                                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-md text-xs shadow-xs transition inline-flex items-center gap-1">
+                                                        <i class="fas fa-check-double text-[10px]"></i>
+                                                        VERIFIKASI
+                                                    </button>
+                                                @endif
+                                            </div>
                                         </td>
                                     @endif
                                 </tr>
@@ -489,8 +509,8 @@
                             <i class="fas fa-clipboard-check"></i>
                         </div>
                         <div>
-                            <h3 class="text-xs font-bold text-slate-800">Verifikasi Detail Defect (QC)</h3>
-                            <p class="text-[10px] text-slate-400">Klasifikasikan rincian defect sebelum konfirmasi final.</p>
+                            <h3 id="modalTitleText" class="text-xs font-bold text-slate-800">Verifikasi Detail Defect (QC)</h3>
+                            <p id="modalSubtitleText" class="text-[10px] text-slate-400">Klasifikasikan rincian defect sebelum konfirmasi final.</p>
                         </div>
                     </div>
                     <button type="button" onclick="closeQcModal()"
@@ -503,8 +523,20 @@
                 <form id="qcForm" method="POST" action="">
                     @csrf
                     <input type="hidden" name="stage" id="qc_modal_stage" value="{{ $selectedStage ?? '' }}">
+                    <input type="hidden" name="mode" id="qc_modal_mode" value="{{ $mode }}">
                     <div class="p-4 space-y-3 text-xs">
                         
+                        <!-- Quality Locked Notice Banner -->
+                        <div id="qualityLockedBanner" class="hidden bg-amber-50 border border-amber-300 rounded-lg p-2.5 text-amber-900 text-xs">
+                            <div class="font-bold flex items-center gap-1.5 text-amber-800">
+                                <i class="fas fa-lock text-amber-600"></i>
+                                KUANTITAS TERKUNCI (GUDANG JADI SELESAI)
+                            </div>
+                            <div class="text-[11px] text-amber-700 mt-1">
+                                Kuantitas defect utama telah dikunci permanen oleh PPIC. Anda dapat melengkapi jenis/alasan cacat atau mengubah sebaran jumlah per jenis asalkan <strong>total defect tidak berubah</strong>.
+                            </div>
+                        </div>
+
                         <!-- Re-Verification Alert Banner -->
                         <div id="reverificationAlertBanner" class="hidden bg-amber-50 border border-amber-300 rounded-lg p-2.5 text-amber-900 text-xs">
                             <div class="font-bold flex items-center gap-1.5 text-amber-800">
@@ -686,20 +718,6 @@
         let isSubmitting = false;
 
         function openQcModal(card) {
-            if (card && card.is_quality_locked) {
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Tahap Terkunci',
-                        text: 'Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.',
-                        confirmButtonColor: '#2563eb'
-                    });
-                } else {
-                    alert('Tahap ini telah terkunci permanen karena KTR telah selesai di Gudang Jadi.');
-                }
-                return;
-            }
-
             currentCard = card;
             isSubmitting = false;
             const modal = document.getElementById('qcModal');
@@ -707,6 +725,7 @@
 
             currentTargetDefectQty = parseInt(card.defect_qty) || 0;
             currentStageKey = card.stage || '{{ $selectedStage ?? "netto" }}';
+            const isConfirmed = (card.status || '').toUpperCase() === 'CONFIRMED';
 
             // Populate readonly details
             document.getElementById('modalKtr').textContent = card.traveler_number || '-';
@@ -744,9 +763,30 @@
                 modalStageInput.value = card.stage || '';
             }
 
+            // Quality Locked Notice Banner
+            const qualityLockedBanner = document.getElementById('qualityLockedBanner');
+            if (qualityLockedBanner) {
+                if (card && card.is_quality_locked) {
+                    qualityLockedBanner.classList.remove('hidden');
+                } else {
+                    qualityLockedBanner.classList.add('hidden');
+                }
+            }
+
+            // Modal Title & Subtitle based on Confirmation Status
+            const modalTitle = document.getElementById('modalTitleText');
+            const modalSubtitle = document.getElementById('modalSubtitleText');
+            if (isConfirmed) {
+                if (modalTitle) modalTitle.textContent = 'Koreksi Detail Defect (QC)';
+                if (modalSubtitle) modalSubtitle.textContent = 'Perbaiki jenis atau sebaran cacat. Total defect tetap terkunci sesuai PPIC.';
+            } else {
+                if (modalTitle) modalTitle.textContent = 'Verifikasi Detail Defect (QC)';
+                if (modalSubtitle) modalSubtitle.textContent = 'Klasifikasikan rincian defect sebelum konfirmasi final.';
+            }
+
             // Re-verification alert
             const alertBanner = document.getElementById('reverificationAlertBanner');
-            if (card.is_reverification) {
+            if (card.is_reverification && !isConfirmed) {
                 alertBanner.classList.remove('hidden');
                 document.getElementById('alertPrevDefect').textContent = card.previous_defect_qty || 0;
                 document.getElementById('alertCurDefect').textContent = card.defect_qty || 0;
@@ -757,7 +797,7 @@
 
             // Draft alert banner
             const draftBanner = document.getElementById('draftActiveAlertBanner');
-            if (card.has_draft && card.draft_defect_qty > 0) {
+            if (card.has_draft && card.draft_defect_qty > 0 && !isConfirmed) {
                 draftBanner.classList.remove('hidden');
                 document.getElementById('alertDraftQty').textContent = card.draft_defect_qty;
                 document.getElementById('alertTargetQty').textContent = currentTargetDefectQty;
@@ -812,8 +852,16 @@
                 // Non-zero defect flow
                 zeroSection.classList.add('hidden');
                 breakdownSection.classList.remove('hidden');
-                if (submitDraftBtn) submitDraftBtn.classList.remove('hidden');
-                submitBtnText.textContent = card.is_reverification ? 'Konfirmasi Re-Verifikasi' : 'Konfirmasi Verifikasi';
+                if (submitDraftBtn) {
+                    if (isConfirmed) {
+                        submitDraftBtn.classList.add('hidden');
+                    } else {
+                        submitDraftBtn.classList.remove('hidden');
+                    }
+                }
+                submitBtnText.textContent = isConfirmed
+                    ? 'Simpan Koreksi Klasifikasi'
+                    : (card.is_reverification ? 'Konfirmasi Re-Verifikasi' : 'Konfirmasi Verifikasi');
 
                 // Prepopulate with existing defect breakdown (which contains saved draft rows) or add one empty row
                 if (card.defects && card.defects.length > 0) {

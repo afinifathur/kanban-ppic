@@ -226,42 +226,65 @@
         @endforeach
 
         <!-- Add New Plan Line Card -->
-        @if($availablePlans->isNotEmpty())
+        @if($availablePlans->isNotEmpty() || $selectedPlan)
             <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-6">
                 <h3 class="text-slate-800 font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
                     <i class="fas fa-plus-circle text-emerald-600"></i> Tambah Item Rencana ke Dokumen
                 </h3>
 
-                <form action="{{ route('sand-casting.casting-orders.lines.store', $castingOrder) }}" method="POST" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <form id="addPlanLineForm" action="{{ route('sand-casting.casting-orders.lines.store', $castingOrder) }}" method="POST" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                     @csrf
-                    <div class="md:col-span-2">
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Pilih Item Rencana Cor</label>
-                        <select name="production_plan_id" id="add_production_plan_id" required onchange="updateMaxAddQty()"
-                            class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500">
-                            <option value="">-- Pilih Item Rencana --</option>
-                            @foreach($availablePlans as $plan)
-                                <option value="{{ $plan->id }}" data-remaining="{{ $plan->qty_remaining_casting_scheduled }}" data-line="{{ $plan->line_number ?: 1 }}">
-                                    {{ $plan->code }} — {{ $plan->item_name }} (Sisa: {{ number_format($plan->qty_remaining_casting_scheduled) }} pcs, {{ number_format((float)($plan->weight ?? 0), 2) }} kg/pcs)
-                                </option>
-                            @endforeach
-                        </select>
+                    <div class="md:col-span-2 relative">
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">
+                            Pilih Item Rencana Cor <span class="text-red-500">*</span>
+                        </label>
+
+                        {{-- Hidden input for production_plan_id --}}
+                        <input type="hidden" name="production_plan_id" id="add_production_plan_id" value="{{ old('production_plan_id', $selectedPlan?->id) }}" required>
+
+                        {{-- Autocomplete Search Input --}}
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                                <i id="planSearchIcon" class="fas fa-search text-xs"></i>
+                                <i id="planSearchSpinner" class="fas fa-circle-notch fa-spin text-xs text-blue-600 hidden"></i>
+                            </div>
+                            <input type="text" id="planSearchInput"
+                                value="{{ $selectedPlan ? ($selectedPlan->code . ' — ' . $selectedPlan->item_name) : '' }}"
+                                placeholder="Ketik kode item rencana (cth: 2610...)..."
+                                autocomplete="off"
+                                class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium">
+                            <button type="button" id="clearPlanSearchBtn"
+                                class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 {{ $selectedPlan ? '' : 'hidden' }}"
+                                title="Bersihkan pilihan">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
+                        </div>
+
+                        {{-- Autocomplete Dropdown List --}}
+                        <div id="planSearchDropdown"
+                            class="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-72 overflow-y-auto hidden">
+                            <div id="planSearchResultsList" class="divide-y divide-slate-100"></div>
+                        </div>
                     </div>
 
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Line (Read-only)</label>
                         <div id="add_line_display" class="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700">
-                            -
+                            {{ $selectedPlan ? ('Line ' . ($selectedPlan->line_number ?: 1)) : '-' }}
                         </div>
                     </div>
 
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Qty Perintah</label>
-                        <input type="number" name="qty_ordered" id="add_qty_ordered" min="1" required placeholder="Jumlah pcs"
+                        <input type="number" name="qty_ordered" id="add_qty_ordered" min="1"
+                            max="{{ $selectedPlan ? $selectedPlan->qty_remaining_casting_scheduled : '' }}"
+                            value="{{ old('qty_ordered', $selectedPlan?->qty_remaining_casting_scheduled) }}"
+                            required placeholder="Jumlah pcs"
                             class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500">
                     </div>
 
                     <div>
-                        <button type="submit" class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-2 shadow-sm transition">
+                        <button type="submit" id="add_line_submit_btn" class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-2 shadow-sm transition">
                             <i class="fas fa-plus"></i> Tambahkan Item
                         </button>
                     </div>
@@ -309,21 +332,206 @@
             }
         }
 
-        function updateMaxAddQty() {
-            const select = document.getElementById('add_production_plan_id');
-            const qtyInput = document.getElementById('add_qty_ordered');
-            const lineDisplay = document.getElementById('add_line_display');
-            const selectedOption = select.options[select.selectedIndex];
-            const remaining = selectedOption ? parseInt(selectedOption.getAttribute('data-remaining')) || 1 : 1;
-            const defaultLine = selectedOption ? parseInt(selectedOption.getAttribute('data-line')) || 1 : 1;
+        // ==========================================
+        // Autocomplete Searchable Dropdown for Plan
+        // ==========================================
+        const planSearchInput = document.getElementById('planSearchInput');
+        const planSearchDropdown = document.getElementById('planSearchDropdown');
+        const planSearchResultsList = document.getElementById('planSearchResultsList');
+        const hiddenPlanId = document.getElementById('add_production_plan_id');
+        const clearPlanBtn = document.getElementById('clearPlanSearchBtn');
+        const planSearchIcon = document.getElementById('planSearchIcon');
+        const planSearchSpinner = document.getElementById('planSearchSpinner');
+        const addLineDisplay = document.getElementById('add_line_display');
+        const addQtyInput = document.getElementById('add_qty_ordered');
+        const searchPlansUrl = "{{ route('sand-casting.casting-orders.search-plans', $castingOrder) }}";
 
-            if (qtyInput) {
-                qtyInput.max = remaining;
-                qtyInput.value = remaining;
+        let planDebounceTimer = null;
+        let currentSelectedPlan = @json($selectedPlanData ?? null);
+
+        function setPlanSearching(isSearching) {
+            if (isSearching) {
+                if (planSearchIcon) planSearchIcon.classList.add('hidden');
+                if (planSearchSpinner) planSearchSpinner.classList.remove('hidden');
+            } else {
+                if (planSearchSpinner) planSearchSpinner.classList.add('hidden');
+                if (planSearchIcon) planSearchIcon.classList.remove('hidden');
             }
-            if (lineDisplay) {
-                lineDisplay.textContent = selectedOption && selectedOption.value ? 'Line ' + defaultLine : '-';
+        }
+
+        function clearPlanSelection() {
+            currentSelectedPlan = null;
+            if (hiddenPlanId) hiddenPlanId.value = '';
+            if (planSearchInput) {
+                planSearchInput.value = '';
+                planSearchInput.focus();
             }
+            if (clearPlanBtn) clearPlanBtn.classList.add('hidden');
+            if (planSearchDropdown) planSearchDropdown.classList.add('hidden');
+            if (addLineDisplay) addLineDisplay.textContent = '-';
+            if (addQtyInput) {
+                addQtyInput.value = '';
+                addQtyInput.removeAttribute('max');
+            }
+        }
+
+        function selectPlanItem(item) {
+            currentSelectedPlan = item;
+            if (hiddenPlanId) hiddenPlanId.value = item.id;
+            if (planSearchInput) planSearchInput.value = `${item.code} — ${item.item_name}`;
+            if (clearPlanBtn) clearPlanBtn.classList.remove('hidden');
+            if (planSearchDropdown) planSearchDropdown.classList.add('hidden');
+
+            // 5. Update Line (Read-only) display
+            if (addLineDisplay) {
+                addLineDisplay.textContent = item.line_label || `Line ${item.line_number || 1}`;
+            }
+
+            // 6. Update Qty Perintah
+            if (addQtyInput) {
+                addQtyInput.max = item.remaining_qty;
+                addQtyInput.value = item.remaining_qty;
+                addQtyInput.focus();
+            }
+        }
+
+        if (clearPlanBtn) {
+            clearPlanBtn.addEventListener('click', clearPlanSelection);
+        }
+
+        if (planSearchInput) {
+            planSearchInput.addEventListener('input', function () {
+                const query = this.value.trim();
+
+                // If modified from current selection, reset the hidden ID
+                if (currentSelectedPlan && this.value !== `${currentSelectedPlan.code} — ${currentSelectedPlan.item_name}`) {
+                    currentSelectedPlan = null;
+                    if (hiddenPlanId) hiddenPlanId.value = '';
+                    if (addLineDisplay) addLineDisplay.textContent = '-';
+                    if (addQtyInput) {
+                        addQtyInput.value = '';
+                        addQtyInput.removeAttribute('max');
+                    }
+                }
+
+                if (!query) {
+                    clearPlanSelection();
+                    return;
+                }
+
+                if (clearPlanBtn) clearPlanBtn.classList.remove('hidden');
+
+                if (query.length < 2) {
+                    planSearchResultsList.innerHTML = `
+                        <div class="p-3 text-center text-xs text-slate-400">
+                            Ketik minimal 2 karakter untuk mencari item rencana...
+                        </div>
+                    `;
+                    planSearchDropdown.classList.remove('hidden');
+                    return;
+                }
+
+                setPlanSearching(true);
+                clearTimeout(planDebounceTimer);
+                planDebounceTimer = setTimeout(() => {
+                    fetch(`${searchPlansUrl}?q=${encodeURIComponent(query)}`, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            setPlanSearching(false);
+                            if (!data.success || !data.items || data.items.length === 0) {
+                                planSearchResultsList.innerHTML = `
+                                    <div class="p-3 text-center text-xs text-slate-400">
+                                        Tidak ada item rencana yang cocok dengan "${query}".
+                                    </div>
+                                `;
+                                planSearchDropdown.classList.remove('hidden');
+                                return;
+                            }
+
+                            planSearchResultsList.innerHTML = data.items.map(item => `
+                                <div class="p-2.5 hover:bg-blue-50/70 active:bg-blue-100 cursor-pointer flex items-center justify-between gap-3 transition-colors plan-result-item"
+                                    data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex flex-wrap items-center gap-1.5 mb-0.5">
+                                            <span class="font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-xs font-bold tracking-tight">
+                                                ${item.code}
+                                            </span>
+                                            <span class="text-xs font-bold text-slate-800 truncate">
+                                                ${item.item_name}
+                                            </span>
+                                        </div>
+                                        <div class="text-[10px] text-slate-500 flex flex-wrap items-center gap-x-2">
+                                            <span>Cust: <strong class="text-slate-700">${item.customer}</strong></span>
+                                            ${item.size && item.size !== '-' ? `<span>&bull; Ukuran: <strong class="text-slate-700">${item.size}</strong></span>` : ''}
+                                            ${item.weight > 0 ? `<span>&bull; Berat: <strong class="text-slate-700">${Number(item.weight).toFixed(2)} kg</strong></span>` : ''}
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 mb-0.5">
+                                            ${item.line_label}
+                                        </span>
+                                        <div class="text-[10px] font-bold text-emerald-600">
+                                            Sisa: ${Number(item.remaining_qty).toLocaleString('en-US')} pcs
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('');
+
+                            planSearchDropdown.classList.remove('hidden');
+
+                            // Click listeners on search items
+                            planSearchResultsList.querySelectorAll('.plan-result-item').forEach(el => {
+                                el.addEventListener('click', function () {
+                                    const itemData = JSON.parse(this.getAttribute('data-item'));
+                                    selectPlanItem(itemData);
+                                });
+                            });
+                        })
+                        .catch(err => {
+                            setPlanSearching(false);
+                            console.error('Plan search error:', err);
+                        });
+                }, 250); // 250ms debounce
+            });
+
+            // Focus show dropdown if query has results
+            planSearchInput.addEventListener('focus', function () {
+                if (this.value.trim().length >= 2 && planSearchResultsList.children.length > 0) {
+                    planSearchDropdown.classList.remove('hidden');
+                }
+            });
+
+            // Close on Escape
+            planSearchInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    planSearchDropdown.classList.add('hidden');
+                }
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (e) {
+            if (planSearchDropdown && planSearchInput && !planSearchInput.contains(e.target) && !planSearchDropdown.contains(e.target)) {
+                planSearchDropdown.classList.add('hidden');
+            }
+        });
+
+        // Form submission safety guard
+        const addPlanLineForm = document.getElementById('addPlanLineForm');
+        if (addPlanLineForm) {
+            addPlanLineForm.addEventListener('submit', function (e) {
+                if (!hiddenPlanId || !hiddenPlanId.value) {
+                    e.preventDefault();
+                    alert('Silakan cari dan pilih Item Rencana Cor dari hasil pencarian.');
+                    if (planSearchInput) planSearchInput.focus();
+                    return false;
+                }
+            });
         }
     </script>
 @endsection

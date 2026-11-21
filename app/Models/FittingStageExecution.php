@@ -97,4 +97,50 @@ class FittingStageExecution extends Model
             ->orderBy('created_at', 'asc')
             ->orderBy('id', 'asc');
     }
+
+    /**
+     * Resolve effective defect event date following business hierarchy:
+     * 1. inspection_date
+     * 2. physical_done_at (fallback if inspection_date is null)
+     */
+    public function resolveEffectiveDefectDate(): ?string
+    {
+        if ($this->inspection_date) {
+            return $this->inspection_date instanceof \Carbon\CarbonInterface
+                ? $this->inspection_date->toDateString()
+                : substr((string) $this->inspection_date, 0, 10);
+        }
+
+        if ($this->physical_done_at) {
+            return $this->physical_done_at instanceof \Carbon\CarbonInterface
+                ? $this->physical_done_at->toDateString()
+                : substr((string) $this->physical_done_at, 0, 10);
+        }
+
+        return null;
+    }
+
+    /**
+     * Scope query to match effective defect date between a date range.
+     */
+    public function scopeWhereEffectiveDefectDateBetween($query, string $startDate, string $endDate)
+    {
+        if ($startDate > $endDate) {
+            [$startDate, $endDate] = [$endDate, $startDate];
+        }
+
+        return $query->where(function ($sub) use ($startDate, $endDate) {
+            $sub->where(function ($dq) use ($startDate, $endDate) {
+                $dq->whereNotNull('fitting_stage_executions.inspection_date')
+                    ->where(function ($idq) use ($startDate, $endDate) {
+                        $idq->whereBetween('fitting_stage_executions.inspection_date', [$startDate, $endDate])
+                            ->orWhereBetween('fitting_stage_executions.inspection_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                    });
+            })->orWhere(function ($sq) use ($startDate, $endDate) {
+                $sq->whereNull('fitting_stage_executions.inspection_date')
+                    ->whereNotNull('fitting_stage_executions.physical_done_at')
+                    ->whereBetween('fitting_stage_executions.physical_done_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            });
+        });
+    }
 }

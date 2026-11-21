@@ -286,6 +286,7 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/casting-orders/{castingOrder}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'destroy'])->name('casting-orders.destroy');
             Route::post('/casting-orders/{castingOrder}/lines', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'storeLine'])->name('casting-orders.lines.store');
             Route::delete('/casting-orders/{castingOrder}/lines/{line}', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'destroyLine'])->name('casting-orders.lines.destroy');
+            Route::get('/casting-orders/{castingOrder}/search-plans', [\App\Http\Controllers\SandCasting\CastingOrderController::class, 'searchPlans'])->name('casting-orders.search-plans');
 
             // Casting Results (Hasil Cor / Heat) - Standalone & Pool-oriented
             Route::get('/casting-results', [\App\Http\Controllers\SandCasting\CastingResultController::class, 'index'])->name('casting-results.index');
@@ -369,6 +370,10 @@ Route::middleware(['auth'])->group(function () {
 
     // Fitting Production Routes (Bounded Context — Authorization strictly via FittingStageAuthorizationService)
     Route::prefix('fitting')->name('fitting.')->group(function () {
+        // Fitting Management Dashboard (Zone 1: Executive Overview Today)
+        Route::get('/dashboard', [\App\Http\Controllers\Fitting\FittingDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard/data', [\App\Http\Controllers\Fitting\FittingDashboardController::class, 'data'])->name('dashboard.data');
+
         Route::prefix('transfers')->name('transfers.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'index'])->name('index');
             Route::post('/', [\App\Http\Controllers\Fitting\FittingTransferController::class, 'store'])->name('store');
@@ -420,6 +425,24 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/export', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'exportXlsx'])->name('export');
             Route::get('/details', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'details'])->name('details');
             Route::get('/{plan}/details', [\App\Http\Controllers\Fitting\FittingProductionStatusController::class, 'details'])->name('plan-details');
+        });
+
+        // Fitting Production Reports
+        Route::prefix('report')->name('report.')->group(function () {
+            Route::prefix('production')->name('production.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Fitting\FittingProductionReportController::class, 'index'])->name('index');
+                Route::get('/data', [\App\Http\Controllers\Fitting\FittingProductionReportController::class, 'data'])->name('data');
+                Route::get('/export/excel', [\App\Http\Controllers\Fitting\FittingProductionReportController::class, 'exportExcel'])->name('export.excel');
+                Route::get('/export/pdf', [\App\Http\Controllers\Fitting\FittingProductionReportController::class, 'exportPdf'])->name('export.pdf');
+                Route::get('/print', [\App\Http\Controllers\Fitting\FittingProductionReportController::class, 'exportPdf'])->name('print');
+            });
+            Route::prefix('qc-defects')->name('qc-defects.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Fitting\FittingQcDefectReportController::class, 'index'])->name('index');
+                Route::get('/data', [\App\Http\Controllers\Fitting\FittingQcDefectReportController::class, 'data'])->name('data');
+                Route::get('/export/excel', [\App\Http\Controllers\Fitting\FittingQcDefectReportController::class, 'exportExcel'])->name('export.excel');
+                Route::get('/export/pdf', [\App\Http\Controllers\Fitting\FittingQcDefectReportController::class, 'exportPdf'])->name('export.pdf');
+                Route::get('/print', [\App\Http\Controllers\Fitting\FittingQcDefectReportController::class, 'exportPdf'])->name('print');
+            });
         });
     });
 

@@ -319,8 +319,8 @@ class QcDefectVerificationTest extends TestCase
             'stage' => 'netto',
             'checkpoint_code' => 'NETTO_CUT',
             'input_qty' => 100,
-            'defect_qty' => 0,
-            'good_qty' => 100,
+            'defect_qty' => 1,
+            'good_qty' => 99,
             'status' => SandCastingStageExecution::STATUS_WAITING_QC,
             'operator_id' => $this->spvUser->id,
             'physical_done_at' => now()->subHours(2),
@@ -1521,9 +1521,10 @@ class QcDefectVerificationTest extends TestCase
     }
 
     /**
-     * TEST 28: Confirmed execution cannot be mutated without explicit policy (no bypass).
+     * TEST 28: QC can update defect classification on confirmed execution when total matches locked defect qty,
+     * but cannot alter total defect quantity (rejects when mismatch), and draft on confirmed is rejected.
      */
-    public function test_28_confirmed_execution_cannot_be_mutated(): void
+    public function test_28_confirmed_execution_classification_can_be_corrected_with_strict_total_match(): void
     {
         $line = $this->createKtrLine(['current_stage' => 'netto']);
         $exec = $line->stageExecutions()->create([
@@ -1541,8 +1542,12 @@ class QcDefectVerificationTest extends TestCase
             'executed_at' => now()->subDay(),
             'inspection_date' => '2026-10-01',
         ]);
+        $exec->defects()->create([
+            'defect_type_id' => $this->defectPorosity->id,
+            'qty' => 5,
+        ]);
 
-        // 1. save-draft rejected on CONFIRMED execution
+        // 1. save-draft rejected on CONFIRMED execution (draft only for unconfirmed)
         $resDraft = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/save-draft", [
             'stage' => 'netto',
             'inspection_date' => '2026-10-02',
@@ -1552,20 +1557,38 @@ class QcDefectVerificationTest extends TestCase
         ]);
         $resDraft->assertStatus(422);
 
-        // 2. verify rejected on CONFIRMED execution
-        $resVerify = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+        // 2. verify with MISMATCHED total rejected on CONFIRMED execution
+        $resMismatch = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
             'stage' => 'netto',
             'inspection_date' => '2026-10-02',
             'defects' => [
-                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 5],
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 6], // 6 != 5
             ],
         ]);
-        $resVerify->assertStatus(422);
+        $resMismatch->assertStatus(422);
+        $resMismatch->assertJson(['success' => false]);
+        $this->assertStringContainsString('tidak sesuai dengan total defect', $resMismatch->json('message'));
 
-        // Assert record remained completely untouched
+        // 3. verify with MATCHING total (redistributed classification) succeeds on CONFIRMED execution
+        $resMatch = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$exec->id}/verify", [
+            'stage' => 'netto',
+            'inspection_date' => '2026-10-02',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 2],
+            ],
+            'notes' => 'Koreksi alasan defect oleh QC',
+        ]);
+        $resMatch->assertStatus(200);
+        $resMatch->assertJson(['success' => true]);
+
+        // Assert record preserved total defect & good, but updated breakdown
         $exec->refresh();
-        $this->assertSame('2026-10-01', $exec->inspection_date?->toDateString());
-        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $exec->status);
+        $this->assertSame(5, (int) $exec->defect_qty);
+        $this->assertSame(45, (int) $exec->good_qty);
+        $this->assertSame('2026-10-02', $exec->inspection_date?->toDateString());
+        $this->assertSame('Koreksi alasan defect oleh QC', $exec->notes);
+        $this->assertCount(2, $exec->defects);
     }
 
     /**
@@ -1725,5 +1748,120 @@ class QcDefectVerificationTest extends TestCase
         $resRecorded->assertStatus(200);
         $itemsRecorded = collect($resRecorded->viewData('executions')->items());
         $this->assertTrue($itemsRecorded->contains('id', $exec->id));
+    }
+
+    /**
+     * TEST 32: Defect dengan defect_qty = 0 tidak boleh masuk antrean verifikasi QC.
+     */
+    public function test_32_zero_defect_does_not_enter_unrecorded_queue_or_summary(): void
+    {
+        $line1 = $this->createKtrLine(['current_stage' => 'netto']);
+        $line2 = $this->createKtrLine(['current_stage' => 'netto']);
+
+        // Exec1 has defect_qty = 5
+        $execPositive = $line1->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 5,
+            'good_qty' => 95,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now(),
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        // Exec2 has defect_qty = 0 (nihil)
+        $execZero = $line2->stageExecutions()->create([
+            'stage' => 'netto',
+            'checkpoint_code' => 'NETTO_CUT',
+            'input_qty' => 100,
+            'defect_qty' => 0,
+            'good_qty' => 100,
+            'status' => SandCastingStageExecution::STATUS_WAITING_QC,
+            'operator_id' => $this->spvUser->id,
+            'physical_done_at' => now(),
+            'defect_entered_by' => $this->adminPpic->id,
+            'defect_entered_at' => now(),
+            'executed_at' => now(),
+        ]);
+
+        // 1. Check getQcVerificationQueue
+        $queue = $this->queryService->getQcVerificationQueue('netto');
+        $queueIds = collect($queue)->pluck('id')->all();
+        $this->assertContains($execPositive->id, $queueIds);
+        $this->assertNotContains($execZero->id, $queueIds);
+
+        // 2. Check getQcVerificationPaginated unrecorded
+        $paginated = $this->queryService->getQcVerificationPaginated('unrecorded', 'netto');
+        $paginatedIds = collect($paginated->items())->pluck('id')->all();
+        $this->assertContains($execPositive->id, $paginatedIds);
+        $this->assertNotContains($execZero->id, $paginatedIds);
+
+        // 3. Check getQcVerificationSummary
+        $summary = $this->queryService->getQcVerificationSummary();
+        $this->assertEquals(1, $summary['stage_counts']['netto']);
+        $this->assertEquals(5, $summary['waiting_qc_defect_pcs']);
+    }
+
+    /**
+     * TEST 33: QC tetap dapat memverifikasi dan mengoreksi rincian defect setelah Gudang Jadi selesai.
+     */
+    public function test_33_qc_can_verify_and_edit_classification_after_gudang_jadi_completed(): void
+    {
+        $line = $this->createKtrLine(['current_stage' => 'netto']);
+
+        // Netto execution: input 100, defect 5 (WAITING_QC, unverified)
+        $nettoExec = $this->executionService->markPhysicalDone($line->traveler_number, 'netto', $this->spvUser->id);
+        $nettoExec = $this->executionService->recordDefectQty($nettoExec, 5, $this->adminPpic->id);
+
+        // Progress subsequent stages up to gudang_jadi completed
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_od', $this->spvUser->id);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bubut_cnc', $this->spvUser->id);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'bor', $this->spvUser->id);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'qc', $this->spvUser->id);
+        $this->executionService->markPhysicalDone($line->traveler_number, 'gudang_jadi', $this->spvUser->id);
+
+        $line->refresh();
+        $this->assertSame('completed', $line->current_stage);
+
+        // Verify Netto has is_quality_locked = true
+        $card = $this->queryService->formatQcVerificationCard($nettoExec->fresh());
+        $this->assertTrue($card['is_quality_locked']);
+
+        // 1. QC saves draft on Netto -> SUCCEEDS (does not mutate PPIC quantity)
+        $resDraft = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$nettoExec->id}/save-draft", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+            ],
+            'notes' => 'Draft QC pasca gudang jadi',
+        ]);
+        $resDraft->assertStatus(200);
+
+        // 2. QC completes verification on Netto (3 pcs Porosity + 2 pcs Retak = 5 pcs) -> SUCCEEDS
+        $resVerify = $this->actingAs($this->adminQc)->postJson("/sand-casting/qc-defects/{$nettoExec->id}/verify", [
+            'stage' => 'netto',
+            'defects' => [
+                ['defect_type_id' => $this->defectPorosity->id, 'qty' => 3],
+                ['defect_type_id' => $this->defectRetak->id, 'qty' => 2],
+            ],
+            'notes' => 'Verifikasi final QC pasca gudang jadi',
+        ]);
+        $resVerify->assertStatus(200);
+
+        $fresh = $nettoExec->fresh();
+        $this->assertSame(SandCastingStageExecution::STATUS_CONFIRMED, $fresh->status);
+        $this->assertSame(5, (int) $fresh->defect_qty);
+        $this->assertSame(95, (int) $fresh->good_qty);
+
+        // 3. PPIC cannot mutate defect count on Netto -> REJECTED (Final Quality Lock preserved)
+        $resPpic = $this->actingAs($this->adminPpic)->postJson("/sand-casting/defects/{$nettoExec->id}/add", [
+            'added_qty' => 1,
+        ]);
+        $resPpic->assertStatus(422);
+        $this->assertStringContainsString('TERKUNCI', $resPpic->json('message'));
     }
 }

@@ -1411,7 +1411,9 @@ class SandCastingProductionFloorQueryService
      */
     public function getQcVerificationSummary(): array
     {
-        $waitingExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)->get();
+        $waitingExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+            ->where('defect_qty', '>', 0)
+            ->get();
         $confirmedExecs = SandCastingStageExecution::where('status', SandCastingStageExecution::STATUS_CONFIRMED)
             ->whereNotNull('qc_verified_at')
             ->get();
@@ -1490,8 +1492,9 @@ class SandCastingProductionFloorQueryService
                 ->orderBy('qc_verified_at', 'desc')
                 ->orderBy('id', 'desc');
         } else {
-            // Default unrecorded: WAITING_QC FIFO queue
+            // Default unrecorded: WAITING_QC FIFO queue (defect > 0 only)
             $query->where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+                ->where('defect_qty', '>', 0)
                 ->orderBy('defect_entered_at', 'asc')
                 ->orderBy('id', 'asc');
 
@@ -1546,6 +1549,7 @@ class SandCastingProductionFloorQueryService
 
         $query = SandCastingStageExecution::where('stage', $canonicalStage)
             ->where('status', SandCastingStageExecution::STATUS_WAITING_QC)
+            ->where('defect_qty', '>', 0)
             ->with([
                 'castingResultLine.castingResult',
                 'castingResultLine.productionPlan',

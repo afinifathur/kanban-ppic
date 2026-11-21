@@ -498,7 +498,109 @@ class CastingOrderController extends Controller
             return $plan->qty_remaining_casting_scheduled > 0;
         })->values();
 
-        return view('sand-casting.casting-orders.edit', compact('castingOrder', 'availablePlans'));
+        $selectedPlan = old('production_plan_id') ? ProductionPlan::find(old('production_plan_id')) : null;
+        $selectedPlanData = null;
+        if ($selectedPlan) {
+            $selectedPlanData = [
+                'id' => $selectedPlan->id,
+                'code' => $selectedPlan->code,
+                'item_name' => $selectedPlan->item_name,
+                'line_number' => (int) ($selectedPlan->line_number ?: 1),
+                'line_label' => 'Line '.((int) ($selectedPlan->line_number ?: 1)),
+                'remaining_qty' => (int) $selectedPlan->qty_remaining_casting_scheduled,
+            ];
+        }
+
+        return view('sand-casting.casting-orders.edit', compact('castingOrder', 'availablePlans', 'selectedPlan', 'selectedPlanData'));
+    }
+
+    /**
+     * Search available production plans for adding to a DRAFT casting order (AJAX autocomplete).
+     */
+    public function searchPlans(Request $request, SandCastingCastingOrder $castingOrder)
+    {
+        $this->authorizeCastingOrder($castingOrder);
+
+        if ($castingOrder->status !== 'DRAFT') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya dokumen berstatus DRAFT yang dapat ditambahkan item baru.',
+                'items' => [],
+            ], 422);
+        }
+
+        $queryTerm = trim((string) $request->input('q', ''));
+        if (mb_strlen($queryTerm) < 2) {
+            return response()->json([
+                'success' => true,
+                'items' => [],
+                'message' => 'Ketik minimal 2 karakter untuk mencari.',
+            ]);
+        }
+
+        $scope = auth()->user()->product_scope;
+        $isPpic = auth()->user()->hasRole('ppic');
+
+        if ($isPpic && ! $scope) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User PPIC tanpa product_scope tidak dapat mencari item.',
+                'items' => [],
+            ], 403);
+        }
+
+        $existingPlanIds = $castingOrder->lines()->pluck('production_plan_id')->filter()->all();
+
+        $plansQuery = ProductionPlan::query()
+            ->where('production_domain', ProductionPlan::DOMAIN_SAND_CASTING)
+            ->where('is_closed', false)
+            ->whereNotIn('id', $existingPlanIds);
+
+        if ($isPpic && $scope) {
+            $plansQuery->where('product_scope', $scope);
+        }
+
+        $plansQuery->where(function ($sub) use ($queryTerm) {
+            $sub->where('code', 'like', '%'.$queryTerm.'%')
+                ->orWhere('item_name', 'like', '%'.$queryTerm.'%')
+                ->orWhere('customer', 'like', '%'.$queryTerm.'%');
+        });
+
+        // Exact code prefix match prioritized, then alphabetical by code
+        $plans = $plansQuery
+            ->orderByRaw('CASE WHEN code LIKE ? THEN 0 ELSE 1 END', [$queryTerm.'%'])
+            ->orderBy('code', 'asc')
+            ->limit(30)
+            ->get();
+
+        $items = $plans->filter(fn ($plan) => $plan->qty_remaining_casting_scheduled > 0)
+            ->take(15)
+            ->map(function ($plan) {
+                $resolvedLine = (int) ($plan->line_number ?: 1);
+                if ($resolvedLine < 1 || $resolvedLine > 4) {
+                    $resolvedLine = 1;
+                }
+
+                return [
+                    'id' => $plan->id,
+                    'code' => $plan->code,
+                    'item_name' => $plan->item_name,
+                    'customer' => $plan->customer ?: '-',
+                    'size' => $plan->size ?: '-',
+                    'aisi' => $plan->aisi ?: '-',
+                    'line_number' => $resolvedLine,
+                    'line_label' => 'Line '.$resolvedLine,
+                    'remaining_qty' => (int) $plan->qty_remaining_casting_scheduled,
+                    'weight' => (float) ($plan->weight ?? 0),
+                    'qty_planned' => (int) $plan->qty_planned,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'items' => $items,
+        ]);
     }
 
     /**

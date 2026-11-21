@@ -2214,4 +2214,314 @@ class CastingOrderTest extends TestCase
         $this->assertEquals(40, $balance['categories']['EXPORT']['pcs']);
         $this->assertEquals(120.00, $balance['categories']['EXPORT']['kg']);
     }
+
+    /**
+     * Test autocomplete search endpoint requires at least 2 characters and DRAFT order status.
+     */
+    public function test_autocomplete_search_plans_requires_at_least_two_characters_and_draft_status(): void
+    {
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261121-0001',
+            'scheduled_date' => '2026-11-21',
+            'status' => 'DRAFT',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        // 1. Query < 2 chars returns empty items with informative message
+        $responseShort = $this->actingAs($this->ppicUser)
+            ->getJson(route('sand-casting.casting-orders.search-plans', [$order, 'q' => '2']));
+
+        $responseShort->assertOk()
+            ->assertJson([
+                'success' => true,
+                'items' => [],
+            ]);
+        $this->assertStringContainsString('minimal 2 karakter', $responseShort->json('message'));
+
+        // 2. Non-DRAFT order rejects search
+        $order->update(['status' => 'ISSUED']);
+        $responseIssued = $this->actingAs($this->ppicUser)
+            ->getJson(route('sand-casting.casting-orders.search-plans', [$order, 'q' => '2610']));
+
+        $responseIssued->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+            ]);
+    }
+
+    /**
+     * Test autocomplete search returns matching plans for 2610 and narrows results with more specific query.
+     */
+    public function test_autocomplete_search_plans_returns_matching_items_and_narrows_with_specific_query(): void
+    {
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261121-0002',
+            'scheduled_date' => '2026-11-21',
+            'status' => 'DRAFT',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        $plan1 = ProductionPlan::create([
+            'code' => '2610ETB001',
+            'title' => 'Rencana 2610-1',
+            'item_code' => '4.2610.1',
+            'item_name' => 'FLANGE BESI JIS 10K 2"',
+            'po_number' => 'PO-2610-1',
+            'customer' => 'PT SINAR METAL',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'weight' => 2.50,
+            'size' => '2"',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        $plan2 = ProductionPlan::create([
+            'code' => '2610ETB002',
+            'title' => 'Rencana 2610-2',
+            'item_code' => '4.2610.2',
+            'item_name' => 'FLANGE BESI JIS 10K 3"',
+            'po_number' => 'PO-2610-2',
+            'customer' => 'PT INDO BAJA',
+            'qty_planned' => 80,
+            'qty_remaining' => 80,
+            'line_number' => 2,
+            'weight' => 3.75,
+            'size' => '3"',
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        $planOther = ProductionPlan::create([
+            'code' => '2620XYZ001',
+            'title' => 'Rencana Lain',
+            'item_code' => '4.2620.1',
+            'item_name' => 'FLANGE BESI JIS 10K 4"',
+            'po_number' => 'PO-2620-1',
+            'customer' => 'PT ANEKA BESI',
+            'qty_planned' => 50,
+            'qty_remaining' => 50,
+            'line_number' => 3,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        // 1. Search '2610': matches both 2610ETB001 and 2610ETB002, excludes 2620XYZ001
+        $response1 = $this->actingAs($this->ppicUser)
+            ->getJson(route('sand-casting.casting-orders.search-plans', [$order, 'q' => '2610']));
+
+        $response1->assertOk()
+            ->assertJsonPath('success', true);
+
+        $items1 = $response1->json('items');
+        $this->assertCount(2, $items1);
+        $codes1 = collect($items1)->pluck('code')->all();
+        $this->assertContains('2610ETB001', $codes1);
+        $this->assertContains('2610ETB002', $codes1);
+        $this->assertNotContains('2620XYZ001', $codes1);
+
+        // Verify response payload contains required UI fields
+        $itemA = collect($items1)->firstWhere('code', '2610ETB001');
+        $this->assertEquals($plan1->id, $itemA['id']);
+        $this->assertEquals('FLANGE BESI JIS 10K 2"', $itemA['item_name']);
+        $this->assertEquals('PT SINAR METAL', $itemA['customer']);
+        $this->assertEquals(1, $itemA['line_number']);
+        $this->assertEquals('Line 1', $itemA['line_label']);
+        $this->assertEquals(100, $itemA['remaining_qty']);
+        $this->assertEquals(2.50, $itemA['weight']);
+
+        // 2. Search more specific '2610ETB002': matches only 2610ETB002
+        $response2 = $this->actingAs($this->ppicUser)
+            ->getJson(route('sand-casting.casting-orders.search-plans', [$order, 'q' => '2610ETB002']));
+
+        $response2->assertOk();
+        $items2 = $response2->json('items');
+        $this->assertCount(1, $items2);
+        $this->assertEquals('2610ETB002', $items2[0]['code']);
+        $this->assertEquals('Line 2', $items2[0]['line_label']);
+    }
+
+    /**
+     * Test autocomplete search excludes plans already added, closed plans, zero remaining, and non-Sand-Casting plans.
+     */
+    public function test_autocomplete_search_plans_excludes_ineligible_plans(): void
+    {
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261121-0003',
+            'scheduled_date' => '2026-11-21',
+            'status' => 'DRAFT',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        // Plan already in order
+        $planAlreadyAdded = ProductionPlan::create([
+            'code' => '2610EXISTING',
+            'title' => 'Rencana Sudah Ada',
+            'item_code' => '4.2610.EX',
+            'item_name' => 'FLANGE SUDAH ADA',
+            'po_number' => 'PO-2610-EX',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+        $order->lines()->create([
+            'production_plan_id' => $planAlreadyAdded->id,
+            'qty_ordered' => 20,
+            'code' => $planAlreadyAdded->code,
+            'item_name' => $planAlreadyAdded->item_name,
+        ]);
+
+        // Closed plan
+        $planClosed = ProductionPlan::create([
+            'code' => '2610CLOSED',
+            'title' => 'Rencana Closed',
+            'item_code' => '4.2610.CL',
+            'item_name' => 'FLANGE CLOSED',
+            'po_number' => 'PO-2610-CL',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'is_closed' => true,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        // Lost wax plan
+        $planLostWax = ProductionPlan::create([
+            'code' => '2610LOSTWAX',
+            'title' => 'Rencana Lost Wax',
+            'item_code' => '4.2610.LW',
+            'item_name' => 'FLANGE LOST WAX',
+            'po_number' => 'PO-2610-LW',
+            'qty_planned' => 100,
+            'qty_remaining' => 100,
+            'line_number' => 1,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_LOST_WAX,
+            'status' => 'planning',
+        ]);
+
+        // Fully scheduled plan (remaining = 0)
+        $planExhausted = ProductionPlan::create([
+            'code' => '2610EXHAUST',
+            'title' => 'Rencana Habis',
+            'item_code' => '4.2610.EH',
+            'item_name' => 'FLANGE HABIS',
+            'po_number' => 'PO-2610-EH',
+            'qty_planned' => 50,
+            'qty_remaining' => 0,
+            'line_number' => 1,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+        $anotherOrder = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261121-OTHER',
+            'scheduled_date' => '2026-11-21',
+            'status' => 'ISSUED',
+            'created_by' => $this->ppicUser->id,
+        ]);
+        $anotherOrder->lines()->create([
+            'production_plan_id' => $planExhausted->id,
+            'qty_ordered' => 50,
+            'code' => $planExhausted->code,
+            'item_name' => $planExhausted->item_name,
+        ]);
+
+        // Eligible plan
+        $planEligible = ProductionPlan::create([
+            'code' => '2610ELIGIBLE',
+            'title' => 'Rencana Eligible',
+            'item_code' => '4.2610.EL',
+            'item_name' => 'FLANGE ELIGIBLE',
+            'po_number' => 'PO-2610-EL',
+            'qty_planned' => 75,
+            'qty_remaining' => 75,
+            'line_number' => 2,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        $response = $this->actingAs($this->ppicUser)
+            ->getJson(route('sand-casting.casting-orders.search-plans', [$order, 'q' => '2610']));
+
+        $response->assertOk();
+        $codes = collect($response->json('items'))->pluck('code')->all();
+
+        $this->assertContains('2610ELIGIBLE', $codes);
+        $this->assertNotContains('2610EXISTING', $codes);
+        $this->assertNotContains('2610CLOSED', $codes);
+        $this->assertNotContains('2610LOSTWAX', $codes);
+        $this->assertNotContains('2610EXHAUST', $codes);
+    }
+
+    /**
+     * Test edit view renders autocomplete UI and adding item works with line derivation and backend validation.
+     */
+    public function test_edit_view_renders_searchable_autocomplete_and_stores_line(): void
+    {
+        $order = SandCastingCastingOrder::create([
+            'casting_order_number' => 'PCOR-20261121-0004',
+            'scheduled_date' => '2026-11-21',
+            'status' => 'DRAFT',
+            'created_by' => $this->ppicUser->id,
+        ]);
+
+        $plan = ProductionPlan::create([
+            'code' => '2610NEWLINE',
+            'title' => 'Rencana Baru',
+            'item_code' => '4.2610.NL',
+            'item_name' => 'FLANGE BESI 3"',
+            'po_number' => 'PO-2610-NL',
+            'customer' => 'PT TESTING LINE',
+            'qty_planned' => 60,
+            'qty_remaining' => 60,
+            'line_number' => 3,
+            'product_scope' => 'FLANGE_BESI',
+            'production_domain' => ProductionPlan::DOMAIN_SAND_CASTING,
+            'status' => 'planning',
+        ]);
+
+        // 1. Edit view renders autocomplete search input instead of bloated static select
+        $viewResp = $this->actingAs($this->ppicUser)
+            ->get(route('sand-casting.casting-orders.edit', $order));
+
+        $viewResp->assertOk()
+            ->assertSee('id="planSearchInput"', false)
+            ->assertSee('id="add_production_plan_id"', false)
+            ->assertSee('id="planSearchDropdown"', false)
+            ->assertSee('id="add_line_display"', false);
+
+        // 2. Add line via POST to storeLine
+        $storeResp = $this->actingAs($this->ppicUser)
+            ->post(route('sand-casting.casting-orders.lines.store', $order), [
+                'production_plan_id' => $plan->id,
+                'qty_ordered' => 25,
+            ]);
+
+        $storeResp->assertRedirect(route('sand-casting.casting-orders.edit', $order));
+
+        $createdLine = $order->lines()->where('production_plan_id', $plan->id)->first();
+        $this->assertNotNull($createdLine);
+        $this->assertEquals(25, $createdLine->qty_ordered);
+        $this->assertEquals(3, $createdLine->line_number); // Strictly derived from plan line_number = 3
+        $this->assertEquals('2610NEWLINE', $createdLine->code);
+
+        // 3. Backend validation rejects invalid / missing production_plan_id
+        $invalidResp = $this->actingAs($this->ppicUser)
+            ->post(route('sand-casting.casting-orders.lines.store', $order), [
+                'production_plan_id' => 999999,
+                'qty_ordered' => 10,
+            ]);
+        $invalidResp->assertSessionHasErrors(['production_plan_id']);
+    }
 }

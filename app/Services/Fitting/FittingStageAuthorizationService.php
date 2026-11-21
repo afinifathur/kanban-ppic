@@ -518,6 +518,18 @@ class FittingStageAuthorizationService
     }
 
     /**
+     * Authorize user to view Fitting Dashboard or throw AuthorizationException.
+     *
+     * @throws AuthorizationException
+     */
+    public function authorizeViewDashboard(?User $user): void
+    {
+        if (! self::canViewDashboard($user)) {
+            throw new AuthorizationException('Anda tidak memiliki wewenang untuk mengakses dashboard Fitting.');
+        }
+    }
+
+    /**
      * Check if user can view Fitting Reports (Production Report & QC Defect Report).
      * Strictly excludes Sales and ALL `spv_fitting` accounts.
      */
@@ -539,6 +551,18 @@ class FittingStageAuthorizationService
             || self::safeHasPermission($user, self::PERMISSION_MANAGE_KANBAN)
             || self::safeHasPermission($user, self::PERMISSION_RECORD_DEFECT)
             || self::safeHasPermission($user, self::PERMISSION_VERIFY_QC);
+    }
+
+    /**
+     * Authorize user to view Fitting Reports or throw AuthorizationException.
+     *
+     * @throws AuthorizationException
+     */
+    public function authorizeViewReports(?User $user): void
+    {
+        if (! self::canViewReports($user)) {
+            throw new AuthorizationException('Anda tidak memiliki hak akses untuk melihat Laporan Fitting Production.');
+        }
     }
 
     /**

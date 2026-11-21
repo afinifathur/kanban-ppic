@@ -704,9 +704,6 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
 
-            // Final Quality Lock Guard: Ensure stage quality is not locked
-            $this->assertStageQualityNotLocked($execution, $line);
-
             if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED. Draft tidak dapat disimpan.");
             }
@@ -813,14 +810,10 @@ class SandCastingStageExecutionService
                 throw new InvalidArgumentException('KTR terkait eksekusi ini tidak ditemukan.');
             }
 
-            // Final Quality Lock Guard: Ensure stage quality is not locked
-            $this->assertStageQualityNotLocked($execution, $line);
-
-            if ($execution->status === SandCastingStageExecution::STATUS_CONFIRMED) {
-                throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} sudah berstatus CONFIRMED.");
-            }
-
-            if ($execution->status !== SandCastingStageExecution::STATUS_WAITING_QC) {
+            // QC defect classification verification/correction:
+            // Final Quality Lock does NOT block classification updates as long as the invariant holds:
+            // total breakdown MUST equal the locked defect_qty.
+            if (! in_array($execution->status, [SandCastingStageExecution::STATUS_WAITING_QC, SandCastingStageExecution::STATUS_CONFIRMED], true)) {
                 throw new InvalidArgumentException("Eksekusi checkpoint {$execution->checkpoint_code} belum dalam status verifikasi QC (Status: {$execution->status}).");
             }
 
