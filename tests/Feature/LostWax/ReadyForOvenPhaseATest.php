@@ -348,4 +348,3 @@ class ReadyForOvenPhaseATest extends TestCase
         $readyCastingResponse->assertSee('Daftar seluruh pohon cangkang yang telah selesai dewaxing dan belum dicor (Buffer Inventory - FIFO)');
     }
 }
-

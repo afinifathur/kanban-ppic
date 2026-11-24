@@ -141,6 +141,11 @@ class LostWaxKitirController extends Controller
         }
         $kitir->setRelation('castingResult', $castingResult);
 
+        // Eager load active Fitting traveler item and its stage executions for dynamic auto-fill
+        $kitir->loadMissing([
+            'activeFittingItem.stageExecutions',
+        ]);
+
         // 1. Barcode Code 128 PNG
         $generator = new BarcodeGeneratorPNG;
         $barcodeBase64 = base64_encode(
@@ -160,8 +165,8 @@ class LostWaxKitirController extends Controller
         );
         $qrCodeSvg = preg_replace('/^<\?xml[^>]*\?>\s*/i', '', $rawQrSvg);
 
-        // 3. Process Rows (6 fitting processes)
-        $processRows = $this->kitirService->buildFittingProcessRows();
+        // 3. Process Rows (6 fitting processes with dynamic execution history)
+        $processRows = $this->kitirService->buildFittingProcessRows($kitir);
 
         return [
             'kitir' => $kitir,

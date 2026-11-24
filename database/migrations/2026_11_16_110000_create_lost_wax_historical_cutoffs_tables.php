@@ -104,4 +104,3 @@ return new class extends Migration
         Schema::dropIfExists('lost_wax_historical_cutoffs');
     }
 };
-

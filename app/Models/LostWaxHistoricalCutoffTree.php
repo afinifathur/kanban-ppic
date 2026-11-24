@@ -74,4 +74,3 @@ class LostWaxHistoricalCutoffTree extends Model
         return $this->belongsTo(\App\Models\LostWaxPrintOrderLine::class, 'lost_wax_print_order_line_id');
     }
 }
-

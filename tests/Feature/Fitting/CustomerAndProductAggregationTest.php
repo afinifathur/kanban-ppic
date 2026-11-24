@@ -9,7 +9,6 @@ use App\Models\LostWaxKitir;
 use App\Models\LostWaxPrintOrder;
 use App\Models\LostWaxPrintOrderLine;
 use App\Models\LostWaxTree;
-use App\Models\LostWaxTreeAllocation;
 use App\Models\ProductionPlan;
 use App\Models\User;
 use App\Services\Fitting\FittingKitirSnapshotResolverService;

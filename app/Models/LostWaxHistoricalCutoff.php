@@ -76,4 +76,3 @@ class LostWaxHistoricalCutoff extends Model
         return $this->status === 'CANCELLED';
     }
 }
-

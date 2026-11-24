@@ -4,7 +4,6 @@ namespace Tests\Feature\Fitting;
 
 use App\Models\LostWaxCastingResult;
 use App\Models\LostWaxCastingResultTree;
-use App\Models\LostWaxKitir;
 use App\Models\LostWaxTree;
 use App\Models\ProductionPlan;
 use App\Models\User;
@@ -286,5 +285,57 @@ class FittingKanbanRefinementTest extends TestCase
             $response->headers->get('content-type')
         );
         $this->assertStringContainsString('Kanban-Fitting-netto-pf-', $response->headers->get('content-disposition'));
+    }
+
+    public function test_05_simplified_kanban_card_renders_six_elements_and_omits_unneeded_data(): void
+    {
+        [$plan1, $res1, $kitir1] = $this->createReadyKitir('CODE-SIMP-1', 'PT LOKAL JAYA', 'SS304 RAISED DIN 2501 PN 16 2"', 1, 150);
+        [$plan2, $res2, $kitir2] = $this->createReadyKitir('CODE-SIMP-2', 'STOK EXP', 'SS316 ELBOW 90 2"', 1, 200);
+
+        $transfers = $this->transferService->transferKitirs(
+            [$kitir1->id, $kitir2->id],
+            $this->ppicFitting,
+            null,
+            null,
+            now()->format('Y-m-d'),
+            [$kitir1->id => 1, $kitir2->id => 1]
+        );
+
+        $response = $this->actingAs($this->ppicFitting)->get(route('fitting.kanban.stage', 'netto-pf'));
+        $response->assertOk();
+
+        $content = $response->getContent();
+
+        $decoded = html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // 1. BARIS 1: Nama Produk (bold & clear)
+        $this->assertStringContainsString('SS304 RAISED DIN 2501 PN 16 2"', $decoded);
+        $this->assertStringContainsString('SS316 ELBOW 90 2"', $decoded);
+
+        // 2. BARIS 2: Nomor Antrean (#01, #02)
+        $this->assertStringContainsString('#01', $content);
+        $this->assertStringContainsString('#02', $content);
+
+        // 3. BARIS 3: Heat Number
+        $this->assertStringContainsString("Heat {$res1->heat_number}", $content);
+        $this->assertStringContainsString("Heat {$res2->heat_number}", $content);
+
+        // 4. BARIS 4: Quantity (Horizontal XX PCS / YY KG)
+        $this->assertStringContainsString('150', $content);
+        $this->assertStringContainsString('PCS', $content);
+        $this->assertStringContainsString('KG', $content);
+
+        // 5. BARIS 5: Aging Badge with Dot Indicator
+        $this->assertStringContainsString('data-aging-color="green"', $content);
+        $this->assertStringContainsString('Aging', $content);
+
+        // 6. BARIS 6: Jenis Order ([LOKAL] & [EXPORT])
+        $this->assertStringContainsString('[LOKAL]', $content);
+        $this->assertStringContainsString('[EXPORT]', $content);
+
+        // 7. Data attributes preserve searchable details for scanner & filters
+        $this->assertStringContainsString('data-traveler-number=', $content);
+        $this->assertStringContainsString('data-production-code=', $content);
+        $this->assertStringContainsString('data-customer=', $content);
     }
 }

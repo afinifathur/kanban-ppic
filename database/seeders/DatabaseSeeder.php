@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            FittingDefectTypesSeeder::class,
             QcFittingUserSeeder::class,
             SandCastingSpvUserSeeder::class,
             SandCastingQcUserSeeder::class,

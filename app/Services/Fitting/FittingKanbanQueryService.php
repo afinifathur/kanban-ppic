@@ -372,10 +372,7 @@ class FittingKanbanQueryService
         $lineBucket = $normalizedLine !== null ? (string) $normalizedLine : self::BUCKET_UNASSIGNED;
 
         $stageEntryAt = $this->resolveStageEntryTimestamp($item, $stage);
-        $now = Carbon::now();
-        $agingHours = $stageEntryAt ? max(0, (int) $stageEntryAt->diffInHours($now)) : 0;
-        $agingDays = intdiv($agingHours, 24);
-        $agingRemHours = $agingHours % 24;
+        $aging = $this->calculateAging($item, $stage, $stageEntryAt);
 
         $allocations = $item->relationLoaded('allocations')
             ? $item->allocations->map(fn ($a) => [
@@ -435,11 +432,7 @@ class FittingKanbanQueryService
             'is_urgent' => (bool) $item->is_urgent,
             'stage_entry_raw' => $stageEntryAt?->format('Y-m-d H:i:s') ?? '9999-12-31 23:59:59',
             'stage_entry_formatted' => $stageEntryAt?->format('d/m/Y H:i') ?? '-',
-            'aging' => [
-                'hours' => $agingHours,
-                'days' => $agingDays,
-                'label' => $agingDays > 0 ? sprintf('%dH %02dJ', $agingDays, $agingRemHours) : sprintf('%02dJ', $agingHours),
-            ],
+            'aging' => $aging,
             'allocations' => $allocations,
         ];
     }
@@ -541,9 +534,46 @@ class FittingKanbanQueryService
     }
 
     /**
+     * Calculate dynamic aging for Fitting Kanban card.
+     *
+     * @return array{
+     *     stage_aging_hours: int,
+     *     stage_aging_days: int,
+     *     stage_aging_label: string,
+     *     hours: int,
+     *     days: int,
+     *     label: string
+     * }
+     */
+    public function calculateAging(FittingItem $item, string $stage, ?Carbon $stageEntryAt = null): array
+    {
+        $stageEntryAt = $stageEntryAt ?? $this->resolveStageEntryTimestamp($item, $stage);
+        $now = Carbon::now();
+
+        $agingHours = $stageEntryAt ? max(0, (int) $stageEntryAt->diffInHours($now)) : 0;
+        $agingDays = $stageEntryAt ? max(0, (int) $stageEntryAt->diffInDays($now)) : 0;
+        $days = intdiv($agingHours, 24);
+        $remHours = $agingHours % 24;
+
+        $agingLabel = $agingHours >= 24
+            ? sprintf('Aging %dD %02dH', $days, $remHours)
+            : sprintf('Aging %02dH', $agingHours);
+
+        return [
+            'stage_aging_hours' => $agingHours,
+            'stage_aging_days' => $agingDays,
+            'stage_aging_label' => $agingDays > 0 ? "{$agingDays}h" : "{$agingHours}j",
+            // Backward compatibility with legacy consumers
+            'hours' => $agingHours,
+            'days' => $agingDays,
+            'label' => $agingLabel,
+        ];
+    }
+
+    /**
      * Resolve entry timestamp for a FittingItem at its current stage (for FIFO & aging).
      */
-    protected function resolveStageEntryTimestamp(FittingItem $item, string $stage): ?Carbon
+    public function resolveStageEntryTimestamp(FittingItem $item, string $stage): ?Carbon
     {
         if ($stage === FittingItem::STAGE_NETTO_PF) {
             return $item->created_at ?? ($item->transfer?->transfer_date?->copy()->startOfDay());
@@ -552,8 +582,11 @@ class FittingKanbanQueryService
         $prevStage = FittingItem::previousStageFor($stage);
         if ($prevStage !== null) {
             $prevCheckpoint = FittingStageAuthorizationService::STAGE_CHECKPOINTS[$prevStage] ?? null;
-            if ($prevCheckpoint !== null && $item->relationLoaded('stageExecutions')) {
-                $prevExec = $item->stageExecutions->firstWhere('checkpoint_code', $prevCheckpoint);
+            if ($prevCheckpoint !== null) {
+                $prevExec = $item->relationLoaded('stageExecutions')
+                    ? $item->stageExecutions->firstWhere('checkpoint_code', $prevCheckpoint)
+                    : $item->stageExecutions()->where('checkpoint_code', $prevCheckpoint)->first();
+
                 if ($prevExec) {
                     return $prevExec->physical_done_at ?? $prevExec->executed_at;
                 }

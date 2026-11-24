@@ -121,6 +121,26 @@ class FittingStageExecution extends Model
     }
 
     /**
+     * Resolve default inspection date based on stage physical scan completion in Asia/Jakarta timezone.
+     */
+    public function resolveDefaultInspectionDate(): string
+    {
+        $dt = $this->physical_done_at ?? $this->executed_at ?? $this->created_at;
+
+        if ($dt instanceof \Carbon\CarbonInterface) {
+            $dateStr = $dt->copy()->timezone('Asia/Jakarta')->format('Y-m-d');
+        } elseif ($dt) {
+            $dateStr = \Carbon\Carbon::parse($dt)->timezone('Asia/Jakarta')->format('Y-m-d');
+        } else {
+            $dateStr = \Carbon\Carbon::now('Asia/Jakarta')->format('Y-m-d');
+        }
+
+        $today = \Carbon\Carbon::now('Asia/Jakarta')->format('Y-m-d');
+
+        return $dateStr > $today ? $today : $dateStr;
+    }
+
+    /**
      * Scope query to match effective defect date between a date range.
      */
     public function scopeWhereEffectiveDefectDateBetween($query, string $startDate, string $endDate)
@@ -134,12 +154,12 @@ class FittingStageExecution extends Model
                 $dq->whereNotNull('fitting_stage_executions.inspection_date')
                     ->where(function ($idq) use ($startDate, $endDate) {
                         $idq->whereBetween('fitting_stage_executions.inspection_date', [$startDate, $endDate])
-                            ->orWhereBetween('fitting_stage_executions.inspection_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                            ->orWhereBetween('fitting_stage_executions.inspection_date', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
                     });
             })->orWhere(function ($sq) use ($startDate, $endDate) {
                 $sq->whereNull('fitting_stage_executions.inspection_date')
                     ->whereNotNull('fitting_stage_executions.physical_done_at')
-                    ->whereBetween('fitting_stage_executions.physical_done_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                    ->whereBetween('fitting_stage_executions.physical_done_at', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
             });
         });
     }

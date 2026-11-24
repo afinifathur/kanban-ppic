@@ -283,6 +283,7 @@
                                 $effectiveGood = (int) $exec->effective_good_qty;
                                 $maxAllowed = (int) $exec->max_allowed_defect_qty;
                                 $isLocked = (bool) $exec->is_quality_locked;
+                                $scanDate = $exec->resolveDefaultInspectionDate();
                                 $logsPayload = $exec->defectLogs->map(fn ($l) => [
                                     'at' => $l->created_at?->format('d/m/Y H:i:s'),
                                     'actor' => $l->is_system_action ? 'SISTEM (AUTO-NIHIL)' : ($l->user?->name ?? 'User'),
@@ -379,7 +380,7 @@
                                             </span>
                                         @elseif($exec->status === \App\Models\FittingStageExecution::STATUS_WAITING_DEFECT)
                                             <button type="button"
-                                                    onclick="openRecordModal({{ $exec->id }}, @js($pfktr), @js($stageLabel), {{ $effectiveInput }}, {{ $maxAllowed }}, @js($exec->notes ?? ''))"
+                                                    onclick="openRecordModal({{ $exec->id }}, @js($pfktr), @js($stageLabel), {{ $effectiveInput }}, {{ $maxAllowed }}, @js($exec->notes ?? ''), @js($scanDate))"
                                                     class="inline-flex items-center px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition">
                                                 <i class="fas fa-edit mr-1"></i>Catat Defect
                                             </button>
@@ -436,6 +437,12 @@
             @csrf
             <input type="hidden" name="idempotency_key" id="recordIdempotencyKey">
             <input type="hidden" name="stage" value="{{ $selectedStage }}">
+            <input type="hidden" name="execution_id" id="recExecutionId" value="{{ old('execution_id') }}">
+            <input type="hidden" name="pfktr" id="recPfktrInput" value="{{ old('pfktr') }}">
+            <input type="hidden" name="stage_label" id="recStageLabelInput" value="{{ old('stage_label') }}">
+            <input type="hidden" name="effective_input" id="recEffectiveInputInput" value="{{ old('effective_input') }}">
+            <input type="hidden" name="max_allowed" id="recMaxAllowedInput" value="{{ old('max_allowed') }}">
+            <input type="hidden" name="scan_date" id="recScanDateInput" value="{{ old('scan_date') }}">
             <div class="bg-slate-50 rounded-lg p-2 text-xs border border-slate-200 grid grid-cols-2 gap-x-2 gap-y-1">
                 <div><span class="text-slate-500">PFKTR:</span> <strong id="recPfktr" class="font-mono text-slate-800"></strong></div>
                 <div><span class="text-slate-500">Tahap:</span> <strong id="recStage" class="text-slate-800"></strong></div>
@@ -450,8 +457,9 @@
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-0.5">Tanggal Pemeriksaan (Opsional)</label>
-                <input type="date" name="inspection_date" max="{{ now()->format('Y-m-d') }}"
+                <input type="date" name="inspection_date" id="recInspectionDate" max="{{ now('Asia/Jakarta')->format('Y-m-d') }}"
                        class="w-full rounded-md border border-slate-300 px-2.5 py-1 text-xs">
+                <p class="text-[10px] text-slate-400 mt-0.5">Otomatis terisi tanggal scan fisik, dapat diubah jika pemeriksaan dilakukan pada tanggal lain.</p>
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-0.5">Catatan (Opsional)</label>
@@ -527,9 +535,15 @@ function genIdemKey(prefix, execId) {
 function closeModal(id) {
     document.getElementById(id).classList.add('hidden');
 }
-function openRecordModal(execId, pfktr, stageLabel, effectiveInput, maxAllowed, existingNotes) {
+function openRecordModal(execId, pfktr, stageLabel, effectiveInput, maxAllowed, existingNotes, defaultDate) {
     document.getElementById('recordForm').action = "{{ url('/fitting/defects') }}/" + execId + "/record";
     document.getElementById('recordIdempotencyKey').value = genIdemKey('fit-rec', execId);
+    document.getElementById('recExecutionId').value = execId;
+    document.getElementById('recPfktrInput').value = pfktr;
+    document.getElementById('recStageLabelInput').value = stageLabel;
+    document.getElementById('recEffectiveInputInput').value = effectiveInput;
+    document.getElementById('recMaxAllowedInput').value = maxAllowed;
+    document.getElementById('recScanDateInput').value = defaultDate || '';
     document.getElementById('recPfktr').textContent = pfktr;
     document.getElementById('recStage').textContent = stageLabel;
     document.getElementById('recEffectiveInput').textContent = effectiveInput;
@@ -537,7 +551,13 @@ function openRecordModal(execId, pfktr, stageLabel, effectiveInput, maxAllowed, 
     const qtyInput = document.getElementById('recDefectQty');
     qtyInput.value = 0;
     qtyInput.max = maxAllowed;
-    document.getElementById('recNotes').value = '';
+    document.getElementById('recNotes').value = existingNotes || '';
+
+    const dateInput = document.getElementById('recInspectionDate');
+    if (dateInput) {
+        dateInput.value = defaultDate || '';
+    }
+
     document.getElementById('recordModal').classList.remove('hidden');
 }
 function openAdjustModal(execId, pfktr, stageLabel, currentDefect, maxAllowed, status) {
@@ -595,6 +615,25 @@ function openLogsModal(pfktr, stageLabel, logs) {
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+@if($errors->any() && old('execution_id'))
+document.addEventListener('DOMContentLoaded', function() {
+    const oldExecId = @json(old('execution_id'));
+    const oldPfktr = @json(old('pfktr'));
+    const oldStageLabel = @json(old('stage_label'));
+    const oldEffectiveInput = @json(old('effective_input'));
+    const oldMaxAllowed = @json(old('max_allowed'));
+    const oldNotes = @json(old('notes'));
+    const oldInspDate = @json(old('inspection_date'));
+    const oldScanDate = @json(old('scan_date'));
+    const oldDefectQty = @json(old('defect_qty'));
+
+    openRecordModal(oldExecId, oldPfktr, oldStageLabel, oldEffectiveInput, oldMaxAllowed, oldNotes, oldInspDate || oldScanDate);
+    if (oldDefectQty !== null && oldDefectQty !== undefined) {
+        document.getElementById('recDefectQty').value = oldDefectQty;
+    }
+});
+@endif
 </script>
 @endif
 @endsection

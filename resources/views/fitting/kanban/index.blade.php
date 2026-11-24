@@ -72,6 +72,82 @@
         '3' => ['title' => 'LINE 3 — BALL VALVE', 'headerClass' => 'bg-purple-600 text-white', 'borderClass' => 'border-purple-200'],
         '4' => ['title' => 'LINE 4 — BW', 'headerClass' => 'bg-amber-600 text-white', 'borderClass' => 'border-amber-200'],
     ];
+
+    // Aging resolver function: semantic color (<120h green, 120-168h yellow, >168h red)
+    $getAgingInfo = function($agingData) {
+        $hours = is_array($agingData) ? ($agingData['stage_aging_hours'] ?? $agingData['hours'] ?? 0) : 0;
+        $label = is_array($agingData) && !empty($agingData['label'])
+            ? $agingData['label']
+            : ($hours >= 24 ? sprintf('Aging %dD %02dH', intdiv($hours, 24), $hours % 24) : sprintf('Aging %02dH', $hours));
+
+        if ($hours < 120) {
+            return [
+                'label' => $label,
+                'color' => 'green',
+                'badgeClass' => 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                'dotClass' => 'bg-emerald-500',
+            ];
+        } elseif ($hours <= 168) {
+            return [
+                'label' => $label,
+                'color' => 'yellow',
+                'badgeClass' => 'bg-amber-50 text-amber-800 border-amber-300',
+                'dotClass' => 'bg-amber-500',
+            ];
+        } else {
+            return [
+                'label' => $label,
+                'color' => 'red',
+                'badgeClass' => 'bg-rose-50 text-rose-700 border-rose-200',
+                'dotClass' => 'bg-rose-500',
+            ];
+        }
+    };
+
+    // Customer order type resolver: [LOKAL] or [EXPORT]
+    $customerCategoryMap = \App\Models\Customer::getCategoryMap();
+    $resolveOrderType = function($card) use ($customerCategoryMap) {
+        $cust = trim((string) ($card['customer'] ?? ''));
+        if ($cust === '' || $cust === '-') {
+            foreach ($card['allocations'] ?? [] as $alloc) {
+                $allocCust = trim((string) ($alloc['customer'] ?? ''));
+                if ($allocCust !== '' && $allocCust !== '-') {
+                    $cust = $allocCust;
+                    break;
+                }
+            }
+        }
+
+        $cat = \App\Models\Customer::resolveCategory($cust, $customerCategoryMap);
+        if ($cat === \App\Models\Customer::CATEGORY_EXPORT) {
+            return [
+                'type' => 'EXPORT',
+                'label' => 'EXPORT',
+                'bg' => 'bg-sky-50',
+                'text' => 'text-sky-700',
+                'border' => 'border-sky-300',
+            ];
+        }
+
+        $upper = strtoupper($cust);
+        if (preg_match('/\b(EXP|EXPORT)\b/i', $upper)) {
+            return [
+                'type' => 'EXPORT',
+                'label' => 'EXPORT',
+                'bg' => 'bg-sky-50',
+                'text' => 'text-sky-700',
+                'border' => 'border-sky-300',
+            ];
+        }
+
+        return [
+            'type' => 'LOKAL',
+            'label' => 'LOKAL',
+            'bg' => 'bg-slate-100',
+            'text' => 'text-slate-700',
+            'border' => 'border-slate-300',
+        ];
+    };
 @endphp
 
 <div class="space-y-2.5 w-full pb-4">
@@ -225,6 +301,8 @@
 
                     @forelse($bucketCards as $card)
                         @php
+                            $agingInfo = $getAgingInfo($card['aging'] ?? null);
+                            $orderType = $resolveOrderType($card);
                             $effectiveQty = (int) ($card['effective_input_qty'] ?? $card['qty_transferred']);
                             $cardWeight = (float) ($card['total_weight_kg'] ?? 0.0);
                             $searchText = strtolower(implode(' ', array_filter([
@@ -241,65 +319,55 @@
                             ])));
                         @endphp
                         {{-- COMPACT CARD (Reference: Sand Casting density) --}}
-                        <div class="kanban-card bg-white rounded-lg border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-300' : 'border-slate-200 hover:border-slate-300' }} p-2 shadow-2xs space-y-1 transition-all text-xs"
+                        <div class="kanban-card bg-white rounded-lg border {{ $card['is_urgent'] ? 'border-rose-400 ring-1 ring-rose-400' : 'border-slate-200 hover:border-slate-300' }} p-2 md:p-2 sm:p-2.5 flex flex-col justify-between transition-all shadow-xs"
                              data-search-text="{{ $searchText }}"
                              data-card-line="{{ $bucketKey }}"
                              data-card-qty="{{ $effectiveQty }}"
-                             data-card-weight="{{ $cardWeight }}">
-
-                            {{-- Row 1: Item Name (Bold) + Badges (Queue Seq, PPIC, Urgent) --}}
-                            <div class="flex items-start justify-between gap-1 leading-snug">
-                                <div class="font-bold text-slate-900 text-[11px] leading-tight line-clamp-2 min-w-0" title="{{ $card['item_name'] }}">
-                                    {{ $card['item_name'] }}
-                                </div>
-                                <div class="flex items-center gap-1 shrink-0">
-                                    @if($card['is_urgent'])
-                                        <span class="px-1 py-0.2 rounded bg-rose-100 text-rose-700 text-[8.5px] font-black uppercase">URGENT</span>
-                                    @endif
-                                    @if($card['queue_position'] !== null)
-                                        <span class="px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8.5px] font-bold" title="Prioritas Manual PPIC">PPIC</span>
-                                    @endif
-                                    <span class="inline-flex items-center justify-center min-w-[20px] h-4 px-1 rounded bg-slate-900 text-white font-mono font-black text-[9px]">
-                                        #{{ $card['queue_seq'] }}
+                             data-card-weight="{{ $cardWeight }}"
+                             data-traveler-number="{{ $card['traveler_number'] }}"
+                             data-production-code="{{ $card['production_code'] }}"
+                             data-customer="{{ $card['customer'] }}">
+                            <div>
+                                {{-- Baris 1: Nama Produk & Baris 2: Nomor Antrean --}}
+                                <div class="flex items-start justify-between gap-1.5">
+                                    <div class="font-bold text-slate-900 text-xs leading-snug tracking-tight line-clamp-2 min-w-0" title="{{ $card['item_name'] ?? '-' }}">
+                                        {{ $card['item_name'] ?? '-' }}
+                                    </div>
+                                    <span class="font-mono text-[10px] font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0 leading-none" title="Nomor Antrian">
+                                        #{{ sprintf('%02d', (int) ($card['queue_seq'] ?? 1)) }}
                                     </span>
                                 </div>
-                            </div>
 
-                            {{-- Row 2: Traveler (PFKTR) & Production Code --}}
-                            <div class="flex items-center justify-between text-[10px] font-mono leading-none pt-0.5">
-                                <span class="font-black text-emerald-800 truncate" title="Traveler: {{ $card['traveler_number'] }}">
-                                    {{ $card['traveler_number'] }}
-                                </span>
-                                <span class="font-semibold text-slate-500 truncate ml-1 text-right" title="Kode: {{ $card['production_code'] }}">
-                                    {{ $card['production_code'] }}
-                                </span>
-                            </div>
-
-                            {{-- Row 3: Heat (Left) & Qty / Weight (Right on same line) --}}
-                            <div class="pt-0.5 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono">
-                                <span class="font-semibold text-slate-600 truncate" title="Heat: {{ $card['heat_number'] }}">
-                                    Heat: <strong class="text-slate-800">{{ $card['heat_number'] }}</strong>
-                                </span>
-                                <div class="text-right shrink-0 font-black text-slate-900 ml-1">
-                                    <span>{{ number_format($effectiveQty) }}<span class="text-[8.5px] font-bold text-slate-400 ml-0.5">PCS</span></span>
-                                    <span class="text-slate-300 font-normal">/</span>
-                                    <span class="{{ $card['has_incomplete_weight'] ? 'text-amber-700' : '' }}">{{ number_format($cardWeight, 1, ',', '.') }}<span class="text-[8.5px] font-bold text-slate-400 ml-0.5">KG{{ $card['has_incomplete_weight'] ? '*' : '' }}</span></span>
+                                {{-- Baris 3: Heat Number & Baris 4: Quantity (Horizontal) --}}
+                                <div class="mt-1 pt-1 border-t border-slate-100 flex items-center justify-between font-mono text-xs" title="Heat: {{ $card['heat_number'] ?? '-' }}">
+                                    <div class="text-[11px] text-slate-500 font-medium truncate" title="Heat: {{ $card['heat_number'] ?? '-' }}">
+                                        Heat {{ $card['heat_number'] ?? '-' }}
+                                    </div>
+                                    <div class="flex items-center gap-1.5 shrink-0 text-slate-900 font-black">
+                                        <span>{{ number_format($effectiveQty, 0, ',', '.') }}<span class="text-[9px] font-bold text-slate-400 ml-0.5">PCS</span></span>
+                                        <span class="text-slate-300 font-normal">/</span>
+                                        <span class="{{ !empty($card['has_incomplete_weight']) ? 'text-amber-700' : '' }}">{{ number_format($cardWeight, 0, ',', '.') }}<span class="text-[9px] font-bold text-slate-400 ml-0.5">KG{{ !empty($card['has_incomplete_weight']) ? '*' : '' }}</span></span>
+                                    </div>
                                 </div>
                             </div>
 
-                            {{-- Row 4: Customer Code badge (Left) & Transfer Date / Stage (Right) --}}
-                            <div class="flex items-center justify-between gap-1 text-[9px] pt-0.5 border-t border-slate-100">
-                                <div class="flex items-center gap-1 min-w-0">
-                                    <span class="inline-flex items-center px-1.5 py-0.2 rounded font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 truncate" title="Customer: {{ $card['customer'] }}">
-                                        [{{ $card['customer'] }}]
-                                    </span>
-                                    @if($card['is_multi_allocation'])
-                                        <span class="px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold text-[8.5px]">Multi</span>
+                            <div>
+                                {{-- Baris 5: Aging Badge & Baris 6: Jenis Order --}}
+                                <div class="mt-1 flex items-center justify-between gap-1 leading-none">
+                                    <div class="flex items-center gap-1">
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] md:text-[10px] font-mono font-bold border {{ $agingInfo['badgeClass'] }}" data-aging-color="{{ $agingInfo['color'] }}" title="{{ $agingInfo['label'] }}">
+                                            <span class="w-1.5 h-1.5 rounded-full {{ $agingInfo['dotClass'] }} shrink-0"></span>
+                                            <span>{{ $agingInfo['label'] }}</span>
+                                        </span>
+                                        @if(!empty($card['is_urgent']))
+                                            <span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-600 text-white animate-pulse">URGENT</span>
+                                        @endif
+                                    </div>
+                                    @if(!empty($orderType))
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] md:text-[10px] font-mono font-black border {{ $orderType['bg'] }} {{ $orderType['text'] }} {{ $orderType['border'] }}" title="Customer: [{{ $card['customer'] ?? '-' }}]">
+                                            [{{ $orderType['label'] }}]
+                                        </span>
                                     @endif
-                                </div>
-                                <div class="flex items-center gap-1.5 shrink-0 text-slate-400 font-mono">
-                                    <span>{{ $card['transfer_date_formatted'] }}</span>
-                                    <span class="font-bold text-emerald-700 font-sans">{{ $card['current_stage_label'] }}</span>
                                 </div>
                             </div>
                         </div>

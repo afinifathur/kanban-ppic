@@ -232,13 +232,13 @@
                                 <tr class="process-row {{ !$loop->last ? 'border-b-black-solid' : '' }}">
                                     <td class="text-center font-bold border-r-black-solid font-mono text-sm">{{ $row['no'] }}</td>
                                     <td class="font-black border-r-black-solid pl-2.5 text-[11px] font-sans">{{ $row['label'] }}</td>
-                                    <td class="border-r-black-solid text-center font-bold font-mono text-sm"></td>
-                                    <td class="border-r-black-solid text-center font-bold font-mono text-sm"></td>
-                                    <td class="border-r-black-solid text-center font-bold font-mono text-xs"></td>
+                                    <td class="border-r-black-solid text-center font-bold font-mono text-sm">{{ $row['hasil'] !== null ? $row['hasil'] : '' }}</td>
+                                    <td class="border-r-black-solid text-center font-bold font-mono text-sm">{{ $row['rusak'] !== null ? $row['rusak'] : '' }}</td>
+                                    <td class="border-r-black-solid text-center font-bold font-mono text-xs">{{ $row['tanggal'] ?? '' }}</td>
                                     <td class="border-r-black-solid text-center align-middle font-bold text-[8.5pt] text-slate-800">
                                         {!! $row['kpi'] !!}
                                     </td>
-                                    <td class="text-center font-bold font-sans text-xs"></td>
+                                    <td class="text-center font-bold font-sans text-xs">{{ $row['operator'] ?? '' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

@@ -19,6 +19,7 @@ class ReadyForOvenPrintLayoutRefinedTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private static int $seq = 1;
 
     protected function setUp(): void

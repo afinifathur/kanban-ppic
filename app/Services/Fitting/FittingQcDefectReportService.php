@@ -46,10 +46,17 @@ class FittingQcDefectReportService
 
         if ($stage && $stage !== 'all') {
             $canonical = FittingStageAuthorizationService::normalizeStage($stage) ?? $stage;
-            $departments = [$canonical];
+            $departments = array_unique(array_filter([$canonical, 'fitting']));
 
             $query->where(function (Builder $q) use ($departments) {
                 $q->whereIn('department', $departments)
+                    ->orWhereNull('department')
+                    ->orWhere('department', 'all');
+            });
+        } else {
+            $query->where(function (Builder $q) {
+                $q->where('department', 'fitting')
+                    ->orWhereIn('department', \App\Models\FittingItem::STAGES)
                     ->orWhereNull('department')
                     ->orWhere('department', 'all');
             });

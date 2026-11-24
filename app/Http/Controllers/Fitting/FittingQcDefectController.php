@@ -45,8 +45,9 @@ class FittingQcDefectController extends Controller
         };
 
         $rawStage = $request->query('stage');
-        $selectedStage = null;
-        if ($rawStage !== null && $rawStage !== '' && $rawStage !== 'all') {
+        if ($rawStage === null || $rawStage === '' || $rawStage === 'all') {
+            $selectedStage = FittingItem::STAGE_NETTO_PF;
+        } else {
             $selectedStage = FittingStageAuthorizationService::normalizeStage((string) $rawStage);
             if ($selectedStage === null) {
                 abort(404, "Tahap operasional Fitting '{$rawStage}' tidak valid.");
@@ -142,23 +143,24 @@ class FittingQcDefectController extends Controller
             return $exec;
         });
 
-        // Master defect types per Fitting stage (active only; stage-specific prioritized, fallback to all Fitting departments)
+        // Master defect types for Fitting (active only; universal department 'fitting' or stage-specific)
         $allActiveFittingDefects = \App\Models\DefectType::active()
-            ->whereIn('department', FittingItem::STAGES)
-            ->orderBy('department')
+            ->where(function ($q) {
+                $q->where('department', 'fitting')
+                    ->orWhereIn('department', FittingItem::STAGES);
+            })
             ->orderBy('name')
             ->get();
 
+        $universalDefectList = $allActiveFittingDefects->map(fn ($dt) => [
+            'id' => (int) $dt->id,
+            'name' => $dt->name,
+            'department' => $dt->department,
+        ])->values()->all();
+
         $defectTypesMap = [];
         foreach (FittingItem::STAGES as $stageKey) {
-            $stageSpecific = $allActiveFittingDefects->where('department', $stageKey)->values();
-            $list = $stageSpecific->isNotEmpty() ? $stageSpecific : $allActiveFittingDefects->values();
-
-            $defectTypesMap[$stageKey] = $list->map(fn ($dt) => [
-                'id' => (int) $dt->id,
-                'name' => $dt->name,
-                'department' => $dt->department,
-            ])->all();
+            $defectTypesMap[$stageKey] = $universalDefectList;
         }
 
         return view('fitting.qc-defects.index', [

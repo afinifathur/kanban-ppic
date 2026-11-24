@@ -698,7 +698,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
         $this->assertStringContainsString('HAL 2/2', $html);
 
         // Parse DOM per page
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         libxml_use_internal_errors(true);
         $dom->loadHTML($html);
         libxml_clear_errors();
@@ -749,7 +749,7 @@ class LostWaxBasketLabelPrintTest extends TestCase
     public function test_22_pagination_scenario_f_oversized_item_is_not_silently_truncated_and_has_warning(): void
     {
         // 30 repeats * 28 chars = 840+ chars (~23 lines > 308 dots height)
-        $hugeName = 'SPECIAL GIANT VALVE WITH EXTREMELY LONG SPECIFICATION THAT SPANS MULTIPLE PARAGRAPHS ' . str_repeat('TESTING HUGE CONTENT STRING ', 30);
+        $hugeName = 'SPECIAL GIANT VALVE WITH EXTREMELY LONG SPECIFICATION THAT SPANS MULTIPLE PARAGRAPHS '.str_repeat('TESTING HUGE CONTENT STRING ', 30);
 
         $res = $this->createCastingResultWithTrees(1, [
             0 => ['item_name' => $hugeName, 'quantity_pcs' => 5],

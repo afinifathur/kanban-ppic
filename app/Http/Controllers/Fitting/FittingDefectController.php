@@ -207,12 +207,16 @@ class FittingDefectController extends Controller
 
             $idempotencyKey = $request->header('X-Idempotency-Key') ?? ($validated['idempotency_key'] ?? null);
 
+            $inspectionDate = ! empty($validated['inspection_date'])
+                ? $validated['inspection_date']
+                : $execution->resolveDefaultInspectionDate();
+
             $updated = $this->defectService->recordDefectQty(
                 executionOrId: $execution,
                 defectQty: (int) $validated['defect_qty'],
                 user: $user,
                 notes: $validated['notes'] ?? null,
-                inspectionDate: $validated['inspection_date'] ?? null,
+                inspectionDate: $inspectionDate,
                 idempotencyKey: $idempotencyKey
             );
 

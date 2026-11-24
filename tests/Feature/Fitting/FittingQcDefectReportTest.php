@@ -4,7 +4,6 @@ namespace Tests\Feature\Fitting;
 
 use App\Models\DefectType;
 use App\Models\FittingItem;
-use App\Models\FittingItemAllocation;
 use App\Models\FittingStageExecution;
 use App\Models\FittingStageExecutionDefect;
 use App\Models\FittingTransfer;

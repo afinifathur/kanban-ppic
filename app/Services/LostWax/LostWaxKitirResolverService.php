@@ -2,9 +2,11 @@
 
 namespace App\Services\LostWax;
 
+use App\Models\FittingItem;
 use App\Models\LostWaxCastingResult;
 use App\Models\LostWaxKitir;
 use App\Models\User;
+use App\Services\Fitting\FittingQuantityResolverService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +14,12 @@ use InvalidArgumentException;
 
 class LostWaxKitirResolverService
 {
+    public function __construct(
+        protected ?FittingQuantityResolverService $quantityResolver = null
+    ) {
+        $this->quantityResolver = $quantityResolver ?? new FittingQuantityResolverService;
+    }
+
     /**
      * Resolve groups of Production Codes for a Casting Result and validate total quantity conservation.
      *
@@ -212,49 +220,104 @@ class LostWaxKitirResolverService
 
     /**
      * Build the 6 standard process rows for Fitting Production Kitir.
+     * Evaluates active FittingItem stageExecutions when available (reprint / in-progress),
+     * or returns blank operational fields if unexecuted / untransferred.
      * Sequence: NETTO -> KIMIA -> MARKING -> BUBUT CNC -> QC -> GUDANG JADI
      *
-     * @return array<int, array{no: int, stage: string, label: string, kpi: string}>
+     * @return array<int, array{no: int, stage: string, label: string, hasil: int|null, rusak: int|null, tanggal: string|null, kpi: string, operator: string|null}>
      */
-    public function buildFittingProcessRows(): array
+    public function buildFittingProcessRows(?LostWaxKitir $kitir = null): array
     {
-        return [
+        $stageConfigs = [
             [
                 'no' => 1,
-                'stage' => 'netto',
+                'stage' => FittingItem::STAGE_NETTO_PF,
                 'label' => 'NETTO',
+                'spv_label' => 'SPV NETTO',
                 'kpi' => '&#215;',
             ],
             [
                 'no' => 2,
-                'stage' => 'kimia',
+                'stage' => FittingItem::STAGE_KIMIA,
                 'label' => 'KIMIA',
+                'spv_label' => 'SPV KIMIA',
                 'kpi' => '&#215;',
             ],
             [
                 'no' => 3,
-                'stage' => 'marking',
+                'stage' => FittingItem::STAGE_MARKING,
                 'label' => 'MARKING',
+                'spv_label' => 'SPV MARKING',
                 'kpi' => '&#215;',
             ],
             [
                 'no' => 4,
-                'stage' => 'bubut_cnc',
+                'stage' => FittingItem::STAGE_BUBUT_CNC_PF,
                 'label' => 'BUBUT CNC',
+                'spv_label' => 'SPV CNC',
                 'kpi' => '', // CNC KPI column is blank
             ],
             [
                 'no' => 5,
-                'stage' => 'qc',
+                'stage' => FittingItem::STAGE_QC_PF,
                 'label' => 'QC',
+                'spv_label' => 'SPV QC',
                 'kpi' => '&#215;',
             ],
             [
                 'no' => 6,
-                'stage' => 'gudang_jadi',
+                'stage' => FittingItem::STAGE_GUDANG_JADI_PF,
                 'label' => 'GUDANG JADI',
+                'spv_label' => 'SPV GUDANG',
                 'kpi' => '&#215;',
             ],
         ];
+
+        $fittingItem = $kitir?->activeFittingItem;
+        $executions = $fittingItem
+            ? ($fittingItem->relationLoaded('stageExecutions') ? $fittingItem->stageExecutions : $fittingItem->stageExecutions()->get())
+            : collect();
+
+        $rows = [];
+
+        foreach ($stageConfigs as $cfg) {
+            $stage = $cfg['stage'];
+            $exec = $executions->firstWhere('stage', $stage);
+
+            $doneDate = $exec ? ($exec->physical_done_at ?? $exec->executed_at) : null;
+
+            if (! $exec || ! $doneDate) {
+                $rows[] = [
+                    'no' => $cfg['no'],
+                    'stage' => $stage,
+                    'label' => $cfg['label'],
+                    'hasil' => null,
+                    'rusak' => null,
+                    'tanggal' => null,
+                    'kpi' => $cfg['kpi'],
+                    'operator' => null,
+                ];
+
+                continue;
+            }
+
+            // Gudang Jadi displays final approved good quantity; processing stages display effective input
+            $hasil = ($stage === FittingItem::STAGE_GUDANG_JADI_PF)
+                ? $this->quantityResolver->resolveEffectiveGoodQty($fittingItem, $stage)
+                : $this->quantityResolver->resolveEffectiveInputQty($fittingItem, $stage);
+
+            $rows[] = [
+                'no' => $cfg['no'],
+                'stage' => $stage,
+                'label' => $cfg['label'],
+                'hasil' => $hasil,
+                'rusak' => (int) $exec->defect_qty,
+                'tanggal' => $doneDate->format('d/m/Y'),
+                'kpi' => $cfg['kpi'],
+                'operator' => $cfg['spv_label'],
+            ];
+        }
+
+        return $rows;
     }
 }

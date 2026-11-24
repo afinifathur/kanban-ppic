@@ -445,6 +445,16 @@ class FittingStageAuthorizationService
             throw new AuthorizationException('Akun read-only tidak berwenang memverifikasi defect QC Fitting.');
         }
 
+        // PPIC accounts are strictly forbidden from accessing or verifying Fitting QC defects.
+        // PPIC only inputs good & defect quantities; defect classification is strictly QC's responsibility.
+        if (
+            strtolower(trim((string) $user->email)) === strtolower(self::EMAIL_ADMIN_PPIC_PF)
+            || $user->hasRole(self::ROLE_ADMIN_PPIC_FITTING)
+            || $user->hasRole('ppic')
+        ) {
+            throw new AuthorizationException("Akun PPIC '{$user->name}' tidak berwenang mengakses atau memverifikasi defect QC Fitting.");
+        }
+
         if (self::isFittingSystemAdmin($user)) {
             return;
         }

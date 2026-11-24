@@ -170,4 +170,3 @@ class LostWaxSidebarOrderTest extends TestCase
         $this->assertContains('Production Status', $menuTitles);
     }
 }
-

@@ -9,24 +9,35 @@ use Illuminate\Support\Collection;
 class LostWaxBasketLabelTsplRenderer
 {
     public const FONT_MODE_FONT1 = 'font1'; // New standard / experiment (Font 1 for items & qty)
+
     public const FONT_MODE_FONT2 = 'font2'; // Previous layout (Font 2 for items & qty)
 
     public const MAX_USABLE_HEIGHT = 308; // Total vertical dots available for table rows (Y = 82..390)
 
     // Font 1 (8x12 dots) metrics - TSC TE200 bitmap font
     public const FONT_SMALL = '1';
+
     public const FONT1_WIDTH = 8;
+
     public const FONT1_HEIGHT = 12;
+
     public const FONT1_ROW_SINGLE = 28;
+
     public const FONT1_ROW_DOUBLE = 44;
+
     public const FONT1_WRAP_LIMIT = 50;
 
     // Font 2 (12x20 dots) metrics - TSC TE200 bitmap font
     public const FONT_NORMAL = '2';
+
     public const FONT2_WIDTH = 12;
+
     public const FONT2_HEIGHT = 20;
+
     public const FONT2_ROW_SINGLE = 34;
+
     public const FONT2_ROW_DOUBLE = 55;
+
     public const FONT2_WRAP_LIMIT = 37;
 
     // Font 4 (24x32 dots) metrics (Heat Number)
@@ -34,14 +45,20 @@ class LostWaxBasketLabelTsplRenderer
 
     // Aliases for default / backward compatibility
     public const ROW_HEIGHT_SINGLE = self::FONT1_ROW_SINGLE; // 28
+
     public const ROW_HEIGHT_DOUBLE = self::FONT1_ROW_DOUBLE; // 44
+
     public const CHAR_WIDTH_FONT1 = self::FONT1_WIDTH; // 8
+
     public const CHAR_WIDTH_FONT2 = self::FONT2_WIDTH; // 12
 
     // Horizontal layout coordinates (Dots across 720 dots label canvas)
     public const COL1_LEFT = 30;
+
     public const DIVIDER_1_X = 490;
+
     public const DIVIDER_2_X = 570;
+
     public const QTY_COL_MID_X = 530; // Midpoint of QTY column (490 to 570)
 
     /**
@@ -64,13 +81,13 @@ class LostWaxBasketLabelTsplRenderer
             }
         }
 
-        return implode("\r\n", $pagesTspl) . "\r\n";
+        return implode("\r\n", $pagesTspl)."\r\n";
     }
 
     /**
      * Dynamically partition items into label chunks based on actual row heights (wrapping).
      *
-     * @param Collection<int, LostWaxCastingResultTree> $trees
+     * @param  Collection<int, LostWaxCastingResultTree>  $trees
      * @return array<int, array<int, array{tree: LostWaxCastingResultTree, lines: array<string>, height: int}>>
      */
     public function chunkItems(Collection $trees, string $fontMode = self::FONT_MODE_FONT1): array
@@ -90,7 +107,7 @@ class LostWaxBasketLabelTsplRenderer
             $height = count($lines) > 1 ? $doubleHeight : $singleHeight;
 
             // If adding this item exceeds the printable height and chunk is not empty, start a new label
-            if (!empty($currentChunk) && ($currentHeight + $height > self::MAX_USABLE_HEIGHT)) {
+            if (! empty($currentChunk) && ($currentHeight + $height > self::MAX_USABLE_HEIGHT)) {
                 $chunks[] = $currentChunk;
                 $currentChunk = [];
                 $currentHeight = 0;
@@ -104,7 +121,7 @@ class LostWaxBasketLabelTsplRenderer
             $currentHeight += $height;
         }
 
-        if (!empty($currentChunk)) {
+        if (! empty($currentChunk)) {
             $chunks[] = $currentChunk;
         }
 
@@ -114,7 +131,7 @@ class LostWaxBasketLabelTsplRenderer
     /**
      * Render a single TSPL label (90 x 50 mm) with dynamic row heights.
      *
-     * @param array<int, array{tree: LostWaxCastingResultTree, lines: array<string>, height: int}> $chunkItems
+     * @param  array<int, array{tree: LostWaxCastingResultTree, lines: array<string>, height: int}>  $chunkItems
      */
     public function renderSingleLabel(
         LostWaxCastingResult $castingResult,
@@ -153,26 +170,26 @@ class LostWaxBasketLabelTsplRenderer
         $cmds[] = 'BOX 20,10,700,390,3';
 
         // 3. Compact Header Section (Font 4 Heat Number + Horizontal Meta in Font 2)
-        $cmds[] = 'TEXT 30,16,"' . self::FONT_LARGE . '",0,1,1,"' . $heatNumber . '"';
-        $cmds[] = 'TEXT ' . $metaX . ',22,"' . self::FONT_NORMAL . '",0,1,1,"' . $metaText . '"';
+        $cmds[] = 'TEXT 30,16,"'.self::FONT_LARGE.'",0,1,1,"'.$heatNumber.'"';
+        $cmds[] = 'TEXT '.$metaX.',22,"'.self::FONT_NORMAL.'",0,1,1,"'.$metaText.'"';
 
         // 4. Header divider (Y = 52)
         $cmds[] = 'BAR 20,52,680,3';
 
         // 5. Table Header Section in Font 2 (Y = 55..80)
         // Kolom Nama Barang
-        $cmds[] = 'TEXT 30,58,"' . self::FONT_NORMAL . '",0,1,1,"NAMA BARANG"';
+        $cmds[] = 'TEXT 30,58,"'.self::FONT_NORMAL.'",0,1,1,"NAMA BARANG"';
         // Kolom QTY (Centered at midpoint 530: "QTY" is 3 chars in Font 2 = 36 dots, 530 - 18 = 512)
-        $cmds[] = 'TEXT 512,58,"' . self::FONT_NORMAL . '",0,1,1,"QTY"';
+        $cmds[] = 'TEXT 512,58,"'.self::FONT_NORMAL.'",0,1,1,"QTY"';
         // Kolom RUSAK (Centered at midpoint 635: "RUSAK" is 5 chars in Font 2 = 60 dots, 635 - 30 = 605)
-        $cmds[] = 'TEXT 605,58,"' . self::FONT_NORMAL . '",0,1,1,"RUSAK"';
+        $cmds[] = 'TEXT 605,58,"'.self::FONT_NORMAL.'",0,1,1,"RUSAK"';
 
         // 6. Table Header divider (Y = 80)
         $cmds[] = 'BAR 20,80,680,2';
 
         // 7. Continuous Vertical Column dividers (Running from Y = 52 down to Y = 390)
-        $cmds[] = 'BAR ' . self::DIVIDER_1_X . ',52,2,338';
-        $cmds[] = 'BAR ' . self::DIVIDER_2_X . ',52,2,338';
+        $cmds[] = 'BAR '.self::DIVIDER_1_X.',52,2,338';
+        $cmds[] = 'BAR '.self::DIVIDER_2_X.',52,2,338';
 
         // 8. Dynamic Rows
         $yCurrent = 82;
@@ -198,8 +215,8 @@ class LostWaxBasketLabelTsplRenderer
                 // Font 1 (H=28): text at yCurrent + 8, qty at yCurrent + 8 (spans +8..+20, 8 dots margin top & bottom)
                 // Font 2 (H=34): text at yCurrent + 7, qty at yCurrent + 7 (spans +7..+27, 7 dots margin top & bottom)
                 $yText = $isFont1 ? $yCurrent + 8 : $yCurrent + 7;
-                $cmds[] = 'TEXT ' . self::COL1_LEFT . ',' . $yText . ',"' . $itemFont . '",0,1,1,"' . $lines[0] . '"';
-                $cmds[] = 'TEXT ' . $qtyX . ',' . $qtyY . ',"' . $itemFont . '",0,1,1,"' . $qtyStr . '"';
+                $cmds[] = 'TEXT '.self::COL1_LEFT.','.$yText.',"'.$itemFont.'",0,1,1,"'.$lines[0].'"';
+                $cmds[] = 'TEXT '.$qtyX.','.$qtyY.',"'.$itemFont.'",0,1,1,"'.$qtyStr.'"';
             } else {
                 // Double-line row:
                 // Font 1 (H=44): line 1 at yCurrent + 8, line 2 at yCurrent + 24, qty at yCurrent + 16
@@ -207,15 +224,15 @@ class LostWaxBasketLabelTsplRenderer
                 $yLine1 = $isFont1 ? $yCurrent + 8 : $yCurrent + 6;
                 $yLine2 = $isFont1 ? $yCurrent + 24 : $yCurrent + 28;
 
-                $cmds[] = 'TEXT ' . self::COL1_LEFT . ',' . $yLine1 . ',"' . $itemFont . '",0,1,1,"' . $lines[0] . '"';
-                $cmds[] = 'TEXT ' . self::COL1_LEFT . ',' . $yLine2 . ',"' . $itemFont . '",0,1,1,"' . $lines[1] . '"';
-                $cmds[] = 'TEXT ' . $qtyX . ',' . $qtyY . ',"' . $itemFont . '",0,1,1,"' . $qtyStr . '"';
+                $cmds[] = 'TEXT '.self::COL1_LEFT.','.$yLine1.',"'.$itemFont.'",0,1,1,"'.$lines[0].'"';
+                $cmds[] = 'TEXT '.self::COL1_LEFT.','.$yLine2.',"'.$itemFont.'",0,1,1,"'.$lines[1].'"';
+                $cmds[] = 'TEXT '.$qtyX.','.$qtyY.',"'.$itemFont.'",0,1,1,"'.$qtyStr.'"';
             }
 
             // Draw horizontal row separator
             $yBottom = $yCurrent + $height;
             if ($yBottom < 390) {
-                $cmds[] = 'BAR 20,' . $yBottom . ',680,1';
+                $cmds[] = 'BAR 20,'.$yBottom.',680,1';
             }
 
             $yCurrent = $yBottom + 1;
@@ -225,7 +242,7 @@ class LostWaxBasketLabelTsplRenderer
         while ($yCurrent + $singleHeight <= 390) {
             $yBottom = $yCurrent + $singleHeight;
             if ($yBottom < 390) {
-                $cmds[] = 'BAR 20,' . $yBottom . ',680,1';
+                $cmds[] = 'BAR 20,'.$yBottom.',680,1';
             }
             $yCurrent = $yBottom + 1;
         }
@@ -258,8 +275,8 @@ class LostWaxBasketLabelTsplRenderer
 
         foreach ($words as $i => $word) {
             $space = $currentLine === '' ? '' : ' ';
-            if (mb_strlen($currentLine . $space . $word) <= $limitPerLine) {
-                $currentLine .= $space . $word;
+            if (mb_strlen($currentLine.$space.$word) <= $limitPerLine) {
+                $currentLine .= $space.$word;
             } else {
                 if ($currentLine !== '') {
                     $lines[] = $currentLine;
@@ -281,12 +298,12 @@ class LostWaxBasketLabelTsplRenderer
 
         if ($currentLine !== '' && count($lines) < $maxLines) {
             if (mb_strlen($currentLine) > $limitPerLine) {
-                $currentLine = mb_substr($currentLine, 0, $limitPerLine - 2) . '..';
+                $currentLine = mb_substr($currentLine, 0, $limitPerLine - 2).'..';
             }
             $lines[] = $currentLine;
         }
 
-        return !empty($lines) ? $lines : [$sanitized];
+        return ! empty($lines) ? $lines : [$sanitized];
     }
 
     /**

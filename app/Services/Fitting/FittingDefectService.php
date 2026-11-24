@@ -789,6 +789,10 @@ class FittingDefectService
                 throw new InvalidArgumentException("Master jenis kerusakan '{$defectType->name}' sudah nonaktif dan tidak dapat dipilih.");
             }
 
+            if ($defectType->department !== 'fitting' && ! in_array($defectType->department, \App\Models\FittingItem::STAGES, true)) {
+                throw new InvalidArgumentException("Master jenis kerusakan '{$defectType->name}' bukan jenis kerusakan resmi Fitting.");
+            }
+
             $validated[] = [
                 'defect_type_id' => $typeId,
                 'qty' => $qty,

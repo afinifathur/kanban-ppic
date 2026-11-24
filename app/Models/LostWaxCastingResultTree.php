@@ -44,4 +44,3 @@ class LostWaxCastingResultTree extends Model
         return $this->belongsTo(\App\Models\LostWaxTree::class, 'lost_wax_tree_id');
     }
 }
-

@@ -16,23 +16,22 @@ class QcFittingUserSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Ensure permissions exist
-        $accessPlanning = Permission::firstOrCreate(['name' => 'access_planning']);
-        $accessExecution = Permission::firstOrCreate(['name' => 'access_execution']);
+        // 1. Ensure required permissions exist idempotently
+        $accessPlanning = Permission::firstOrCreate(['name' => 'access_planning', 'guard_name' => 'web']);
+        $accessExecution = Permission::firstOrCreate(['name' => 'access_execution', 'guard_name' => 'web']);
+        $verifyQc = Permission::firstOrCreate(['name' => \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VERIFY_QC, 'guard_name' => 'web']);
+        $allKanban = Permission::firstOrCreate(['name' => \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_ALL_KANBAN, 'guard_name' => 'web']);
+        $visibility = Permission::firstOrCreate(['name' => \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VISIBILITY, 'guard_name' => 'web']);
 
-        // 2. Ensure admin_qc_fitting role exists and has read permissions
-        // Preserve any Fitting QC permissions already granted by FittingSpvUserSeeder (order-independent)
+        // 2. Ensure admin_qc_fitting role exists and explicitly receives QC verification & read visibility
         $qcRole = Role::firstOrCreate(['name' => 'admin_qc_fitting', 'guard_name' => 'web']);
-        $preservedFittingPerms = $qcRole->permissions()
-            ->whereIn('name', [
-                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VERIFY_QC,
-                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_ALL_KANBAN,
-                \App\Services\Fitting\FittingStageAuthorizationService::PERMISSION_VISIBILITY,
-            ])
-            ->get();
-        $qcRole->syncPermissions(
-            $preservedFittingPerms->merge([$accessPlanning, $accessExecution])->unique('id')
-        );
+        $qcRole->syncPermissions([
+            $verifyQc,
+            $allKanban,
+            $visibility,
+            $accessPlanning,
+            $accessExecution,
+        ]);
 
         // 3. Ensure user adminqcfitting@peroniks.com exists idempotently
         $user = User::where('email', 'adminqcfitting@peroniks.com')->first();

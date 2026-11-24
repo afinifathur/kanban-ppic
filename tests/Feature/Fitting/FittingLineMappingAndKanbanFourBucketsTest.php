@@ -5,7 +5,6 @@ namespace Tests\Feature\Fitting;
 use App\Models\FittingItem;
 use App\Models\LostWaxCastingResult;
 use App\Models\LostWaxCastingResultTree;
-use App\Models\LostWaxKitir;
 use App\Models\LostWaxTree;
 use App\Models\ProductionPlan;
 use App\Models\User;

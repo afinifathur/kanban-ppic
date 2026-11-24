@@ -109,13 +109,9 @@
             @php
                 $stageCounts = $mode === 'waiting' ? $summary['per_stage_waiting'] : $summary['per_stage_confirmed'];
             @endphp
-            <a href="{{ route('fitting.qc-defects.index', array_filter(['mode' => $mode, 'search' => $search])) }}"
-               class="px-3 py-1 rounded-full text-xs font-semibold border transition {{ $selectedStage === null ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100' }}">
-                Semua Tahap
-            </a>
             @foreach($stages as $st)
                 @php $cnt = (int) ($stageCounts[$st] ?? 0); @endphp
-                <a href="{{ route('fitting.qc-defects.index', array_filter(['mode' => $mode, 'stage' => $st, 'search' => $search])) }}"
+                <a href="{{ route('fitting.qc-defects.index', array_filter(['mode' => $mode, 'stage' => $st, 'search' => $search, 'draft_status' => $draftStatus !== 'all' ? $draftStatus : null])) }}"
                    class="px-3 py-1 rounded-full text-xs font-semibold border transition {{ $selectedStage === $st ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100' }}">
                     {{ $stageLabels[$st] ?? strtoupper($st) }}
                     <span class="ml-1 opacity-80">({{ $cnt }})</span>
@@ -205,8 +201,6 @@
                                             Draft: {{ $draftSum }} / {{ (int) $exec->defect_qty }} PCS
                                         </div>
                                     @endif
-                                @elseif((int) $exec->defect_qty === 0)
-                                    <span class="text-xs text-emerald-600 font-medium">Nihil (0 PCS)</span>
                                 @else
                                     <span class="text-xs text-slate-400 italic">Belum ada rincian klasifikasi</span>
                                 @endif
@@ -228,8 +222,14 @@
                                         </span>
                                     @elseif($exec->status === \App\Models\FittingStageExecution::STATUS_WAITING_QC)
                                         <button type="button"
-                                                onclick='openVerifyModal({{ $exec->id }}, @js($pfktr), @js($exec->stage), @js($stageLabel), {{ (int) $exec->defect_qty }}, @json($existingDefects), @js($exec->inspection_date?->format("Y-m-d") ?? ""))'
-                                                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm">
+                                                class="btn-open-verify-modal inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+                                                data-exec-id="{{ $exec->id }}"
+                                                data-pfktr="{{ $pfktr }}"
+                                                data-stage-key="{{ $exec->stage }}"
+                                                data-stage-label="{{ $stageLabel }}"
+                                                data-defect-qty="{{ (int) $exec->defect_qty }}"
+                                                data-existing-defects='@json($existingDefects)'
+                                                data-inspection-date="{{ $exec->inspection_date?->format('Y-m-d') ?? '' }}">
                                             <i class="fas fa-check-double mr-1.5"></i>Verifikasi / Draft
                                         </button>
                                         <button type="button"
@@ -246,8 +246,10 @@
                                     @endif
 
                                     <button type="button"
-                                            onclick='openQcLogsModal(@js($pfktr), @js($stageLabel), @json($logsPayload))'
-                                            class="inline-flex items-center px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-100 text-slate-600 text-[11px] font-medium">
+                                            class="btn-open-logs-modal inline-flex items-center px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-100 text-slate-600 text-[11px] font-medium"
+                                            data-pfktr="{{ $pfktr }}"
+                                            data-stage-label="{{ $stageLabel }}"
+                                            data-logs='@json($logsPayload)'>
                                         <i class="fas fa-history mr-1"></i>Log ({{ count($logsPayload) }})
                                     </button>
                                 </div>
@@ -284,12 +286,11 @@
             @csrf
             <div class="bg-slate-50 rounded-lg p-3 text-xs flex flex-wrap justify-between gap-2 border border-slate-200">
                 <div><strong>PFKTR:</strong> <span id="qcPfktr" class="font-mono"></span> (<span id="qcStageLabel"></span>)</div>
-                <div><strong>Target Defect:</strong> <span id="qcTargetDefect" class="font-mono font-bold text-rose-600"></span> PCS &middot; <strong>Terisi:</strong> <span id="qcCurrentSum" class="font-mono font-bold text-emerald-700">0</span> PCS</div>
-            </div>
-
-            <div id="qcZeroNotice" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg p-3 text-xs">
-                <i class="fas fa-check-circle mr-1"></i>
-                Total defect adalah <strong>0 PCS (Nihil)</strong>. Klik <strong>Verifikasi & Konfirmasi</strong> untuk menyetujui status CONFIRMED.
+                <div>
+                    <strong>Target Defect:</strong> <span id="qcTargetDefect" class="font-mono font-bold text-rose-600">0</span> PCS &middot;
+                    <strong>Terisi:</strong> <span id="qcCurrentSum" class="font-mono font-bold text-emerald-700">0</span> PCS &middot;
+                    <strong>Sisa:</strong> <span id="qcRemainingDefect" class="font-mono font-bold text-amber-600">0</span> PCS
+                </div>
             </div>
 
             <div id="qcBreakdownSection" class="space-y-2">
@@ -402,7 +403,8 @@ let currentTargetDefect = 0;
 let rowIndex = 0;
 
 function closeQcModal(id) {
-    document.getElementById(id).classList.add('hidden');
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
 }
 
 function openVerifyModal(execId, pfktr, stageKey, stageLabel, defectQty, existingDefects, inspectionDate) {
@@ -420,24 +422,10 @@ function openVerifyModal(execId, pfktr, stageKey, stageLabel, defectQty, existin
     const container = document.getElementById('qcRowsContainer');
     container.innerHTML = '';
 
-    const zeroNotice = document.getElementById('qcZeroNotice');
-    const breakdownSection = document.getElementById('qcBreakdownSection');
-    const btnDraft = document.getElementById('btnSaveDraft');
-
-    if (currentTargetDefect === 0) {
-        zeroNotice.classList.remove('hidden');
-        breakdownSection.classList.add('hidden');
-        btnDraft.classList.add('hidden');
+    if (existingDefects && existingDefects.length > 0) {
+        existingDefects.forEach(d => addDefectRow(d.defect_type_id, d.qty, d.notes));
     } else {
-        zeroNotice.classList.add('hidden');
-        breakdownSection.classList.remove('hidden');
-        btnDraft.classList.remove('hidden');
-
-        if (existingDefects && existingDefects.length > 0) {
-            existingDefects.forEach(d => addDefectRow(d.defect_type_id, d.qty, d.notes));
-        } else {
-            addDefectRow('', currentTargetDefect, '');
-        }
+        addDefectRow('', currentTargetDefect, '');
     }
 
     recalcQcSum();
@@ -457,7 +445,7 @@ function addDefectRow(selectedTypeId = '', qty = '', notes = '') {
         '<div class="col-span-6"><select name="defects[' + idx + '][defect_type_id]" required class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs">' + options + '</select></div>' +
         '<div class="col-span-2"><input type="number" name="defects[' + idx + '][qty]" min="1" required value="' + (qty || '') + '" oninput="recalcQcSum()" class="qc-qty-input w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-mono" placeholder="Qty"></div>' +
         '<div class="col-span-3"><input type="text" name="defects[' + idx + '][notes]" value="' + escapeQcHtml(notes || '') + '" class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs" placeholder="Catatan"></div>' +
-        '<div class="col-span-1 text-right"><button type="button" onclick="this.closest(\'.qc-defect-row\').remove(); recalcQcSum();" class="text-rose-500 hover:text-rose-700"><i class="fas fa-trash"></i></button></div>';
+        '<div class="col-span-1 text-right"><button type="button" onclick="this.closest(\'.qc-defect-row\').remove(); recalcQcSum();" class="text-rose-500 hover:text-rose-700" title="Hapus Baris"><i class="fas fa-trash"></i></button></div>';
     document.getElementById('qcRowsContainer').appendChild(row);
     recalcQcSum();
 }
@@ -467,16 +455,43 @@ function recalcQcSum() {
     document.querySelectorAll('#qcRowsContainer .qc-qty-input').forEach(inp => {
         sum += Number(inp.value || 0);
     });
-    const el = document.getElementById('qcCurrentSum');
-    el.textContent = sum;
-    el.className = 'font-mono font-bold ' + (sum === currentTargetDefect ? 'text-emerald-700' : 'text-amber-600');
+
+    const elSum = document.getElementById('qcCurrentSum');
+    if (elSum) {
+        elSum.textContent = sum;
+        elSum.className = 'font-mono font-bold ' + (sum === currentTargetDefect ? 'text-emerald-700' : (sum > currentTargetDefect ? 'text-rose-600' : 'text-amber-600'));
+    }
+
+    const remaining = currentTargetDefect - sum;
+    const elRem = document.getElementById('qcRemainingDefect');
+    if (elRem) {
+        elRem.textContent = remaining;
+        elRem.className = 'font-mono font-bold ' + (remaining === 0 ? 'text-emerald-700' : (remaining < 0 ? 'text-rose-600' : 'text-amber-600'));
+    }
 }
 
 function submitQcForm(action) {
     const form = document.getElementById('qcVerifyForm');
+    let sum = 0;
+    document.querySelectorAll('#qcRowsContainer .qc-qty-input').forEach(inp => {
+        sum += Number(inp.value || 0);
+    });
+
     if (action === 'draft') {
+        if (sum <= 0) {
+            alert('Kuantitas draft rincian cacat minimal 1 PCS.');
+            return;
+        }
+        if (sum > currentTargetDefect) {
+            alert('Total draft rincian cacat (' + sum + ' PCS) melebihi target defect PPIC (' + currentTargetDefect + ' PCS).');
+            return;
+        }
         form.action = "{{ url('/fitting/qc-defects') }}/" + currentExecId + "/save-draft";
     } else {
+        if (sum !== currentTargetDefect) {
+            alert('Total klasifikasi cacat (' + sum + ' PCS) harus sama persis dengan target defect PPIC (' + currentTargetDefect + ' PCS) untuk konfirmasi QC.');
+            return;
+        }
         form.action = "{{ url('/fitting/qc-defects') }}/" + currentExecId + "/verify";
     }
     form.submit();
@@ -533,5 +548,40 @@ function openQcLogsModal(pfktr, stageLabel, logs) {
 function escapeQcHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// Event Delegation for Button Modals (Safely handles data attributes without HTML quote collisions)
+document.addEventListener('click', function(e) {
+    const btnVerify = e.target.closest('.btn-open-verify-modal');
+    if (btnVerify) {
+        const execId = btnVerify.getAttribute('data-exec-id');
+        const pfktr = btnVerify.getAttribute('data-pfktr');
+        const stageKey = btnVerify.getAttribute('data-stage-key');
+        const stageLabel = btnVerify.getAttribute('data-stage-label');
+        const defectQty = btnVerify.getAttribute('data-defect-qty');
+        let existingDefects = [];
+        try {
+            existingDefects = JSON.parse(btnVerify.getAttribute('data-existing-defects') || '[]');
+        } catch(err) {
+            console.error('Failed to parse existing defects', err);
+        }
+        const inspectionDate = btnVerify.getAttribute('data-inspection-date');
+        openVerifyModal(execId, pfktr, stageKey, stageLabel, defectQty, existingDefects, inspectionDate);
+        return;
+    }
+
+    const btnLogs = e.target.closest('.btn-open-logs-modal');
+    if (btnLogs) {
+        const pfktr = btnLogs.getAttribute('data-pfktr');
+        const stageLabel = btnLogs.getAttribute('data-stage-label');
+        let logs = [];
+        try {
+            logs = JSON.parse(btnLogs.getAttribute('data-logs') || '[]');
+        } catch(err) {
+            console.error('Failed to parse logs', err);
+        }
+        openQcLogsModal(pfktr, stageLabel, logs);
+        return;
+    }
+});
 </script>
 @endsection
