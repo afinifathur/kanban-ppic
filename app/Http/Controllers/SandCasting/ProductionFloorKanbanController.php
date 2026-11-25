@@ -77,12 +77,17 @@ class ProductionFloorKanbanController extends Controller
 
         $stageLabel = self::STAGE_LABELS[$targetStage] ?? strtoupper(str_replace('_', ' ', $targetStage));
 
-        // Output today widget data for Bubut CNC and QC
+        // Output today widget data for Bubut CNC, QC, and Gudang Jadi
         $todayOutput = null;
-        if (in_array($targetStage, ['bubut_cnc', 'qc'], true)) {
+        if (in_array($targetStage, ['bubut_cnc', 'qc', 'gudang_jadi'], true)) {
             $stageOutput = $this->dashboardService->getTodayStageOutput($targetStage, $user);
+            $title = match ($targetStage) {
+                'bubut_cnc' => 'HASIL CNC HARI INI',
+                'gudang_jadi' => 'HASIL GUDANG JADI HARI INI',
+                default => 'HASIL QC HARI INI',
+            };
             $todayOutput = [
-                'title' => $targetStage === 'bubut_cnc' ? 'HASIL CNC HARI INI' : 'HASIL QC HARI INI',
+                'title' => $title,
                 'good_pcs' => (int) ($stageOutput['good_pcs'] ?? 0),
                 'weight_kg' => (float) ($stageOutput['weight_kg'] ?? 0.0),
                 'stage' => $targetStage,

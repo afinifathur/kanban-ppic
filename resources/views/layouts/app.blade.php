@@ -538,6 +538,13 @@
                 </li>
                 @endif
 
+                @php
+                    $navUserEmail = strtolower(trim((string) (Auth::user()?->email ?? '')));
+                    $canViewSandCastingNav = ($navUserEmail !== 'adminppicpf@peroniks.com');
+                    $canViewLostWaxNav = ($navUserEmail !== 'adminppicfl@peroniks.com');
+                @endphp
+
+                @if($canViewSandCastingNav)
                 <!-- 3. SAND CASTING -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Sand Casting</span>
@@ -648,7 +655,9 @@
                         @endif
                     </ul>
                 </li>
+                @endif
 
+                @if($canViewLostWaxNav)
                 <!-- 4. LOST WAX -->
                 <li class="sidebar-header px-6 pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase">
                     <span class="sidebar-text">Lost Wax</span>
@@ -797,6 +806,7 @@
                         </li>
                     </ul>
                 </li>
+                @endif
 
                 @php
                     $fittingAuth = app(\App\Services\Fitting\FittingStageAuthorizationService::class);
@@ -963,6 +973,8 @@
                         const menu = document.getElementById(menuId);
                         const icon = document.getElementById(iconId);
 
+                        if (!menu || !icon) return false;
+
                         if (sidebar && sidebar.classList.contains('sidebar-collapsed')) {
                             sidebar.classList.remove('sidebar-collapsed');
                             const toggleIcon = document.getElementById('sidebarToggleIcon');
@@ -981,8 +993,8 @@
                         if (handleCollapsedClick('sandCastingMenu', 'sandCastingMenuIcon')) return;
                         const menu = document.getElementById('sandCastingMenu');
                         const icon = document.getElementById('sandCastingMenuIcon');
-                        menu.classList.toggle('hidden');
-                        icon.classList.toggle('rotate-90');
+                        if (menu) menu.classList.toggle('hidden');
+                        if (icon) icon.classList.toggle('rotate-90');
                     }
                     function toggleCorPasirMenu() {
                         toggleSandCastingMenu();
@@ -991,8 +1003,8 @@
                         if (handleCollapsedClick('lostWaxMenu', 'lostWaxMenuIcon')) return;
                         const menu = document.getElementById('lostWaxMenu');
                         const icon = document.getElementById('lostWaxMenuIcon');
-                        menu.classList.toggle('hidden');
-                        icon.classList.toggle('rotate-90');
+                        if (menu) menu.classList.toggle('hidden');
+                        if (icon) icon.classList.toggle('rotate-90');
                     }
                     function toggleSettingsMenu() {
                         if (handleCollapsedClick('settingsMenu', 'settingsMenuIcon')) return;

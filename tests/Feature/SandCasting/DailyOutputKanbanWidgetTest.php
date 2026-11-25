@@ -28,6 +28,8 @@ class DailyOutputKanbanWidgetTest extends TestCase
 
     protected User $spvNettoUser;
 
+    protected User $spvGudangUser;
+
     protected SandCastingDashboardService $dashboardService;
 
     protected function setUp(): void
@@ -74,6 +76,14 @@ class DailyOutputKanbanWidgetTest extends TestCase
             'product_scope' => 'FLANGE_BESI',
         ]);
         $this->spvNettoUser->assignRole('spv');
+
+        $this->spvGudangUser = User::factory()->create([
+            'name' => 'SPV Gudang Jadi',
+            'email' => 'spvgdfl@peroniks.com',
+            'assigned_stage' => 'gudang_jadi',
+            'product_scope' => 'FLANGE_BESI',
+        ]);
+        $this->spvGudangUser->assignRole('spv');
 
         $this->dashboardService = app(SandCastingDashboardService::class);
     }
@@ -220,6 +230,46 @@ class DailyOutputKanbanWidgetTest extends TestCase
         $response->assertSee('KG');
     }
 
+    public function test_gudang_jadi_kanban_displays_daily_output_widget_matching_zone_1(): void
+    {
+        [$plan, $line] = $this->createPlanWithKtrLine([
+            'qty_good' => 60,
+            'unit_weight_kg' => 3.5,
+            'current_stage' => 'gudang_jadi',
+        ]);
+
+        // Record completed execution for Gudang Jadi today
+        $line->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 60,
+            'good_qty' => 60,
+            'defect_qty' => 0,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => Carbon::now('Asia/Jakarta'),
+            'executed_at' => Carbon::now('Asia/Jakarta'),
+            'operator_id' => $this->spvGudangUser->id,
+        ]);
+
+        Cache::flush();
+
+        // 1. Verify Zone 1 throughput data
+        $zone1Output = $this->dashboardService->getTodayStageOutput('gudang_jadi', $this->spvGudangUser);
+        $this->assertSame(60, $zone1Output['good_pcs']);
+        $this->assertEquals(210.0, (float) $zone1Output['weight_kg']); // 60 pcs * 3.5 kg
+
+        // 2. SPV Gudang Jadi accesses Gudang Jadi Kanban page
+        $response = $this->actingAs($this->spvGudangUser)
+            ->get('/sand-casting/kanban/stage/gudang-jadi');
+
+        $response->assertStatus(200);
+        $response->assertSee('HASIL GUDANG JADI HARI INI');
+        $response->assertSee('60');
+        $response->assertSee('210');
+        $response->assertSee('PCS');
+        $response->assertSee('KG');
+    }
+
     public function test_zero_output_displays_zero_pcs_and_zero_kg(): void
     {
         Cache::flush();
@@ -239,13 +289,21 @@ class DailyOutputKanbanWidgetTest extends TestCase
         $qcRes->assertStatus(200);
         $qcRes->assertSee('HASIL QC HARI INI');
         $qcRes->assertSee('0');
+
+        // Gudang Jadi zero output
+        $gjRes = $this->actingAs($this->spvGudangUser)
+            ->get('/sand-casting/kanban/stage/gudang-jadi');
+
+        $gjRes->assertStatus(200);
+        $gjRes->assertSee('HASIL GUDANG JADI HARI INI');
+        $gjRes->assertSee('0');
     }
 
     public function test_other_stages_do_not_render_the_output_widget(): void
     {
         Cache::flush();
 
-        $nonTargetStages = ['netto', 'bubut-od', 'bor', 'gudang-jadi'];
+        $nonTargetStages = ['netto', 'bubut-od', 'bor'];
 
         foreach ($nonTargetStages as $stage) {
             $res = $this->actingAs($this->adminUser)
@@ -254,6 +312,7 @@ class DailyOutputKanbanWidgetTest extends TestCase
             $res->assertStatus(200);
             $res->assertDontSee('HASIL CNC HARI INI');
             $res->assertDontSee('HASIL QC HARI INI');
+            $res->assertDontSee('HASIL GUDANG JADI HARI INI');
         }
     }
 
@@ -301,9 +360,15 @@ class DailyOutputKanbanWidgetTest extends TestCase
 
         $qcResponse->assertStatus(200);
         $qcResponse->assertSee('HASIL QC HARI INI');
+
+        $gjResponse = $this->actingAs($this->spvGudangUser)
+            ->get('/sand-casting/kanban/stage/gudang-jadi');
+
+        $gjResponse->assertStatus(200);
+        $gjResponse->assertSee('HASIL GUDANG JADI HARI INI');
     }
 
-    public function test_json_endpoint_includes_today_output_for_cnc_and_qc(): void
+    public function test_json_endpoint_includes_today_output_for_cnc_qc_and_gudang_jadi(): void
     {
         // Bubut CNC JSON includes today_output
         $cncRes = $this->actingAs($this->spvCncUser)
@@ -321,12 +386,144 @@ class DailyOutputKanbanWidgetTest extends TestCase
         $this->assertSame('HASIL CNC HARI INI', $cncRes->json('today_output.title'));
         $this->assertSame('bubut_cnc', $cncRes->json('today_output.stage'));
 
+        // Gudang Jadi JSON includes today_output
+        $gjRes = $this->actingAs($this->spvGudangUser)
+            ->getJson('/sand-casting/kanban/stage/gudang-jadi');
+
+        $gjRes->assertStatus(200);
+        $gjRes->assertJsonStructure([
+            'today_output' => [
+                'title',
+                'good_pcs',
+                'weight_kg',
+                'stage',
+            ],
+        ]);
+        $this->assertSame('HASIL GUDANG JADI HARI INI', $gjRes->json('today_output.title'));
+        $this->assertSame('gudang_jadi', $gjRes->json('today_output.stage'));
+
         // Netto JSON does not include today_output
         $nettoRes = $this->actingAs($this->spvNettoUser)
             ->getJson('/sand-casting/kanban/stage/netto');
 
         $nettoRes->assertStatus(200);
         $this->assertArrayNotHasKey('today_output', $nettoRes->json());
+    }
+
+    public function test_gudang_jadi_output_does_not_double_count_repeated_updates_on_same_line(): void
+    {
+        [$plan, $line] = $this->createPlanWithKtrLine([
+            'qty_good' => 50,
+            'unit_weight_kg' => 2.0,
+            'current_stage' => 'gudang_jadi',
+        ]);
+
+        // First execution record: 50 pcs
+        $exec = $line->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 50,
+            'good_qty' => 50,
+            'defect_qty' => 0,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => Carbon::now('Asia/Jakarta'),
+            'executed_at' => Carbon::now('Asia/Jakarta'),
+            'operator_id' => $this->spvGudangUser->id,
+        ]);
+
+        // Repeated update / touch on the same line
+        $exec->update([
+            'physical_done_at' => Carbon::now('Asia/Jakarta'),
+        ]);
+
+        Cache::flush();
+
+        // Must still be 50 pcs (100 kg), NOT double counted (e.g. 100 pcs / 200 kg)
+        $zone1Output = $this->dashboardService->getTodayStageOutput('gudang_jadi', $this->spvGudangUser);
+        $this->assertSame(50, $zone1Output['good_pcs']);
+        $this->assertEquals(100.0, (float) $zone1Output['weight_kg']);
+
+        $res = $this->actingAs($this->spvGudangUser)
+            ->get('/sand-casting/kanban/stage/gudang-jadi');
+        $res->assertStatus(200);
+        $res->assertSee('HASIL GUDANG JADI HARI INI');
+        $res->assertSee('50');
+        $res->assertSee('100');
+    }
+
+    public function test_gudang_jadi_output_excludes_executions_done_on_previous_days(): void
+    {
+        [$plan, $line] = $this->createPlanWithKtrLine([
+            'qty_good' => 50,
+            'unit_weight_kg' => 2.0,
+            'current_stage' => 'gudang_jadi',
+        ]);
+
+        // Execution completed yesterday
+        $line->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 50,
+            'good_qty' => 50,
+            'defect_qty' => 0,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => Carbon::now('Asia/Jakarta')->subDay(),
+            'executed_at' => Carbon::now('Asia/Jakarta')->subDay(),
+            'operator_id' => $this->spvGudangUser->id,
+        ]);
+
+        Cache::flush();
+
+        $zone1Output = $this->dashboardService->getTodayStageOutput('gudang_jadi', $this->spvGudangUser);
+        $this->assertSame(0, $zone1Output['good_pcs']);
+        $this->assertEquals(0.0, (float) $zone1Output['weight_kg']);
+
+        $res = $this->actingAs($this->spvGudangUser)
+            ->get('/sand-casting/kanban/stage/gudang-jadi');
+        $res->assertStatus(200);
+        $res->assertSee('HASIL GUDANG JADI HARI INI');
+        $res->assertSee('0');
+    }
+
+    public function test_gudang_jadi_kanban_preserves_ready_backlog_cards_pcs_and_kg(): void
+    {
+        [$plan1, $line1] = $this->createPlanWithKtrLine([
+            'qty_good' => 50,
+            'unit_weight_kg' => 2.5,
+            'current_stage' => 'gudang_jadi',
+        ]);
+
+        [$plan2, $line2] = $this->createPlanWithKtrLine([
+            'qty_good' => 30,
+            'unit_weight_kg' => 2.5,
+            'current_stage' => 'gudang_jadi',
+        ]);
+
+        // Completed execution today for line 1 (50 pcs)
+        $line1->stageExecutions()->create([
+            'stage' => 'gudang_jadi',
+            'checkpoint_code' => 'GUDANG_RECEIVE',
+            'input_qty' => 50,
+            'good_qty' => 50,
+            'defect_qty' => 0,
+            'status' => SandCastingStageExecution::STATUS_CONFIRMED,
+            'physical_done_at' => Carbon::now('Asia/Jakarta'),
+            'executed_at' => Carbon::now('Asia/Jakarta'),
+            'operator_id' => $this->spvGudangUser->id,
+        ]);
+
+        Cache::flush();
+
+        $res = $this->actingAs($this->spvGudangUser)
+            ->get('/sand-casting/kanban/stage/gudang-jadi');
+
+        $res->assertStatus(200);
+        $res->assertSee('HASIL GUDANG JADI HARI INI');
+        $res->assertSee('50');
+
+        // Verify READY summary elements exist and are intact
+        $res->assertSee('kanbanReadyTotalPcs', false);
+        $res->assertSee('kanbanReadyTotalKg', false);
     }
 
     public function test_spv_with_different_product_scope_sees_actual_stage_output_when_production_is_under_another_scope(): void
