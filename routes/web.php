@@ -259,6 +259,13 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/production-status/trees', [ProductionStatusController::class, 'trees'])->name('production-status.trees');
             Route::get('/production-status/export', [ProductionStatusController::class, 'exportXlsx'])->name('production-status.export');
         });
+
+        // Accounting Report Routes (Lost Wax Horizontal Production Tracking)
+        Route::prefix('report/accounting')->name('report.accounting.')->middleware(['permission:access_planning|access_execution|access_production_visibility|access_auditor_visibility'])->group(function () {
+            Route::get('/', [\App\Http\Controllers\LostWax\LostWaxAccountingReportController::class, 'index'])->name('index');
+            Route::get('/export/excel', [\App\Http\Controllers\LostWax\LostWaxAccountingReportController::class, 'exportExcel'])->name('export.excel');
+            Route::get('/export/pdf', [\App\Http\Controllers\LostWax\LostWaxAccountingReportController::class, 'exportPdf'])->name('export.pdf');
+        });
     });
 
     // Sand Casting Routes

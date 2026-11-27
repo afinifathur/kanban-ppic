@@ -454,6 +454,14 @@
                             <span class="text-sm sidebar-text ml-2">Report Produksi</span>
                         </a>
                     </li>
+                    <li>
+                        <a href="{{ route('lost-wax.report.accounting.index') }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('lost-wax.report.accounting.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Laporan Accounting">
+                            <i class="fas fa-calculator w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Laporan Accounting</span>
+                        </a>
+                    </li>
 
                     @php
                         $auditorHasFittingRoutes = \Illuminate\Support\Facades\Route::has('fitting.dashboard')
@@ -818,6 +826,14 @@
                                 title="Report Produksi">
                                 <i class="fas fa-chart-line w-4 shrink-0 text-center text-xs text-blue-400 mr-2"></i>
                                 <span class="text-sm sidebar-text">Report Produksi</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('lost-wax.report.accounting.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('lost-wax.report.accounting.*') ? 'text-white font-medium border-l-2 border-emerald-400' : 'text-slate-300' }}"
+                                title="Laporan Accounting">
+                                <i class="fas fa-calculator w-4 shrink-0 text-center text-xs text-emerald-400 mr-2"></i>
+                                <span class="text-sm sidebar-text">Laporan Accounting</span>
                             </a>
                         </li>
                     </ul>
