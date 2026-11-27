@@ -411,6 +411,14 @@
                         </a>
                     </li>
                     <li>
+                        <a href="{{ route('sand-casting.report.accounting.index') }}"
+                            class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.accounting.*') ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300' }}"
+                            title="Laporan Accounting">
+                            <i class="fas fa-calculator w-6 shrink-0 text-center"></i>
+                            <span class="text-sm sidebar-text ml-2">Laporan Accounting</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="{{ route('sand-casting.report.qc-defects.index') }}"
                             class="sidebar-link flex items-center px-6 py-2.5 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.qc-defects.*') ? 'bg-blue-600 text-white font-bold' : 'text-slate-300' }}"
                             title="Laporan Defect (QC)">
@@ -621,6 +629,14 @@
                                 title="Laporan Produksi">
                                 <i class="fas fa-file-alt w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
                                 <span class="text-sm sidebar-text">Laporan Produksi</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('sand-casting.report.accounting.index') }}"
+                                class="sidebar-link flex items-center pl-10 pr-6 py-2 hover:bg-slate-800 {{ request()->routeIs('sand-casting.report.accounting.*') ? 'text-white font-medium border-l-2 border-emerald-500' : 'text-slate-300' }}"
+                                title="Laporan Accounting">
+                                <i class="fas fa-calculator w-4 shrink-0 text-center text-xs opacity-70 mr-2"></i>
+                                <span class="text-sm sidebar-text">Laporan Accounting</span>
                             </a>
                         </li>
                         @if(Auth::user() && (Auth::user()->roles->contains('name', 'admin') || Auth::user()->roles->contains('name', 'ppic') || in_array(strtolower(trim((string) Auth::user()->email)), ['adminppicfl@peroniks.com', 'ppicflange@peroniks.com', 'adminppicpf@peroniks.com'])))

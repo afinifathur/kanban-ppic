@@ -347,6 +347,13 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\ProductionReportController::class, 'exportPdf'])->name('export.pdf');
         });
 
+        // Accounting Report Routes (Sand Casting)
+        Route::prefix('report/accounting')->name('report.accounting.')->middleware(['permission:access_planning|access_execution|access_production_visibility|access_auditor_visibility'])->group(function () {
+            Route::get('/', [\App\Http\Controllers\SandCasting\SandCastingAccountingReportController::class, 'index'])->name('index');
+            Route::get('/export/excel', [\App\Http\Controllers\SandCasting\SandCastingAccountingReportController::class, 'exportExcel'])->name('export.excel');
+            Route::get('/export/pdf', [\App\Http\Controllers\SandCasting\SandCastingAccountingReportController::class, 'exportPdf'])->name('export.pdf');
+        });
+
         // QC Defect Detail Report Routes (Sand Casting)
         Route::prefix('report/qc-defects')->name('report.qc-defects.')->middleware(['permission:access_planning|access_execution|access_auditor_visibility'])->group(function () {
             Route::get('/', [\App\Http\Controllers\SandCasting\QcDefectReportController::class, 'index'])->name('index');
